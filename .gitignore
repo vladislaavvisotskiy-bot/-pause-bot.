@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .env
 credentials.json
+_sandbox_run.py
+bot.log
