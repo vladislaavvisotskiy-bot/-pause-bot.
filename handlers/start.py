@@ -54,17 +54,10 @@ async def got_phone(message: Message, state: FSMContext):
     await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
 
 
-@router.callback_query(F.data == "requisites")
-async def show_requisites(callback: CallbackQuery):
-    await callback.message.answer(
-        "Реквизиты для оплаты:\n\n5614 6829 1627 0798\nVladislav Visotskiy"
-    )
-    await callback.answer()
-
-
 @router.callback_query(F.data == "support")
-async def show_support(callback: CallbackQuery):
-    await callback.message.answer(texts.SUPPORT_INFO)
+async def show_support(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.answer(texts.SUPPORT_INFO, reply_markup=kb.home_only_kb())
     await callback.answer()
 
 

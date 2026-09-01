@@ -31,7 +31,10 @@ COL_CONTACT = 10    # J  (телефон)
 COL_TELEGRAM = 11   # K  (Instagram/Telegram username, текстом)
 COL_STATUS = 13     # M
 COL_NOTE = 14        # N
+COL_ORDER_COUNT = 15  # O ("Кол-во Заказов" — уже считается в таблице, бот только читает)
+COL_LAST_ORDER_DATE = 16  # P ("Дата последнего заказа" — тоже уже считается, бот не трогает)
 COL_TG_ID = 17       # Q — НОВЫЙ столбец, надо добавить в таблицу вручную (см. README)
+COL_REG_DATE = 18    # R — НОВЫЙ столбец, дата регистрации, бот пишет сам
 
 # Заказы: header row 1, data starts row 2
 ORDERS_HEADER_ROW = 1
@@ -60,3 +63,21 @@ REF_GARNISH_RANGE = "C2:C20"      # гарниры
 REF_PAYMENT_RANGE = "D2:D20"      # способы оплаты
 REF_TODAY_MENU_CELL = "J1"        # список file_id фотографий меню на сегодня (через запятую) — бот пишет сам
 REF_TODAY_MENU2_CELL = "J2"       # подпись к посту меню на сегодня — бот пишет сам
+
+# --- Pause Club: лист "Клуб" ---
+SHEET_CLUB = "Клуб"
+CLUB_ACTIVE_CELL = "B1"          # "Да" / "Нет" — есть ли сейчас активный розыгрыш
+CLUB_GIVEAWAY_TEXT_CELL = "B2"   # текст розыгрыша
+CLUB_INFO_TEXT_CELL = "B3"       # общий текст о клубе (когда розыгрыша нет)
+
+# Пороги уровней Pause Club — по количеству заказов (столбец O в CRM)
+CLUB_LEVELS = [
+    (0, "🌱", "Новичок"),
+    (3, "☘️", "Свой человек"),
+    (10, "🪴", "Друг Паузы"),
+    (25, "👑", "VIP Паузы"),
+]
+
+# --- PDF-отчёт для кухни ---
+PDF_FONT_REGULAR = os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans.ttf")
+PDF_FONT_BOLD = os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans-Bold.ttf")

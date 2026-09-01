@@ -16,6 +16,15 @@ def display_set_name(name: str) -> str:
 
 SUPPORT_USERNAME = "@ssaavveeyy"
 
+# --- Главное меню и общая навигация ---
+HOME_BTN = "🏠 Главное меню"
+PROFILE_BTN = "👤 Профиль"
+MENU_BTN = "💌 Меню"
+CLUB_BTN = "🌿 Pause Club"
+SUPPORT_BTN = "🤍 Поддержка"
+
+REQUISITES_TEXT = "5614 6829 1627 0798\nVladislav Visotskiy"
+
 WELCOME_NEW = (
     "☘️ Привет, здесь PAUSE.\n\n"
     "Мы каждый день готовим два тёплых сета — «Пауза дня» и «Для тебя» — "
@@ -37,6 +46,7 @@ REGISTERED = "Готово, вы в системе 🪴 Дальше — зак�
 MAIN_MENU = "Чем займёмся?"
 
 NO_MENU_YET = "Меню на сегодня ещё не опубликовано — загляните чуть позже."
+MENU_ORDER_PROMPT = "Готовы заказать?"
 
 CHOOSE_SET = "Какой сет выбираем?"
 
@@ -64,7 +74,10 @@ ASK_CLARIFICATION = (
 
 CHOOSE_PAYMENT = "Как удобнее оплатить?"
 
-CARD_PAYMENT_ASK = "Пришлите скрин оплаты сейчас, или подтвердите чуть позже?"
+CARD_PAYMENT_ASK = (
+    "Реквизиты для оплаты:\n{requisites}\n\n"
+    "Пришлите скрин оплаты сейчас, или подтвердите чуть позже?"
+)
 CARD_SEND_NOW_BTN = "📎 Пришлю сейчас"
 CARD_LATER_BTN = "🕐 Подтвержу позже"
 CARD_SEND_SCREENSHOT = "Пришлите, пожалуйста, скрин оплаты — просто отправьте фото сюда."
@@ -86,9 +99,7 @@ ORDER_SENT = (
 ORDER_CANCELLED = "Хорошо, отменили. Если что — я тут же рядом."
 
 CUTOFF_CLOSED_NOTICE = (
-    "☘️ Приём заказов на сегодня уже закрыт.\n\n"
-    "Как только опубликуем меню на завтра — загляните сюда снова и сможете "
-    "сделать заказ."
+    "Приём заказов на сегодня закрыт. Напишем, как только опубликуем меню на завтра."
 )
 
 MY_ORDERS_EMPTY = "Пока не было ни одного заказа — самое время начать 🪴"
@@ -97,6 +108,18 @@ MY_ORDERS_HEADER = "Ваша история с нами:"
 
 MY_DEBT_LINE = "\n\nТекущий долг: {sum:,} сум".replace(",", " ")
 MY_ORDERS_CANCELED_TAG = " (отменён)"
+
+# --- Раздел «Профиль» ---
+PROFILE_NOT_SET = "не указано"
+PROFILE_TEMPLATE = (
+    "👤 {name}\n"
+    "📞 {phone}\n"
+    "📍 {point}\n\n"
+    "{club_emoji} Статус в Pause Club: {club_label}\n"
+    "🗓 С нами с {reg_date}\n"
+    "🧾 Всего заказов: {order_count}"
+)
+MY_ORDERS_LINK_BTN = "📋 Мои заказы"
 
 EDIT_PROFILE_BTN = "✏️ Изменить данные"
 EDIT_NAME_BTN = "Имя"
@@ -115,7 +138,7 @@ CANCEL_TOO_LATE = (
     "Если очень нужно — напишите нашему помощнику {support}, разберёмся."
 )
 CANCEL_CARD_REDIRECT = (
-    "Этот заказ оплачен картой, поэтому отменить его самостоятельно нельзя — "
+    "Оплата по этому заказу уже {status} — самостоятельно отменить нельзя, "
     "тут нужна помощь человека. Напишите {support}, поможем с отменой и возвратом."
 )
 CANCEL_CONFIRM_ASK = "Точно отменить заказ от {date}: {items}?"
@@ -128,7 +151,7 @@ ADMIN_ORDER_CANCELLED_ALERT = (
     "❌ Клиент {name} (ID {client_id}) отменил заказ на {date}:\n{items}"
 )
 
-FEEDBACK_BTN = "⭐ Оставить отзыв"
+FEEDBACK_BTN = "⭐ Оставить отзыв: {date}"
 FEEDBACK_NO_ORDERS = "Пока нечего оценивать — закажите что-нибудь в первый раз 🪴"
 FEEDBACK_PROMPT = "Расскажите, как всё прошло — что понравилось, что стоит поправить."
 FEEDBACK_THANKS = "Спасибо, что рассказали! Обязательно передадим команде 🪴"
@@ -139,11 +162,20 @@ ADMIN_FEEDBACK_ALERT = (
     "{text}"
 )
 
-SUPPORT_BTN = "🆘 Поддержка"
 SUPPORT_INFO = (
     "Если что-то пошло не так или нужна помощь — пишите нашему помощнику "
     "{support}, разберёмся."
 ).format(support=SUPPORT_USERNAME)
+
+# --- Раздел «Pause Club» ---
+CLUB_STATUS_TEMPLATE = "{emoji} Статус: {label}\nЗаказов сделано: {order_count}"
+CLUB_NEXT_LEVEL_LINE = "\nЕщё {left} до уровня «{next_emoji} {next_label}»"
+CLUB_MAX_LEVEL_LINE = "\nВы на максимальном уровне 👑"
+CLUB_NEWS_HEADER = "\n\n🗞 Новости и события\n"
+
+GIVEAWAY_PARTICIPATE_BTN = "🎁 Участвовать"
+GIVEAWAY_JOINED = "Готово, записали вас — удачи 🍀"
+ADMIN_GIVEAWAY_JOIN_ALERT = "🎁 {name} (ID {client_id}) хочет участвовать в розыгрыше."
 
 SKIP_BTN = "Пропустить"
 BACK_BTN = "‹ Назад"
@@ -178,6 +210,22 @@ ADMIN_CARD_PAYMENT_ALERT = (
 )
 ADMIN_CARD_CONFIRMED_SUFFIX = "\n\n✅ Оплата подтверждена"
 ADMIN_CARD_CONFIRMED_TOAST = "Отмечено ✓"
+
+ADMIN_CLUB_PANEL_BTN = "🌿 Pause Club"
+ADMIN_CLUB_INFO_BTN = "📝 Текст о клубе"
+ADMIN_CLUB_INFO_PROMPT = "Пришлите новый текст о клубе — он покажется, когда розыгрыша нет."
+ADMIN_CLUB_INFO_SAVED = "Текст о клубе сохранён ✓"
+ADMIN_GIVEAWAY_BTN = "🎁 Розыгрыш"
+ADMIN_GIVEAWAY_PROMPT = (
+    "Пришлите текст розыгрыша — клиенты увидят его и кнопку «Участвовать».\n"
+    "Чтобы выключить текущий розыгрыш без нового текста — напишите «выключить»."
+)
+ADMIN_GIVEAWAY_SAVED = "Розыгрыш опубликован ✓"
+ADMIN_GIVEAWAY_OFF = "Розыгрыш выключен ✓"
+ADMIN_GIVEAWAY_OFF_WORDS = {"выключить", "выключи", "нет", "стоп", "off"}
+
+ADMIN_KITCHEN_PDF_CAPTION = "📄 PDF-отчёт для кухни — {date}"
+ADMIN_NO_ORDERS_TODAY = "На сегодня заказов нет."
 
 CARE_LINES = [
     "Пусть сегодняшний обед будет самым спокойным моментом дня.",

@@ -12,6 +12,55 @@ from states import EditProfile, Feedback
 router = Router()
 
 
+def _is_card_payment(payment: str) -> bool:
+    return "карт" in (payment or "").lower()
+
+
+def _order_items_text(items: list) -> str:
+    return ", ".join(f"{i['qty']}× {texts.display_set_name(i['set'])}" for i in items)
+
+
+def _card_pending_status(comment: str) -> str:
+    """Если по заказу уже принята оплата картой (на проверке/подтверждена) —
+    возвращает статус для сообщения; иначе пустую строку (можно отменять)."""
+    c = (comment or "").lower()
+    if "оплата подтверждена" in c:
+        return "подтверждена"
+    if "оплата на проверке" in c:
+        return "на проверке"
+    return ""
+
+
+async def _show_profile(chat_id: int, tg_id: int, bot: Bot):
+    client = sheets.find_client_by_tg_id(tg_id)
+    if not client:
+        await bot.send_message(chat_id, "Наберите /start, чтобы зарегистрироваться.")
+        return
+    level = sheets.get_club_level(client.get("order_count", 0))
+    point = ", ".join(p for p in [client.get("zone", ""), client.get("point", "")] if p) or texts.PROFILE_NOT_SET
+    text = texts.PROFILE_TEMPLATE.format(
+        name=client.get("name") or texts.PROFILE_NOT_SET,
+        phone=client.get("contact") or texts.PROFILE_NOT_SET,
+        point=point,
+        club_emoji=level["emoji"],
+        club_label=level["label"],
+        reg_date=client.get("reg_date") or texts.PROFILE_NOT_SET,
+        order_count=client.get("order_count", 0),
+    )
+    await bot.send_message(chat_id, text, reply_markup=kb.profile_kb())
+
+
+@router.callback_query(F.data == "profile_section")
+async def profile_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await state.clear()
+    await _show_profile(callback.message.chat.id, callback.from_user.id, bot)
+    await callback.answer()
+
+
+# ---------------------------------------------------------------------------
+# Мои заказы
+# ---------------------------------------------------------------------------
+
 @router.callback_query(F.data == "my_orders")
 async def my_orders(callback: CallbackQuery):
     client = sheets.find_client_by_tg_id(callback.from_user.id)
@@ -20,18 +69,18 @@ async def my_orders(callback: CallbackQuery):
         await callback.answer()
         return
 
-    orders = sheets.get_client_orders(client["id"])
-    if not orders:
-        await callback.message.answer(texts.MY_ORDERS_EMPTY, reply_markup=kb.my_orders_kb())
+    groups = sheets.get_client_order_groups(client["id"], limit=10)
+    if not groups:
+        await callback.message.answer(texts.MY_ORDERS_EMPTY, reply_markup=kb.my_orders_kb([], show_cancel=False))
         await callback.answer()
         return
 
     lines = [texts.MY_ORDERS_HEADER, ""]
-    for o in orders:
-        line = f"{o['date']} — {o['qty']}× {texts.display_set_name(o['set'])}"
-        if o["payment"] == "В долг":
+    for g in groups:
+        line = f"{g['date']} — {_order_items_text(g['items'])}"
+        if g["payment"] == "В долг":
             line += " (в долг)"
-        if o.get("canceled"):
+        if g["canceled"]:
             line += texts.MY_ORDERS_CANCELED_TAG
         lines.append(line)
 
@@ -40,12 +89,12 @@ async def my_orders(callback: CallbackQuery):
     if debt > 0:
         text += texts.MY_DEBT_LINE.format(sum=debt)
 
-    await callback.message.answer(text, reply_markup=kb.my_orders_kb())
+    await callback.message.answer(text, reply_markup=kb.my_orders_kb(groups, show_cancel=True))
     await callback.answer()
 
 
 # ---------------------------------------------------------------------------
-# Редактирование своих данных (личный кабинет)
+# Редактирование своих данных
 # ---------------------------------------------------------------------------
 
 @router.callback_query(F.data == "edit_profile")
@@ -62,7 +111,7 @@ async def edit_name_start(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(EditProfile.waiting_name)
-async def edit_name_save(message: Message, state: FSMContext):
+async def edit_name_save(message: Message, state: FSMContext, bot: Bot):
     name = (message.text or "").strip()
     if not name:
         await message.answer(texts.EDIT_NAME_PROMPT)
@@ -72,7 +121,7 @@ async def edit_name_save(message: Message, state: FSMContext):
         sheets.update_client_field(client["row"], config.COL_NAME, name)
     await state.clear()
     await message.answer(texts.EDIT_SAVED)
-    await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await _show_profile(message.chat.id, message.from_user.id, bot)
 
 
 @router.callback_query(F.data == "edit_phone")
@@ -83,7 +132,7 @@ async def edit_phone_start(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(EditProfile.waiting_phone)
-async def edit_phone_save(message: Message, state: FSMContext):
+async def edit_phone_save(message: Message, state: FSMContext, bot: Bot):
     phone = (message.text or "").strip()
     if not phone:
         await message.answer(texts.EDIT_PHONE_PROMPT)
@@ -93,7 +142,7 @@ async def edit_phone_save(message: Message, state: FSMContext):
         sheets.update_client_field(client["row"], config.COL_CONTACT, phone)
     await state.clear()
     await message.answer(texts.EDIT_SAVED)
-    await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await _show_profile(message.chat.id, message.from_user.id, bot)
 
 
 @router.callback_query(F.data == "edit_point")
@@ -161,22 +210,12 @@ async def _save_point(tg_id: int, state: FSMContext, point: str, bot: Bot, is_ne
                 pass
     await state.clear()
     await bot.send_message(tg_id, texts.EDIT_SAVED)
-    await bot.send_message(tg_id, texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await _show_profile(tg_id, tg_id, bot)
 
 
 # ---------------------------------------------------------------------------
 # Отмена последнего заказа (до времени отсечки для отмены)
 # ---------------------------------------------------------------------------
-
-def _order_items_text(rows: list) -> str:
-    return ", ".join(
-        f"{r['qty']}× {texts.display_set_name(r['set'])}" for r in rows
-    )
-
-
-def _is_card_payment(payment: str) -> bool:
-    return "карт" in (payment or "").lower()
-
 
 @router.callback_query(F.data == "cancel_order_start")
 async def cancel_order_start(callback: CallbackQuery):
@@ -186,12 +225,13 @@ async def cancel_order_start(callback: CallbackQuery):
         await callback.answer()
         return
 
-    rows = sheets.get_last_order_rows(client["id"])
-    if not rows:
+    groups = sheets.get_client_order_groups(client["id"], limit=1)
+    if not groups:
         await callback.message.answer(texts.CANCEL_NO_ORDERS)
         await callback.answer()
         return
-    if rows[0]["canceled"]:
+    g = groups[0]
+    if g["canceled"]:
         await callback.message.answer(texts.CANCEL_ALREADY)
         await callback.answer()
         return
@@ -201,13 +241,16 @@ async def cancel_order_start(callback: CallbackQuery):
         )
         await callback.answer()
         return
-    if any(_is_card_payment(r["payment"]) for r in rows):
-        await callback.message.answer(texts.CANCEL_CARD_REDIRECT.format(support=texts.SUPPORT_USERNAME))
+    status = _card_pending_status(g["comment"])
+    if status:
+        await callback.message.answer(
+            texts.CANCEL_CARD_REDIRECT.format(status=status, support=texts.SUPPORT_USERNAME)
+        )
         await callback.answer()
         return
 
     await callback.message.answer(
-        texts.CANCEL_CONFIRM_ASK.format(date=rows[0]["date"], items=_order_items_text(rows)),
+        texts.CANCEL_CONFIRM_ASK.format(date=g["date"], items=_order_items_text(g["items"])),
         reply_markup=kb.cancel_confirm_kb(),
     )
     await callback.answer()
@@ -220,23 +263,27 @@ async def cancel_order_yes(callback: CallbackQuery, bot: Bot):
         await callback.answer()
         return
 
-    rows = sheets.get_last_order_rows(client["id"])
-    if not rows or rows[0]["canceled"]:
+    groups = sheets.get_client_order_groups(client["id"], limit=1)
+    if not groups or groups[0]["canceled"]:
         await callback.message.answer(texts.CANCEL_ALREADY)
         await callback.answer()
         return
+    g = groups[0]
     if sheets.is_after_cancel_cutoff():
         await callback.message.answer(
             texts.CANCEL_TOO_LATE.format(cutoff=config.CANCEL_CUTOFF_TIME, support=texts.SUPPORT_USERNAME)
         )
         await callback.answer()
         return
-    if any(_is_card_payment(r["payment"]) for r in rows):
-        await callback.message.answer(texts.CANCEL_CARD_REDIRECT.format(support=texts.SUPPORT_USERNAME))
+    status = _card_pending_status(g["comment"])
+    if status:
+        await callback.message.answer(
+            texts.CANCEL_CARD_REDIRECT.format(status=status, support=texts.SUPPORT_USERNAME)
+        )
         await callback.answer()
         return
 
-    sheets.cancel_order_rows([r["row"] for r in rows])
+    sheets.cancel_order_rows(g["rows"])
     await callback.message.answer(texts.CANCEL_DONE)
 
     if config.ADMIN_CHAT_ID:
@@ -246,8 +293,8 @@ async def cancel_order_yes(callback: CallbackQuery, bot: Bot):
                 texts.ADMIN_ORDER_CANCELLED_ALERT.format(
                     name=client.get("name", ""),
                     client_id=client.get("id", ""),
-                    date=rows[0]["date"],
-                    items=_order_items_text(rows),
+                    date=g["date"],
+                    items=_order_items_text(g["items"]),
                 ),
             )
         except Exception:
@@ -264,10 +311,10 @@ async def cancel_order_no(callback: CallbackQuery):
 
 
 # ---------------------------------------------------------------------------
-# Отзыв о последнем заказе
+# Отзыв о заказе (у каждого заказа своя кнопка)
 # ---------------------------------------------------------------------------
 
-@router.callback_query(F.data == "leave_feedback")
+@router.callback_query(F.data.startswith("feedback:"))
 async def feedback_start(callback: CallbackQuery, state: FSMContext):
     client = sheets.find_client_by_tg_id(callback.from_user.id)
     if not client:
@@ -275,12 +322,20 @@ async def feedback_start(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    orders = sheets.get_client_orders(client["id"], limit=1)
-    if not orders:
+    try:
+        row_num = int(callback.data.split(":", 1)[1])
+    except ValueError:
+        await callback.answer()
+        return
+
+    groups = sheets.get_client_order_groups(client["id"], limit=10**9)
+    group = next((g for g in groups if row_num in g["rows"]), None)
+    if not group:
         await callback.message.answer(texts.FEEDBACK_NO_ORDERS)
         await callback.answer()
         return
 
+    await state.update_data(feedback_order=f"{group['date']} — {_order_items_text(group['items'])}")
     await callback.message.answer(texts.FEEDBACK_PROMPT)
     await state.set_state(Feedback.waiting_text)
     await callback.answer()
@@ -294,15 +349,11 @@ async def feedback_save(message: Message, state: FSMContext, bot: Bot):
         return
 
     client = sheets.find_client_by_tg_id(message.from_user.id)
-    orders = sheets.get_client_orders(client["id"], limit=1) if client else []
-    last = orders[0] if orders else None
+    data = await state.get_data()
+    order_info = data.get("feedback_order", "—")
     await state.clear()
 
     if config.ADMIN_CHAT_ID and client:
-        order_info = (
-            f"{last['date']} — {last['qty']}× {texts.display_set_name(last['set'])}"
-            if last else "—"
-        )
         try:
             await bot.send_message(
                 config.ADMIN_CHAT_ID,

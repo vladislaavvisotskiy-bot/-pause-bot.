@@ -3,12 +3,15 @@ import asyncio
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, BufferedInputFile
+from aiogram.fsm.context import FSMContext
 
 import sheets
 import texts
 import keyboards as kb
 import config
+import pdf_report
+from states import AdminClub
 
 router = Router()
 
@@ -142,3 +145,85 @@ async def cmd_courier(message: Message):
     date_str = sheets.get_order_date_for_now()
     report = sheets.build_courier_report(date_str)
     await message.answer(report or "На сегодня заказов нет.")
+
+
+# ---------------------------------------------------------------------------
+# PDF-отчёт для кухни
+# ---------------------------------------------------------------------------
+
+async def send_kitchen_pdf(bot: Bot, chat_id: int, date_str: str):
+    data = pdf_report.build_kitchen_report_pdf(date_str)
+    filename = f"kitchen_{date_str.replace('.', '-')}.pdf"
+    await bot.send_document(
+        chat_id,
+        BufferedInputFile(data, filename=filename),
+        caption=texts.ADMIN_KITCHEN_PDF_CAPTION.format(date=date_str),
+    )
+
+
+@router.message(Command("kitchen_pdf"))
+async def cmd_kitchen_pdf(message: Message, bot: Bot):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    date_str = sheets.get_order_date_for_now()
+    await send_kitchen_pdf(bot, message.chat.id, date_str)
+
+
+# ---------------------------------------------------------------------------
+# Pause Club — текст о клубе и розыгрыш (админ)
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data == "admin_club_panel")
+async def admin_club_panel(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await callback.message.answer("Pause Club:", reply_markup=kb.admin_club_panel_kb())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_club_info")
+async def admin_club_info_start(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await callback.message.answer(texts.ADMIN_CLUB_INFO_PROMPT)
+    await state.set_state(AdminClub.waiting_info)
+    await callback.answer()
+
+
+@router.message(AdminClub.waiting_info)
+async def admin_club_info_save(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer(texts.ADMIN_CLUB_INFO_PROMPT)
+        return
+    sheets.set_club_info_text(text)
+    await state.clear()
+    await message.answer(texts.ADMIN_CLUB_INFO_SAVED)
+
+
+@router.callback_query(F.data == "admin_giveaway")
+async def admin_giveaway_start(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await callback.message.answer(texts.ADMIN_GIVEAWAY_PROMPT)
+    await state.set_state(AdminClub.waiting_giveaway)
+    await callback.answer()
+
+
+@router.message(AdminClub.waiting_giveaway)
+async def admin_giveaway_save(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer(texts.ADMIN_GIVEAWAY_PROMPT)
+        return
+    await state.clear()
+    if text.lower() in texts.ADMIN_GIVEAWAY_OFF_WORDS:
+        sheets.set_giveaway("", False)
+        await message.answer(texts.ADMIN_GIVEAWAY_OFF)
+    else:
+        sheets.set_giveaway(text, True)
+        await message.answer(texts.ADMIN_GIVEAWAY_SAVED)

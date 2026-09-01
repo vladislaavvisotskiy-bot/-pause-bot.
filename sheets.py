@@ -58,6 +58,7 @@ def _load_clients(force=False):
         cid = cell(config.COL_ID)
         if not cid:
             continue
+        order_count_raw = cell(config.COL_ORDER_COUNT)
         clients.append({
             "row": r,
             "id": int(cid) if cid.isdigit() else cid,
@@ -67,6 +68,8 @@ def _load_clients(force=False):
             "contact": cell(config.COL_CONTACT),
             "telegram": cell(config.COL_TELEGRAM),
             "tg_id": cell(config.COL_TG_ID),
+            "reg_date": cell(config.COL_REG_DATE),
+            "order_count": int(order_count_raw) if order_count_raw.isdigit() else 0,
         })
     _cache["clients"] = clients
     _cache["clients_ts"] = now
@@ -88,6 +91,29 @@ def get_client_by_id(client_id) -> Optional[dict]:
     return None
 
 
+def _clients_index() -> dict:
+    return {str(c["id"]): c for c in _load_clients()}
+
+
+def _row_amount(row: list, prices: dict) -> int:
+    """Сумма по строке заказа — считаем сами по цене сета, а не полагаемся на
+    формулу в таблице (она может быть не протянута на новые строки)."""
+    set_name = row[config.O_SET - 1].strip() if len(row) >= config.O_SET else ""
+    try:
+        qty = int(row[config.O_QTY - 1].strip() or 0) if len(row) >= config.O_QTY else 0
+    except ValueError:
+        qty = 0
+    amount = qty * prices.get(set_name, 0)
+    if amount:
+        return amount
+    if len(row) >= config.O_SUM:
+        try:
+            return int(row[config.O_SUM - 1].replace(" ", "").replace(",", "") or 0)
+        except (ValueError, IndexError):
+            pass
+    return 0
+
+
 def create_client(tg_id: int, name: str, phone: str, telegram_username: str = "") -> int:
     """Создаёт нового клиента, возвращает его новый ID."""
     ws = _ws(config.SHEET_CLIENTS)
@@ -103,6 +129,7 @@ def create_client(tg_id: int, name: str, phone: str, telegram_username: str = ""
         (config.COL_TELEGRAM, telegram_username),
         (config.COL_STATUS, "Новичок"),
         (config.COL_TG_ID, str(tg_id)),
+        (config.COL_REG_DATE, today_date_str()),
     ]
     for col, value in updates:
         ws.update_cell(new_row_num, col, value)
@@ -151,6 +178,7 @@ def is_canceled(comment: str) -> bool:
 def get_client_debt(client_id) -> int:
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
+    prices = get_set_prices()
     total = 0
     for i, row in enumerate(rows):
         r = i + 1
@@ -160,10 +188,7 @@ def get_client_debt(client_id) -> int:
         payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
         if eid == str(client_id) and payment == "В долг" and not is_canceled(comment):
-            try:
-                total += int(row[config.O_SUM - 1].replace(" ", "").replace(",", "") or 0)
-            except (ValueError, IndexError):
-                pass
+            total += _row_amount(row, prices)
     return total
 
 
@@ -171,6 +196,8 @@ def get_all_debtors() -> list:
     """Возвращает список [(имя, id, сумма_долга)] — агрегированный по всем заказам."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
+    clients = _clients_index()
+    prices = get_set_prices()
     debts = {}
     for i, row in enumerate(rows):
         r = i + 1
@@ -185,11 +212,8 @@ def get_all_debtors() -> list:
         if is_canceled(comment):
             continue
         eid = row[config.O_CLIENT_ID - 1].strip()
-        name = row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else eid
-        try:
-            amount = int(row[config.O_SUM - 1].replace(" ", "").replace(",", "") or 0)
-        except (ValueError, IndexError):
-            amount = 0
+        name = (clients.get(eid) or {}).get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or eid
+        amount = _row_amount(row, prices)
         key = eid or name
         if key not in debts:
             debts[key] = {"name": name, "id": eid, "sum": 0}
@@ -221,13 +245,41 @@ def get_client_orders(client_id, limit=10) -> list:
     return out[-limit:][::-1]
 
 
+def get_client_order_groups(client_id, limit=10) -> list:
+    """Заказы клиента, сгруппированные по дате — один оформленный заказ мог
+    занять несколько строк (несколько сетов), но это по-прежнему один заказ
+    для отмены/отзыва/истории. Возвращает от новых к старым."""
+    rows = get_client_orders(client_id, limit=10**9)  # уже от новых к старым
+    groups, order = {}, []
+    for r in rows:
+        key = r["date"]
+        if key not in groups:
+            groups[key] = {
+                "date": r["date"],
+                "items": [],
+                "rows": [],
+                "payment": r["payment"],
+                "comment": r["comment"],
+                "canceled": r["canceled"],
+            }
+            order.append(key)
+        g = groups[key]
+        g["items"].append({"set": r["set"], "qty": r["qty"]})
+        g["rows"].append(r["row"])
+    return [groups[k] for k in order][:limit]
+
+
 def get_last_order_rows(client_id) -> list:
     """Все строки последнего (по дате) заказа клиента — для отмены."""
-    orders = get_client_orders(client_id, limit=10**9)
-    if not orders:
+    groups = get_client_order_groups(client_id, limit=1)
+    if not groups:
         return []
-    last_date = orders[0]["date"]  # get_client_orders уже возвращает от новых к старым
-    return [o for o in orders if o["date"] == last_date]
+    g = groups[0]
+    return [
+        {"row": row, "date": g["date"], "set": item["set"], "qty": item["qty"],
+         "payment": g["payment"], "comment": g["comment"], "canceled": g["canceled"]}
+        for row, item in zip(g["rows"], g["items"])
+    ]
 
 
 def cancel_order_rows(row_nums: list):
@@ -364,13 +416,98 @@ def set_today_menu_photos(photo_ids: list, caption: str):
 
 
 # ---------------------------------------------------------------------------
+# Pause Club
+# ---------------------------------------------------------------------------
+
+def get_club_level(order_count: int) -> dict:
+    """Уровень клуба по количеству заказов — чистая функция, таблицу не трогает."""
+    levels = config.CLUB_LEVELS
+    current = levels[0]
+    next_level = None
+    for i, (threshold, emoji, label) in enumerate(levels):
+        if order_count >= threshold:
+            current = (threshold, emoji, label)
+            next_level = levels[i + 1] if i + 1 < len(levels) else None
+        else:
+            break
+    _, emoji, label = current
+    result = {"emoji": emoji, "label": label, "order_count": order_count, "next_label": None, "left": 0}
+    if next_level:
+        next_threshold, next_emoji, next_label = next_level
+        result["next_label"] = next_label
+        result["next_emoji"] = next_emoji
+        result["left"] = max(0, next_threshold - order_count)
+    return result
+
+
+def get_giveaway() -> tuple:
+    """(активен ли розыгрыш, текст розыгрыша)."""
+    ws = _ws(config.SHEET_CLUB)
+    active = (ws.acell(config.CLUB_ACTIVE_CELL).value or "").strip().lower() == "да"
+    text = ws.acell(config.CLUB_GIVEAWAY_TEXT_CELL).value or ""
+    return active, text
+
+
+def set_giveaway(text: str, active: bool):
+    ws = _ws(config.SHEET_CLUB)
+    ws.update_acell(config.CLUB_ACTIVE_CELL, "Да" if active else "Нет")
+    ws.update_acell(config.CLUB_GIVEAWAY_TEXT_CELL, text or "")
+
+
+def get_club_info_text() -> str:
+    ws = _ws(config.SHEET_CLUB)
+    return ws.acell(config.CLUB_INFO_TEXT_CELL).value or ""
+
+
+def set_club_info_text(text: str):
+    ws = _ws(config.SHEET_CLUB)
+    ws.update_acell(config.CLUB_INFO_TEXT_CELL, text or "")
+
+
+# ---------------------------------------------------------------------------
 # Отчёты для кухни / курьера — те же формулы, что и в самой таблице,
 # просто пересчитанные тут, чтобы бот мог прислать их сам
 # ---------------------------------------------------------------------------
 
+def get_orders_for_date(date_str: str) -> list:
+    """Сырые строки заказов на дату (без отменённых) — источник для PDF-отчёта.
+    Имя резолвим сами по ID клиента — не полагаемся на формулу в таблице
+    (она может быть не протянута на новые строки)."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    clients = _clients_index()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_TELEGRAM:
+            row = row + [""] * (config.O_TELEGRAM - len(row))
+        if row[config.O_DATE - 1].strip() != date_str:
+            continue
+        client_id = row[config.O_CLIENT_ID - 1].strip()
+        if not client_id:
+            continue
+        comment = row[config.O_COMMENT - 1].strip()
+        if is_canceled(comment):
+            continue
+        name = (clients.get(client_id) or {}).get("name") or row[config.O_NAME - 1].strip() or client_id
+        out.append({
+            "name": name,
+            "zone": row[config.O_ZONE - 1].strip(),
+            "point": row[config.O_POINT - 1].strip(),
+            "set": row[config.O_SET - 1].strip(),
+            "qty": row[config.O_QTY - 1].strip() or "0",
+            "garnish": row[config.O_GARNISH - 1].strip(),
+            "comment": comment,
+        })
+    return out
+
+
 def build_kitchen_report(date_str: str) -> str:
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
+    clients = _clients_index()
     lines_by_name = {}
     order_by_name = []
     comments = []
@@ -384,12 +521,13 @@ def build_kitchen_report(date_str: str) -> str:
             row = row + [""] * (config.O_TELEGRAM - len(row))
         if row[config.O_DATE - 1].strip() != date_str:
             continue
-        name = row[config.O_NAME - 1].strip()
-        if not name:
+        client_id = row[config.O_CLIENT_ID - 1].strip()
+        if not client_id:
             continue
         comment = row[config.O_COMMENT - 1].strip()
         if is_canceled(comment):
             continue
+        name = (clients.get(client_id) or {}).get("name") or row[config.O_NAME - 1].strip() or client_id
         set_name = row[config.O_SET - 1].strip()
         qty = row[config.O_QTY - 1].strip() or "0"
         garnish = row[config.O_GARNISH - 1].strip()
@@ -429,6 +567,8 @@ def build_kitchen_report(date_str: str) -> str:
 def build_courier_report(date_str: str) -> str:
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
+    clients = _clients_index()
+    prices = get_set_prices()
     by_zone = {}
     zone_order = []
 
@@ -441,20 +581,19 @@ def build_courier_report(date_str: str) -> str:
         if row[config.O_DATE - 1].strip() != date_str:
             continue
         zone = row[config.O_ZONE - 1].strip()
-        name = row[config.O_NAME - 1].strip()
-        if not zone or not name:
+        client_id = row[config.O_CLIENT_ID - 1].strip()
+        if not zone or not client_id:
             continue
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
         if is_canceled(comment):
             continue
+        client = clients.get(client_id) or {}
+        name = client.get("name") or row[config.O_NAME - 1].strip() or client_id
         point = row[config.O_POINT - 1].strip()
-        contact = row[config.O_CONTACT - 1].strip() or "Неизвестно"
-        telegram = row[config.O_TELEGRAM - 1].strip()
+        contact = client.get("contact") or row[config.O_CONTACT - 1].strip() or "Неизвестно"
+        telegram = client.get("telegram") or row[config.O_TELEGRAM - 1].strip()
         payment = row[config.O_PAYMENT - 1].strip()
-        try:
-            amount = int(row[config.O_SUM - 1].replace(" ", "").replace(",", "") or 0)
-        except (ValueError, IndexError):
-            amount = 0
+        amount = _row_amount(row, prices)
 
         tg = f"@{telegram}" if telegram and not telegram.startswith("@") else (telegram or "—")
         line = f"○ {name} - {contact} / {tg} - {point} - {amount:,} сум - {payment}".replace(",", " ")

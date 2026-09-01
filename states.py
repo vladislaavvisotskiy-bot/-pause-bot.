@@ -34,3 +34,8 @@ class EditProfile(StatesGroup):
 
 class Feedback(StatesGroup):
     waiting_text = State()
+
+
+class AdminClub(StatesGroup):
+    waiting_info = State()
+    waiting_giveaway = State()

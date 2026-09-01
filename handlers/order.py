@@ -22,6 +22,41 @@ def _is_card_payment(payment: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Раздел «Меню» — показ меню на сегодня и кнопка «Заказать»
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data == "menu_section")
+async def menu_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await state.clear()
+    client = _require_client(callback)
+    if not client:
+        await callback.message.answer("Похоже, вы ещё не зарегистрированы — наберите /start")
+        await callback.answer()
+        return
+
+    can_order = not sheets.is_after_cutoff()
+
+    photo_ids, caption = sheets.get_today_menu_photos()
+    if photo_ids:
+        if len(photo_ids) == 1:
+            await callback.message.answer_photo(photo_ids[0], caption=caption or None)
+        else:
+            media = [
+                InputMediaPhoto(media=pid, caption=(caption if i == 0 else None))
+                for i, pid in enumerate(photo_ids)
+            ]
+            await bot.send_media_group(callback.message.chat.id, media)
+    else:
+        await callback.message.answer(texts.NO_MENU_YET)
+
+    if can_order:
+        await callback.message.answer(texts.MENU_ORDER_PROMPT, reply_markup=kb.menu_section_kb(can_order=True))
+    else:
+        await callback.message.answer(texts.CUTOFF_CLOSED_NOTICE, reply_markup=kb.menu_section_kb(can_order=False))
+    await callback.answer()
+
+
+# ---------------------------------------------------------------------------
 # Старт заказа
 # ---------------------------------------------------------------------------
 
@@ -37,19 +72,6 @@ async def order_start(callback: CallbackQuery, state: FSMContext, bot: Bot):
         await callback.message.answer(texts.CUTOFF_CLOSED_NOTICE)
         await callback.answer()
         return
-
-    photo_ids, caption = sheets.get_today_menu_photos()
-    if photo_ids:
-        if len(photo_ids) == 1:
-            await callback.message.answer_photo(photo_ids[0], caption=caption or None)
-        else:
-            media = [
-                InputMediaPhoto(media=pid, caption=(caption if i == 0 else None))
-                for i, pid in enumerate(photo_ids)
-            ]
-            await bot.send_media_group(callback.message.chat.id, media)
-    else:
-        await callback.message.answer(texts.NO_MENU_YET)
 
     await state.update_data(client_id=client["id"], client_row=client["row"],
                              client_name=client["name"], client_phone=client["contact"],
@@ -229,7 +251,10 @@ async def chosen_payment(callback: CallbackQuery, state: FSMContext):
     await state.update_data(cur_payment=payment, card_screenshot=None, card_status="")
 
     if _is_card_payment(payment):
-        await callback.message.answer(texts.CARD_PAYMENT_ASK, reply_markup=kb.card_payment_kb())
+        await callback.message.answer(
+            texts.CARD_PAYMENT_ASK.format(requisites=texts.REQUISITES_TEXT),
+            reply_markup=kb.card_payment_kb(),
+        )
         await state.set_state(Order.card_decision)
     else:
         await _show_summary(callback.message, state)
