@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Все тексты бота собраны в одном месте — в стиле PAUSE (тепло, коротко, без канцелярита)."""
+import html
+import re
 
 # Как называются сеты для клиента в боте — при этом в таблицу и отчёты кухни/
 # курьера по-прежнему уходят исходные названия из Справочников ("Блюдо дня",
@@ -12,6 +14,49 @@ SET_DISPLAY_NAMES = {
 
 def display_set_name(name: str) -> str:
     return SET_DISPLAY_NAMES.get(name, name)
+
+
+def display_garnish(garnish: str) -> str:
+    """Гарнир для показа клиенту — с заглавной буквы (кнопки, сводка заказа,
+    итоговое сообщение). В таблицу "Заказы" по-прежнему пишем как прислали
+    (с маленькой буквы) — отчёты Кухня/Курьер ищут точное совпадение
+    "без гарнира" в нижнем регистре, менять это нельзя."""
+    g = (garnish or "").strip()
+    if not g:
+        return g
+    if "/" in g:
+        # составной гарнир вида "рис/пюре 50/50" -> "Рис/Пюре 50/50"
+        head, sep, tail = g.partition(" ")
+        parts = [p[:1].upper() + p[1:] if p else p for p in head.split("/")]
+        head_cap = "/".join(parts)
+        return f"{head_cap} {tail}".strip() if tail else head_cap
+    return g[:1].upper() + g[1:]
+
+
+# --- Форматирование текста меню при пересылке клиентам ---
+# Заголовок сета ("Пауза дня." / "Для тебя.", допускаем небольшие отличия в
+# формулировке) — жирным. Строка с ценой (содержит "uzs") — курсивом.
+_MENU_HEADER_RE = re.compile(r"^\s*(пауза\s+дня|для\s+тебя)", re.IGNORECASE)
+_MENU_PRICE_RE = re.compile(r"uzs", re.IGNORECASE)
+
+
+def format_menu_text(text: str) -> str:
+    """HTML-разметка текста меню от админа для показа клиенту. Экранируем
+    исходный текст целиком (это свободный текст от человека, может
+    содержать "<"/"&"), затем оборачиваем найденные строки в <b>/<i>."""
+    if not text:
+        return text
+    out_lines = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        escaped = html.escape(line)
+        if stripped and _MENU_HEADER_RE.match(stripped):
+            out_lines.append(f"<b>{escaped}</b>")
+        elif stripped and _MENU_PRICE_RE.search(stripped):
+            out_lines.append(f"<i>{escaped}</i>")
+        else:
+            out_lines.append(escaped)
+    return "\n".join(out_lines)
 
 
 SUPPORT_USERNAME = "@ssaavveeyy"
@@ -37,7 +82,7 @@ WELCOME_BACK = "☘️ С возвращением! Что сегодня зак
 ASK_NAME = "Как к вам обращаться? Напишите имя, как удобно."
 
 ASK_PHONE = (
-    "Спасибо, {name}! Теперь оставьте номер телефона — "
+    "Спасибо, {name}! Оставьте номер телефона в формате: 91 111 11 11 — "
     "он нужен только курьеру, чтобы с вами связаться."
 )
 

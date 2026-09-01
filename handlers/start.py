@@ -43,12 +43,20 @@ async def got_phone(message: Message, state: FSMContext):
     name = data.get("reg_name", message.from_user.full_name)
     username = message.from_user.username or ""
 
-    new_id = sheets.create_client(
-        tg_id=message.from_user.id,
-        name=name,
-        phone=phone,
-        telegram_username=username,
-    )
+    # Если такой номер уже есть в CRM (клиент добавлен вручную до бота) —
+    # не создаём дубликат, а просто привязываем Telegram ID к его карточке.
+    # Имя, уже записанное в таблице, не трогаем — оно может быть точнее
+    # того, что человек ввёл в боте.
+    existing = sheets.find_client_by_phone(phone)
+    if existing:
+        sheets.link_tg_id_to_client(existing["row"], message.from_user.id)
+    else:
+        sheets.create_client(
+            tg_id=message.from_user.id,
+            name=name,
+            phone=phone,
+            telegram_username=username,
+        )
     await state.clear()
     await message.answer(texts.REGISTERED)
     await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())

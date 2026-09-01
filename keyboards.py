@@ -25,10 +25,11 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def options_kb(options: list, prefix: str, back: bool = False, other: bool = False, home: bool = True) -> InlineKeyboardMarkup:
+def options_kb(options: list, prefix: str, back: bool = False, other: bool = False, home: bool = True, display=None) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for opt in options:
-        b.button(text=opt, callback_data=f"{prefix}:{opt}")
+        label = display(opt) if display else opt
+        b.button(text=label, callback_data=f"{prefix}:{opt}")
     if other:
         b.button(text=texts.OTHER_BTN, callback_data=f"{prefix}:__other__")
     if back:
@@ -39,24 +40,28 @@ def options_kb(options: list, prefix: str, back: bool = False, other: bool = Fal
     return b.as_markup()
 
 
-def set_kb(sets: list) -> InlineKeyboardMarkup:
+def set_kb(sets: list, back: bool = False) -> InlineKeyboardMarkup:
     """Кнопки выбора сета — показывают клиенту дружелюбное название
     («Пауза дня»/«Для тебя»), а в callback_data и в таблицу по-прежнему
     уходит исходное название из Справочников."""
     b = InlineKeyboardBuilder()
     for opt in sets:
         b.button(text=texts.display_set_name(opt), callback_data=f"set:{opt}")
+    if back:
+        b.button(text=texts.BACK_BTN, callback_data="set:__back__")
     _home(b)
     b.adjust(1)
     return b.as_markup()
 
 
-def garnish_kb(options: list) -> InlineKeyboardMarkup:
+def garnish_kb(options: list, back: bool = False) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for opt in options:
-        b.button(text=opt, callback_data=f"garnish:{opt}")
+        b.button(text=texts.display_garnish(opt), callback_data=f"garnish:{opt}")
     if len(options) >= 2:
         b.button(text=texts.MIX_GARNISH_BTN, callback_data="garnish:__mix__")
+    if back:
+        b.button(text=texts.BACK_BTN, callback_data="garnish:__back__")
     _home(b)
     b.adjust(1)
     return b.as_markup()

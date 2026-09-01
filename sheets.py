@@ -96,6 +96,40 @@ def _clients_index() -> dict:
     return {str(c["id"]): c for c in _load_clients()}
 
 
+def _digits_only(s: str) -> str:
+    return "".join(ch for ch in (s or "") if ch.isdigit())
+
+
+def _phone_key(s: str) -> str:
+    """Последние 9 цифр номера (длина узбекского номера без кода страны) —
+    так "90 123 45 67", "901234567" и "+998901234567" совпадают между собой,
+    независимо от пробелов/дефисов/скобок и наличия кода страны."""
+    digits = _digits_only(s)
+    return digits[-9:] if len(digits) >= 9 else digits
+
+
+def find_client_by_phone(phone: str) -> Optional[dict]:
+    """Ищет существующего клиента (например, добавленного вручную в CRM ещё
+    до бота) по номеру телефона — сравниваем только цифры, чтобы разное
+    написание одного и того же номера считалось совпадением."""
+    target = _phone_key(phone)
+    if not target:
+        return None
+    for c in _load_clients():
+        if _phone_key(c["contact"]) == target:
+            return c
+    return None
+
+
+def link_tg_id_to_client(client_row: int, tg_id: int):
+    """Привязывает Telegram ID к уже существующей строке клиента в Sheet1 —
+    используется, когда клиент, ранее добавленный вручную, впервые пишет
+    боту и находится по совпадению телефона (дубликат не создаём)."""
+    ws = _ws(config.SHEET_CLIENTS)
+    ws.update_cell(client_row, config.COL_TG_ID, str(tg_id))
+    _cache["clients"] = None
+
+
 def _id_value(client_id):
     """ID клиента для записи в ячейку — числом, если это возможно.
 

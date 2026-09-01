@@ -38,11 +38,19 @@ async def menu_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
     photo_ids, caption = sheets.get_today_menu_photos()
     if photo_ids:
+        formatted = texts.format_menu_text(caption) if caption else None
         if len(photo_ids) == 1:
-            await callback.message.answer_photo(photo_ids[0], caption=caption or None)
+            await callback.message.answer_photo(
+                photo_ids[0], caption=formatted or None,
+                parse_mode="HTML" if formatted else None,
+            )
         else:
             media = [
-                InputMediaPhoto(media=pid, caption=(caption if i == 0 else None))
+                InputMediaPhoto(
+                    media=pid,
+                    caption=(formatted if i == 0 else None),
+                    parse_mode=("HTML" if i == 0 and formatted else None),
+                )
                 for i, pid in enumerate(photo_ids)
             ]
             await bot.send_media_group(callback.message.chat.id, media)
@@ -82,14 +90,27 @@ async def order_start(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
 
 async def _ask_set(message: Message, state: FSMContext):
+    data = await state.get_data()
+    back = bool(data.get("cart"))
     sets = sheets.get_sets()
-    await message.answer(texts.CHOOSE_SET, reply_markup=kb.set_kb(sets))
+    await message.answer(texts.CHOOSE_SET, reply_markup=kb.set_kb(sets, back=back))
     await state.set_state(Order.choosing_set)
+
+
+async def _back_to_asking_more(message: Message, state: FSMContext):
+    await message.answer(texts.ASK_MORE, reply_markup=kb.yes_no_kb("add_more", "done_adding"))
+    await state.set_state(Order.asking_more)
 
 
 @router.callback_query(Order.choosing_set, F.data.startswith("set:"))
 async def chosen_set(callback: CallbackQuery, state: FSMContext):
     set_name = callback.data.split(":", 1)[1]
+
+    if set_name == "__back__":
+        await _back_to_asking_more(callback.message, state)
+        await callback.answer()
+        return
+
     await state.update_data(cur_set=set_name)
 
     if set_name.strip().lower() == "сет стандарт":
@@ -98,7 +119,7 @@ async def chosen_set(callback: CallbackQuery, state: FSMContext):
         # оставить клиента без вариантов.
         garnishes = sheets.get_today_garnishes() or sheets.get_garnishes()
         await state.update_data(garnish_options=garnishes)
-        await callback.message.answer(texts.CHOOSE_GARNISH, reply_markup=kb.garnish_kb(garnishes))
+        await callback.message.answer(texts.CHOOSE_GARNISH, reply_markup=kb.garnish_kb(garnishes, back=True))
         await state.set_state(Order.choosing_garnish)
     else:
         await state.update_data(cur_garnish="")
@@ -111,10 +132,18 @@ async def chosen_set(callback: CallbackQuery, state: FSMContext):
 async def chosen_garnish(callback: CallbackQuery, state: FSMContext):
     value = callback.data.split(":", 1)[1]
 
+    if value == "__back__":
+        await _ask_set(callback.message, state)
+        await callback.answer()
+        return
+
     if value == "__mix__":
         data = await state.get_data()
         options = data.get("garnish_options", [])
-        await callback.message.answer(texts.CHOOSE_GARNISH_MIX1, reply_markup=kb.options_kb(options, "gmix1"))
+        await callback.message.answer(
+            texts.CHOOSE_GARNISH_MIX1,
+            reply_markup=kb.options_kb(options, "gmix1", back=True, display=texts.display_garnish),
+        )
         await state.set_state(Order.choosing_garnish_mix1)
         await callback.answer()
         return
@@ -129,9 +158,20 @@ async def chosen_garnish(callback: CallbackQuery, state: FSMContext):
 async def chosen_garnish_mix1(callback: CallbackQuery, state: FSMContext):
     g1 = callback.data.split(":", 1)[1]
     data = await state.get_data()
+
+    if g1 == "__back__":
+        garnishes = data.get("garnish_options", [])
+        await callback.message.answer(texts.CHOOSE_GARNISH, reply_markup=kb.garnish_kb(garnishes, back=True))
+        await state.set_state(Order.choosing_garnish)
+        await callback.answer()
+        return
+
     options = [g for g in data.get("garnish_options", []) if g != g1]
     await state.update_data(mix_g1=g1)
-    await callback.message.answer(texts.CHOOSE_GARNISH_MIX2, reply_markup=kb.options_kb(options, "gmix2"))
+    await callback.message.answer(
+        texts.CHOOSE_GARNISH_MIX2,
+        reply_markup=kb.options_kb(options, "gmix2", back=True, display=texts.display_garnish),
+    )
     await state.set_state(Order.choosing_garnish_mix2)
     await callback.answer()
 
@@ -141,6 +181,17 @@ async def chosen_garnish_mix2(callback: CallbackQuery, state: FSMContext):
     g2 = callback.data.split(":", 1)[1]
     data = await state.get_data()
     g1 = data.get("mix_g1", "")
+
+    if g2 == "__back__":
+        options = [g for g in data.get("garnish_options", []) if g != g1]
+        await callback.message.answer(
+            texts.CHOOSE_GARNISH_MIX1,
+            reply_markup=kb.options_kb(options, "gmix1", back=True, display=texts.display_garnish),
+        )
+        await state.set_state(Order.choosing_garnish_mix1)
+        await callback.answer()
+        return
+
     mixed = f"{g1}/{g2} 50/50"
     await state.update_data(cur_garnish=mixed)
     await callback.message.answer(texts.ASK_QTY, reply_markup=kb.qty_kb())
@@ -183,13 +234,19 @@ async def done_adding(callback: CallbackQuery, state: FSMContext):
         )
         await state.set_state(Order.asking_default_point)
     else:
-        await _ask_zone(callback.message, state)
+        await _ask_zone(callback.message, state, from_default=False)
     await callback.answer()
 
 
-async def _ask_zone(message: Message, state: FSMContext):
+async def _ask_zone(message: Message, state: FSMContext, from_default: bool = None):
+    # from_default запоминает, откуда пришли на этот шаг — нужно, чтобы
+    # кнопка «Назад» отсюда вернула на правильный предыдущий экран
+    # (к вопросу "как обычно?" или к "добавить ещё один сет?"). None — не
+    # меняем то, что уже сохранено (используется при возврате со «Точки»).
+    if from_default is not None:
+        await state.update_data(zone_back_target="default_point" if from_default else "asking_more")
     zones = sheets.get_zones()
-    await message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "zone"))
+    await message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "zone", back=True))
     await state.set_state(Order.choosing_zone)
 
 
@@ -208,7 +265,7 @@ async def default_point_yes(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(Order.asking_default_point, F.data == "default_point_change")
 async def default_point_change(callback: CallbackQuery, state: FSMContext):
-    await _ask_zone(callback.message, state)
+    await _ask_zone(callback.message, state, from_default=True)
     await callback.answer()
 
 
@@ -219,11 +276,27 @@ async def default_point_change(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(Order.choosing_zone, F.data.startswith("zone:"))
 async def chosen_zone(callback: CallbackQuery, state: FSMContext):
     zone = callback.data.split(":", 1)[1]
+
+    if zone == "__back__":
+        data = await state.get_data()
+        if data.get("zone_back_target") == "default_point":
+            await callback.message.answer(
+                texts.DEFAULT_POINT_ASK.format(
+                    zone=data.get("client_zone", ""), point=data.get("client_point", "")
+                ),
+                reply_markup=kb.default_point_kb(),
+            )
+            await state.set_state(Order.asking_default_point)
+        else:
+            await _back_to_asking_more(callback.message, state)
+        await callback.answer()
+        return
+
     await state.update_data(cur_zone=zone)
     points = sheets.get_points(zone)
     if points:
         await callback.message.answer(texts.CHOOSE_POINT,
-                                       reply_markup=kb.options_kb(points, "point", other=True))
+                                       reply_markup=kb.options_kb(points, "point", other=True, back=True))
         await state.set_state(Order.choosing_point)
     else:
         await callback.message.answer(texts.ASK_NEW_POINT)
@@ -234,6 +307,12 @@ async def chosen_zone(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(Order.choosing_point, F.data.startswith("point:"))
 async def chosen_point(callback: CallbackQuery, state: FSMContext):
     point = callback.data.split(":", 1)[1]
+
+    if point == "__back__":
+        await _ask_zone(callback.message, state)
+        await callback.answer()
+        return
+
     if point == "__other__":
         await callback.message.answer(texts.ASK_NEW_POINT)
         await state.set_state(Order.entering_new_point)
@@ -341,7 +420,7 @@ async def _show_summary(message: Message, state: FSMContext):
         total += sub
         line = f"• {item['qty']}× {texts.display_set_name(item['set'])}"
         if item["garnish"]:
-            line += f" ({item['garnish']})"
+            line += f" ({texts.display_garnish(item['garnish'])})"
         line += f" — {sub:,} сум".replace(",", " ")
         lines.append(line)
 
