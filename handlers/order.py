@@ -75,6 +75,7 @@ async def order_start(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
     await state.update_data(client_id=client["id"], client_row=client["row"],
                              client_name=client["name"], client_phone=client["contact"],
+                             client_zone=client.get("zone", ""), client_point=client.get("point", ""),
                              cart=[])
     await _ask_set(callback.message, state)
     await callback.answer()
@@ -92,7 +93,10 @@ async def chosen_set(callback: CallbackQuery, state: FSMContext):
     await state.update_data(cur_set=set_name)
 
     if set_name.strip().lower() == "сет стандарт":
-        garnishes = sheets.get_garnishes()
+        # Гарниры, реально доступные сегодня (задаёт админ после публикации
+        # меню); если ещё не заданы — берём общий справочник, чтобы не
+        # оставить клиента без вариантов.
+        garnishes = sheets.get_today_garnishes() or sheets.get_garnishes()
         await state.update_data(garnish_options=garnishes)
         await callback.message.answer(texts.CHOOSE_GARNISH, reply_markup=kb.garnish_kb(garnishes))
         await state.set_state(Order.choosing_garnish)
@@ -169,9 +173,42 @@ async def add_more(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(Order.asking_more, F.data == "done_adding")
 async def done_adding(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    zone = data.get("client_zone", "")
+    point = data.get("client_point", "")
+    if zone and point:
+        await callback.message.answer(
+            texts.DEFAULT_POINT_ASK.format(zone=zone, point=point),
+            reply_markup=kb.default_point_kb(),
+        )
+        await state.set_state(Order.asking_default_point)
+    else:
+        await _ask_zone(callback.message, state)
+    await callback.answer()
+
+
+async def _ask_zone(message: Message, state: FSMContext):
     zones = sheets.get_zones()
-    await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "zone"))
+    await message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "zone"))
     await state.set_state(Order.choosing_zone)
+
+
+@router.callback_query(Order.asking_default_point, F.data == "default_point_yes")
+async def default_point_yes(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await state.update_data(
+        cur_zone=data.get("client_zone", ""),
+        cur_point=data.get("client_point", ""),
+        is_new_point=False,
+    )
+    await callback.message.answer(texts.ASK_CLARIFICATION, reply_markup=kb.skip_kb())
+    await state.set_state(Order.entering_clarification)
+    await callback.answer()
+
+
+@router.callback_query(Order.asking_default_point, F.data == "default_point_change")
+async def default_point_change(callback: CallbackQuery, state: FSMContext):
+    await _ask_zone(callback.message, state)
     await callback.answer()
 
 
@@ -324,12 +361,7 @@ async def _show_summary(message: Message, state: FSMContext):
     await message.answer("\n".join(lines), reply_markup=kb.confirm_order_kb())
 
 
-@router.callback_query(Order.confirming, F.data == "order_confirm")
-async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    data = await state.get_data()
-    cart = data.get("cart", [])
-    date_str = sheets.get_order_date_for_now()
-
+def _order_comment(data: dict) -> str:
     base_comment = data.get("cur_comment", "")
     card_status = data.get("card_status", "")
     marker = ""
@@ -337,7 +369,64 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
         marker = "оплата на проверке"
     elif card_status == "не подтверждена":
         marker = "оплата не подтверждена"
-    full_comment = " | ".join(p for p in [base_comment, marker] if p)
+    return " | ".join(p for p in [base_comment, marker] if p)
+
+
+@router.callback_query(Order.confirming, F.data == "order_confirm")
+async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    cart = data.get("cart", [])
+    date_str = sheets.get_order_date_for_now()
+    full_comment = _order_comment(data)
+
+    # Новая точка через «Другое» — заказ придерживаем до подтверждения
+    # координатором, в «Заказы» (и отчёты кухни/курьера) пока не попадает.
+    if data.get("is_new_point"):
+        pending_id = sheets.create_pending_order(
+            date_str=date_str,
+            zone=data["cur_zone"],
+            point=data["cur_point"],
+            client_id=data["client_id"],
+            client_name=data.get("client_name", ""),
+            client_phone=data.get("client_phone", ""),
+            cart=cart,
+            payment=data["cur_payment"],
+            comment=full_comment,
+            screenshot=data.get("card_screenshot") or "",
+        )
+
+        if config.ADMIN_CHAT_ID:
+            try:
+                prices = sheets.get_set_prices()
+                total = sum(prices.get(i["set"], 0) * i["qty"] for i in cart)
+                items_text = ", ".join(
+                    f"{i['qty']}× {texts.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i["garnish"] else "")
+                    for i in cart
+                )
+                alert = texts.ADMIN_PENDING_POINT_ALERT.format(
+                    name=data.get("client_name", ""),
+                    client_id=data.get("client_id", ""),
+                    zone=data["cur_zone"],
+                    point=data["cur_point"],
+                    items=items_text,
+                    sum=f"{total:,}".replace(",", " "),
+                    payment=data["cur_payment"],
+                )
+                markup = kb.pending_point_admin_kb(pending_id)
+                screenshot = data.get("card_screenshot")
+                if screenshot:
+                    alert += texts.ADMIN_PENDING_SCREENSHOT_NOTE
+                    await bot.send_photo(config.ADMIN_CHAT_ID, screenshot, caption=alert, reply_markup=markup)
+                else:
+                    await bot.send_message(config.ADMIN_CHAT_ID, alert, reply_markup=markup)
+            except Exception:
+                pass
+
+        await state.clear()
+        await callback.message.answer(texts.ORDER_PENDING_NEW_POINT.format(support=texts.SUPPORT_USERNAME))
+        await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+        await callback.answer()
+        return
 
     row_nums = []
     for item in cart:
@@ -354,21 +443,8 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
         )
         row_nums.append(row_num)
 
-    if data.get("is_new_point") and config.ADMIN_CHAT_ID:
-        try:
-            await bot.send_message(
-                config.ADMIN_CHAT_ID,
-                texts.ADMIN_NEW_POINT_ALERT.format(
-                    name=data.get("client_name", ""),
-                    client_id=data.get("client_id", ""),
-                    zone=data.get("cur_zone", ""),
-                    point=data.get("cur_point", ""),
-                ),
-            )
-        except Exception:
-            pass  # не роняем заказ клиента из-за проблемы с уведомлением админу
-
-    # если клиент указал новую точку — сохраняем её ему в карточку на будущее
+    # точка уже известна (по умолчанию или выбрана из списка) — пересохраняем
+    # как текущую точку по умолчанию клиента
     if data.get("cur_zone") and data.get("cur_point"):
         try:
             sheets.update_client_point(data["client_row"], data["cur_zone"], data["cur_point"])

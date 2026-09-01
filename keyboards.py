@@ -55,7 +55,17 @@ def garnish_kb(options: list) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for opt in options:
         b.button(text=opt, callback_data=f"garnish:{opt}")
-    b.button(text=texts.MIX_GARNISH_BTN, callback_data="garnish:__mix__")
+    if len(options) >= 2:
+        b.button(text=texts.MIX_GARNISH_BTN, callback_data="garnish:__mix__")
+    _home(b)
+    b.adjust(1)
+    return b.as_markup()
+
+
+def default_point_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.DEFAULT_POINT_YES_BTN, callback_data="default_point_yes")
+    b.button(text=texts.DEFAULT_POINT_CHANGE_BTN, callback_data="default_point_change")
     _home(b)
     b.adjust(1)
     return b.as_markup()
@@ -99,6 +109,14 @@ def card_payment_kb() -> InlineKeyboardMarkup:
 def card_confirm_admin_kb(rows_str: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="✅ Подтверждено", callback_data=f"cardok:{rows_str}")
+    return b.as_markup()
+
+
+def pending_point_admin_kb(pending_id: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_PENDING_APPROVE_BTN, callback_data=f"pendok:{pending_id}")
+    b.button(text=texts.ADMIN_PENDING_DENY_BTN, callback_data=f"penddeny:{pending_id}")
+    b.adjust(1)
     return b.as_markup()
 
 

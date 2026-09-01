@@ -11,7 +11,7 @@ import texts
 import keyboards as kb
 import config
 import pdf_report
-from states import AdminClub
+from states import AdminClub, AdminMenu
 
 router = Router()
 
@@ -30,6 +30,7 @@ async def admin_panel(message: Message):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
+    await message.answer(texts.ADMIN_COMMANDS_LIST)
     await message.answer("Панель администратора:", reply_markup=kb.admin_panel_kb())
 
 
@@ -47,18 +48,18 @@ async def admin_menu_howto(callback: CallbackQuery):
 # ---------------------------------------------------------------------------
 
 @router.message(F.photo, F.from_user.id == config.ADMIN_CHAT_ID)
-async def admin_menu_photo(message: Message, bot: Bot):
+async def admin_menu_photo(message: Message, bot: Bot, state: FSMContext):
     file_id = message.photo[-1].file_id
     caption = message.caption or ""
     media_group_id = message.media_group_id
 
     if not media_group_id:
-        await _save_menu_and_notify(bot, message.chat.id, [file_id], caption)
+        await _save_menu_and_notify(bot, message.chat.id, [file_id], caption, state)
         return
 
     entry = _pending_albums.get(media_group_id)
     if entry is None:
-        entry = {"photos": [], "caption": "", "chat_id": message.chat.id}
+        entry = {"photos": [], "caption": "", "chat_id": message.chat.id, "state": state}
         _pending_albums[media_group_id] = entry
         asyncio.create_task(_flush_album(bot, media_group_id))
 
@@ -72,12 +73,25 @@ async def _flush_album(bot: Bot, media_group_id: str):
     entry = _pending_albums.pop(media_group_id, None)
     if not entry:
         return
-    await _save_menu_and_notify(bot, entry["chat_id"], entry["photos"], entry["caption"])
+    await _save_menu_and_notify(bot, entry["chat_id"], entry["photos"], entry["caption"], entry["state"])
 
 
-async def _save_menu_and_notify(bot: Bot, chat_id: int, photo_ids: list, caption: str):
+async def _save_menu_and_notify(bot: Bot, chat_id: int, photo_ids: list, caption: str, state: FSMContext):
     sheets.set_today_menu_photos(photo_ids, caption)
     await bot.send_message(chat_id, texts.ADMIN_MENU_SAVED)
+    await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_GARNISH)
+    await state.set_state(AdminMenu.waiting_garnishes)
+
+
+@router.message(AdminMenu.waiting_garnishes)
+async def admin_today_garnish_save(message: Message, state: FSMContext):
+    garnishes = [g.strip() for g in (message.text or "").split(",") if g.strip()]
+    sheets.set_today_garnishes(garnishes)
+    await state.clear()
+    if garnishes:
+        await message.answer(texts.ADMIN_GARNISH_SAVED.format(list=", ".join(garnishes)))
+    else:
+        await message.answer(texts.ADMIN_GARNISH_CLEARED)
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +113,89 @@ async def card_payment_confirmed(callback: CallbackQuery):
     except Exception:
         pass
     await callback.answer(texts.ADMIN_CARD_CONFIRMED_TOAST)
+
+
+# ---------------------------------------------------------------------------
+# Подтверждение/отклонение заказа на новую точку доставки
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data.startswith("pendok:"))
+async def pending_point_approved(callback: CallbackQuery, bot: Bot):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    pending_id = callback.data.split(":", 1)[1]
+    pending = sheets.get_pending_order(pending_id)
+    if not pending or pending["status"] != config.PENDING_STATUS_WAITING:
+        await callback.answer(texts.ADMIN_PENDING_ALREADY_HANDLED, show_alert=True)
+        return
+
+    row_nums = []
+    for item in pending["cart"]:
+        row_num = sheets.append_order(
+            date_str=pending["date"],
+            zone=pending["zone"],
+            point=pending["point"],
+            client_id=pending["client_id"],
+            set_name=item["set"],
+            qty=item["qty"],
+            garnish=item.get("garnish", ""),
+            payment=pending["payment"],
+            comment=pending["comment"],
+        )
+        row_nums.append(row_num)
+
+    client = sheets.get_client_by_id(pending["client_id"])
+    if client:
+        sheets.update_client_point(client["row"], pending["zone"], pending["point"])
+
+    if pending["screenshot"]:
+        sheets.confirm_card_payment(row_nums)
+
+    sheets.set_pending_status(pending["row"], config.PENDING_STATUS_APPROVED)
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    if client and client.get("tg_id"):
+        try:
+            await bot.send_message(int(client["tg_id"]), texts.ORDER_POINT_APPROVED)
+        except Exception:
+            pass
+
+    await callback.answer(texts.ADMIN_PENDING_APPROVED_TOAST)
+
+
+@router.callback_query(F.data.startswith("penddeny:"))
+async def pending_point_denied(callback: CallbackQuery, bot: Bot):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    pending_id = callback.data.split(":", 1)[1]
+    pending = sheets.get_pending_order(pending_id)
+    if not pending or pending["status"] != config.PENDING_STATUS_WAITING:
+        await callback.answer(texts.ADMIN_PENDING_ALREADY_HANDLED, show_alert=True)
+        return
+
+    sheets.set_pending_status(pending["row"], config.PENDING_STATUS_DENIED)
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    client = sheets.get_client_by_id(pending["client_id"])
+    if client and client.get("tg_id"):
+        try:
+            await bot.send_message(
+                int(client["tg_id"]), texts.ORDER_POINT_DENIED.format(support=texts.SUPPORT_USERNAME)
+            )
+        except Exception:
+            pass
+
+    await callback.answer(texts.ADMIN_PENDING_DENIED_TOAST)
 
 
 # ---------------------------------------------------------------------------
@@ -227,3 +324,21 @@ async def admin_giveaway_save(message: Message, state: FSMContext):
     else:
         sheets.set_giveaway(text, True)
         await message.answer(texts.ADMIN_GIVEAWAY_SAVED)
+
+
+@router.message(Command("giveaway"))
+async def cmd_giveaway(message: Message, state: FSMContext):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    await message.answer(texts.ADMIN_GIVEAWAY_PROMPT)
+    await state.set_state(AdminClub.waiting_giveaway)
+
+
+@router.message(Command("giveaway_finish"))
+async def cmd_giveaway_finish(message: Message):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    sheets.set_giveaway("", False)
+    await message.answer(texts.ADMIN_GIVEAWAY_OFF)

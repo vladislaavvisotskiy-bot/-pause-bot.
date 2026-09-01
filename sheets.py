@@ -3,6 +3,7 @@
 Слой работы с Google Таблицей. Всё общение с гугл-таблицей PAUSE идёт только
 через эти функции — если завтра поменяются столбцы, править нужно только тут.
 """
+import json
 import time
 import datetime as dt
 from typing import Optional
@@ -391,8 +392,23 @@ def get_sets() -> list:
 
 
 def get_garnishes() -> list:
+    """Полный список всех возможных гарниров — справочник на будущее."""
     ws = _ws(config.SHEET_REFERENCE)
     return [v[0] for v in ws.get(config.REF_GARNISH_RANGE) if v]
+
+
+def get_today_garnishes() -> list:
+    """Гарниры, которые реально есть сегодня — задаёт админ после публикации
+    меню. Если ещё не заданы, вызывающая сторона сама решает, что показать
+    (обычно — падать обратно на полный список get_garnishes())."""
+    ws = _ws(config.SHEET_REFERENCE)
+    raw = ws.acell(config.REF_TODAY_GARNISH_CELL).value or ""
+    return [g.strip() for g in raw.split(",") if g.strip()]
+
+
+def set_today_garnishes(garnishes: list):
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_TODAY_GARNISH_CELL, ", ".join(garnishes))
 
 
 def get_payment_options() -> list:
@@ -609,3 +625,62 @@ def build_courier_report(date_str: str) -> str:
         out.extend(by_zone[zone])
         out.append("")
     return "\n".join(out).strip()
+
+
+# ---------------------------------------------------------------------------
+# Заказы на новую точку доставки — держим до подтверждения координатором,
+# в лист «Заказы» (и, соответственно, в отчёты кухни/курьера) не попадают,
+# пока админ не нажмёт «Подтвердить».
+# ---------------------------------------------------------------------------
+
+def create_pending_order(date_str: str, zone: str, point: str, client_id, client_name: str,
+                          client_phone: str, cart: list, payment: str, comment: str,
+                          screenshot: str = "") -> str:
+    ws = _ws(config.SHEET_PENDING)
+    pending_id = f"P{int(time.time() * 1000)}"
+    row = [
+        pending_id, date_str, zone, point, str(client_id), client_name, client_phone,
+        json.dumps(cart, ensure_ascii=False), payment, comment or "", screenshot or "",
+        config.PENDING_STATUS_WAITING,
+    ]
+    ws.append_row(row, value_input_option="RAW")
+    return pending_id
+
+
+def get_pending_order(pending_id: str) -> Optional[dict]:
+    ws = _ws(config.SHEET_PENDING)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.PENDING_DATA_START_ROW:
+            continue
+        if len(row) >= config.P_ID and row[config.P_ID - 1] == pending_id:
+            def cell(col):
+                idx = col - 1
+                return row[idx] if idx < len(row) else ""
+            cart_raw = cell(config.P_CART_JSON)
+            try:
+                cart = json.loads(cart_raw) if cart_raw else []
+            except ValueError:
+                cart = []
+            return {
+                "row": r,
+                "id": cell(config.P_ID),
+                "date": cell(config.P_DATE),
+                "zone": cell(config.P_ZONE),
+                "point": cell(config.P_POINT),
+                "client_id": cell(config.P_CLIENT_ID),
+                "client_name": cell(config.P_CLIENT_NAME),
+                "client_phone": cell(config.P_CLIENT_PHONE),
+                "cart": cart,
+                "payment": cell(config.P_PAYMENT),
+                "comment": cell(config.P_COMMENT),
+                "screenshot": cell(config.P_SCREENSHOT),
+                "status": cell(config.P_STATUS),
+            }
+    return None
+
+
+def set_pending_status(row_num: int, status: str):
+    ws = _ws(config.SHEET_PENDING)
+    ws.update_cell(row_num, config.P_STATUS, status)

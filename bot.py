@@ -5,6 +5,7 @@ import datetime as dt
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import config
@@ -32,6 +33,26 @@ async def send_morning_reports(bot: Bot):
         logger.exception("Не удалось отправить утренний отчёт: %s", e)
 
 
+async def setup_commands(bot: Bot):
+    await bot.set_my_commands(
+        [BotCommand(command="start", description="Начать / открыть главное меню")],
+        scope=BotCommandScopeDefault(),
+    )
+    if config.ADMIN_CHAT_ID:
+        admin_commands = [
+            BotCommand(command="admin", description="Панель администратора"),
+            BotCommand(command="kitchen", description="Текстовый отчёт для кухни"),
+            BotCommand(command="kitchen_pdf", description="PDF-отчёт для кухни"),
+            BotCommand(command="courier", description="Отчёт для курьера"),
+            BotCommand(command="giveaway", description="Запустить/обновить розыгрыш"),
+            BotCommand(command="giveaway_finish", description="Завершить текущий розыгрыш"),
+        ]
+        try:
+            await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))
+        except Exception:
+            logger.exception("Не удалось задать список команд для админа")
+
+
 async def main():
     if not config.BOT_TOKEN:
         raise SystemExit("BOT_TOKEN не задан — заполните .env (см. .env.example)")
@@ -47,6 +68,8 @@ async def main():
     dp.include_router(profile.router)
     dp.include_router(club.router)
     dp.include_router(admin.router)
+
+    await setup_commands(bot)
 
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
     h, m = map(int, config.MORNING_REPORT_TIME.split(":"))

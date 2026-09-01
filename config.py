@@ -63,6 +63,7 @@ REF_GARNISH_RANGE = "C2:C20"      # гарниры
 REF_PAYMENT_RANGE = "D2:D20"      # способы оплаты
 REF_TODAY_MENU_CELL = "J1"        # список file_id фотографий меню на сегодня (через запятую) — бот пишет сам
 REF_TODAY_MENU2_CELL = "J2"       # подпись к посту меню на сегодня — бот пишет сам
+REF_TODAY_GARNISH_CELL = "J3"     # гарниры, доступные сегодня (через запятую) — бот пишет сам
 
 # --- Pause Club: лист "Клуб" ---
 SHEET_CLUB = "Клуб"
@@ -81,3 +82,23 @@ CLUB_LEVELS = [
 # --- PDF-отчёт для кухни ---
 PDF_FONT_REGULAR = os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans.ttf")
 PDF_FONT_BOLD = os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans-Bold.ttf")
+
+# --- Заказы на новую точку, ждущие подтверждения координатором ---
+SHEET_PENDING = "Ожидают подтверждения"
+PENDING_HEADER_ROW = 1
+PENDING_DATA_START_ROW = 2
+P_ID = 1
+P_DATE = 2
+P_ZONE = 3
+P_POINT = 4
+P_CLIENT_ID = 5
+P_CLIENT_NAME = 6
+P_CLIENT_PHONE = 7
+P_CART_JSON = 8
+P_PAYMENT = 9
+P_COMMENT = 10
+P_SCREENSHOT = 11
+P_STATUS = 12
+PENDING_STATUS_WAITING = "ожидает"
+PENDING_STATUS_APPROVED = "подтверждено"
+PENDING_STATUS_DENIED = "отклонено"
