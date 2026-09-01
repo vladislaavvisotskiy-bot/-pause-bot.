@@ -30,3 +30,7 @@ class EditProfile(StatesGroup):
     choosing_zone = State()
     choosing_point = State()
     entering_new_point = State()
+
+
+class Feedback(StatesGroup):
+    waiting_text = State()

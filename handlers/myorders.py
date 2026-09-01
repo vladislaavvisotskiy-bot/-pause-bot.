@@ -7,7 +7,7 @@ import sheets
 import texts
 import keyboards as kb
 import config
-from states import EditProfile
+from states import EditProfile, Feedback
 
 router = Router()
 
@@ -28,9 +28,11 @@ async def my_orders(callback: CallbackQuery):
 
     lines = [texts.MY_ORDERS_HEADER, ""]
     for o in orders:
-        line = f"{o['date']} — {o['qty']}× {o['set']}"
+        line = f"{o['date']} — {o['qty']}× {texts.display_set_name(o['set'])}"
         if o["payment"] == "В долг":
             line += " (в долг)"
+        if o.get("canceled"):
+            line += texts.MY_ORDERS_CANCELED_TAG
         lines.append(line)
 
     debt = sheets.get_client_debt(client["id"])
@@ -160,3 +162,159 @@ async def _save_point(tg_id: int, state: FSMContext, point: str, bot: Bot, is_ne
     await state.clear()
     await bot.send_message(tg_id, texts.EDIT_SAVED)
     await bot.send_message(tg_id, texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+
+
+# ---------------------------------------------------------------------------
+# Отмена последнего заказа (до времени отсечки для отмены)
+# ---------------------------------------------------------------------------
+
+def _order_items_text(rows: list) -> str:
+    return ", ".join(
+        f"{r['qty']}× {texts.display_set_name(r['set'])}" for r in rows
+    )
+
+
+def _is_card_payment(payment: str) -> bool:
+    return "карт" in (payment or "").lower()
+
+
+@router.callback_query(F.data == "cancel_order_start")
+async def cancel_order_start(callback: CallbackQuery):
+    client = sheets.find_client_by_tg_id(callback.from_user.id)
+    if not client:
+        await callback.message.answer("Наберите /start, чтобы зарегистрироваться.")
+        await callback.answer()
+        return
+
+    rows = sheets.get_last_order_rows(client["id"])
+    if not rows:
+        await callback.message.answer(texts.CANCEL_NO_ORDERS)
+        await callback.answer()
+        return
+    if rows[0]["canceled"]:
+        await callback.message.answer(texts.CANCEL_ALREADY)
+        await callback.answer()
+        return
+    if sheets.is_after_cancel_cutoff():
+        await callback.message.answer(
+            texts.CANCEL_TOO_LATE.format(cutoff=config.CANCEL_CUTOFF_TIME, support=texts.SUPPORT_USERNAME)
+        )
+        await callback.answer()
+        return
+    if any(_is_card_payment(r["payment"]) for r in rows):
+        await callback.message.answer(texts.CANCEL_CARD_REDIRECT.format(support=texts.SUPPORT_USERNAME))
+        await callback.answer()
+        return
+
+    await callback.message.answer(
+        texts.CANCEL_CONFIRM_ASK.format(date=rows[0]["date"], items=_order_items_text(rows)),
+        reply_markup=kb.cancel_confirm_kb(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cancel_order_yes")
+async def cancel_order_yes(callback: CallbackQuery, bot: Bot):
+    client = sheets.find_client_by_tg_id(callback.from_user.id)
+    if not client:
+        await callback.answer()
+        return
+
+    rows = sheets.get_last_order_rows(client["id"])
+    if not rows or rows[0]["canceled"]:
+        await callback.message.answer(texts.CANCEL_ALREADY)
+        await callback.answer()
+        return
+    if sheets.is_after_cancel_cutoff():
+        await callback.message.answer(
+            texts.CANCEL_TOO_LATE.format(cutoff=config.CANCEL_CUTOFF_TIME, support=texts.SUPPORT_USERNAME)
+        )
+        await callback.answer()
+        return
+    if any(_is_card_payment(r["payment"]) for r in rows):
+        await callback.message.answer(texts.CANCEL_CARD_REDIRECT.format(support=texts.SUPPORT_USERNAME))
+        await callback.answer()
+        return
+
+    sheets.cancel_order_rows([r["row"] for r in rows])
+    await callback.message.answer(texts.CANCEL_DONE)
+
+    if config.ADMIN_CHAT_ID:
+        try:
+            await bot.send_message(
+                config.ADMIN_CHAT_ID,
+                texts.ADMIN_ORDER_CANCELLED_ALERT.format(
+                    name=client.get("name", ""),
+                    client_id=client.get("id", ""),
+                    date=rows[0]["date"],
+                    items=_order_items_text(rows),
+                ),
+            )
+        except Exception:
+            pass
+
+    await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cancel_order_no")
+async def cancel_order_no(callback: CallbackQuery):
+    await callback.message.answer(texts.CANCEL_KEPT, reply_markup=kb.main_menu_kb())
+    await callback.answer()
+
+
+# ---------------------------------------------------------------------------
+# Отзыв о последнем заказе
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data == "leave_feedback")
+async def feedback_start(callback: CallbackQuery, state: FSMContext):
+    client = sheets.find_client_by_tg_id(callback.from_user.id)
+    if not client:
+        await callback.message.answer("Наберите /start, чтобы зарегистрироваться.")
+        await callback.answer()
+        return
+
+    orders = sheets.get_client_orders(client["id"], limit=1)
+    if not orders:
+        await callback.message.answer(texts.FEEDBACK_NO_ORDERS)
+        await callback.answer()
+        return
+
+    await callback.message.answer(texts.FEEDBACK_PROMPT)
+    await state.set_state(Feedback.waiting_text)
+    await callback.answer()
+
+
+@router.message(Feedback.waiting_text)
+async def feedback_save(message: Message, state: FSMContext, bot: Bot):
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer(texts.FEEDBACK_PROMPT)
+        return
+
+    client = sheets.find_client_by_tg_id(message.from_user.id)
+    orders = sheets.get_client_orders(client["id"], limit=1) if client else []
+    last = orders[0] if orders else None
+    await state.clear()
+
+    if config.ADMIN_CHAT_ID and client:
+        order_info = (
+            f"{last['date']} — {last['qty']}× {texts.display_set_name(last['set'])}"
+            if last else "—"
+        )
+        try:
+            await bot.send_message(
+                config.ADMIN_CHAT_ID,
+                texts.ADMIN_FEEDBACK_ALERT.format(
+                    name=client.get("name", ""),
+                    client_id=client.get("id", ""),
+                    order=order_info,
+                    text=text,
+                ),
+            )
+        except Exception:
+            pass
+
+    await message.answer(texts.FEEDBACK_THANKS)
+    await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())

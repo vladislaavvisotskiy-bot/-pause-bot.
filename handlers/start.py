@@ -62,6 +62,12 @@ async def show_requisites(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "support")
+async def show_support(callback: CallbackQuery):
+    await callback.message.answer(texts.SUPPORT_INFO)
+    await callback.answer()
+
+
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()

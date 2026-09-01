@@ -8,7 +8,12 @@ GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0") or 0)
 ORDER_CUTOFF_TIME = os.getenv("ORDER_CUTOFF_TIME", "10:00")
+CANCEL_CUTOFF_TIME = os.getenv("CANCEL_CUTOFF_TIME", "09:00")
 MORNING_REPORT_TIME = os.getenv("MORNING_REPORT_TIME", "10:05")
+
+# Отметка в комментарии заказа, по которой бот считает его отменённым клиентом
+# (отчёты кухни/курьера и подсчёт долга такие строки пропускают)
+CANCEL_MARKER = "ОТМЕНЁН"
 
 # --- Названия листов и колонки — под структуру уже существующей таблицы PAUSE ---
 SHEET_CLIENTS = "Sheet1"

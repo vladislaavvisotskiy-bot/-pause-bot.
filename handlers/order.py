@@ -33,6 +33,11 @@ async def order_start(callback: CallbackQuery, state: FSMContext, bot: Bot):
         await callback.answer()
         return
 
+    if sheets.is_after_cutoff():
+        await callback.message.answer(texts.CUTOFF_CLOSED_NOTICE)
+        await callback.answer()
+        return
+
     photo_ids, caption = sheets.get_today_menu_photos()
     if photo_ids:
         if len(photo_ids) == 1:
@@ -46,9 +51,6 @@ async def order_start(callback: CallbackQuery, state: FSMContext, bot: Bot):
     else:
         await callback.message.answer(texts.NO_MENU_YET)
 
-    if sheets.is_after_cutoff():
-        await callback.message.answer(texts.CUTOFF_PASSED_NOTICE)
-
     await state.update_data(client_id=client["id"], client_row=client["row"],
                              client_name=client["name"], client_phone=client["contact"],
                              cart=[])
@@ -58,7 +60,7 @@ async def order_start(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
 async def _ask_set(message: Message, state: FSMContext):
     sets = sheets.get_sets()
-    await message.answer(texts.CHOOSE_SET, reply_markup=kb.options_kb(sets, "set"))
+    await message.answer(texts.CHOOSE_SET, reply_markup=kb.set_kb(sets))
     await state.set_state(Order.choosing_set)
 
 
@@ -214,7 +216,9 @@ async def got_clarification(message: Message, state: FSMContext):
 
 
 async def _ask_payment(message: Message, state: FSMContext):
-    options = sheets.get_payment_options()
+    # Клиент выбирает только между наличными и картой — "В долг" ставится
+    # вручную в таблице, самостоятельно клиент этот вариант не выбирает.
+    options = [o for o in sheets.get_payment_options() if "долг" not in o.lower()]
     await message.answer(texts.CHOOSE_PAYMENT, reply_markup=kb.options_kb(options, "payment"))
     await state.set_state(Order.choosing_payment)
 
@@ -273,7 +277,7 @@ async def _show_summary(message: Message, state: FSMContext):
         price = prices.get(item["set"], 0)
         sub = price * item["qty"]
         total += sub
-        line = f"• {item['qty']}× {item['set']}"
+        line = f"• {item['qty']}× {texts.display_set_name(item['set'])}"
         if item["garnish"]:
             line += f" ({item['garnish']})"
         line += f" — {sub:,} сум".replace(",", " ")
@@ -353,7 +357,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             prices = sheets.get_set_prices()
             total = sum(prices.get(i["set"], 0) * i["qty"] for i in cart)
             items_text = ", ".join(
-                f"{i['qty']}× {i['set']}" + (f" ({i['garnish']})" if i["garnish"] else "")
+                f"{i['qty']}× {texts.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i["garnish"] else "")
                 for i in cart
             )
             caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(

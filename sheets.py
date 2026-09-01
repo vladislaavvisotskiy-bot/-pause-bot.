@@ -144,6 +144,10 @@ def update_client_field(client_row: int, col: int, value: str):
     _cache["clients"] = None
 
 
+def is_canceled(comment: str) -> bool:
+    return config.CANCEL_MARKER in (comment or "")
+
+
 def get_client_debt(client_id) -> int:
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
@@ -154,7 +158,8 @@ def get_client_debt(client_id) -> int:
             continue
         eid = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
         payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
-        if eid == str(client_id) and payment == "В долг":
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if eid == str(client_id) and payment == "В долг" and not is_canceled(comment):
             try:
                 total += int(row[config.O_SUM - 1].replace(" ", "").replace(",", "") or 0)
             except (ValueError, IndexError):
@@ -175,6 +180,9 @@ def get_all_debtors() -> list:
             continue
         payment = row[config.O_PAYMENT - 1].strip()
         if payment != "В долг":
+            continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
             continue
         eid = row[config.O_CLIENT_ID - 1].strip()
         name = row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else eid
@@ -200,13 +208,37 @@ def get_client_orders(client_id, limit=10) -> list:
         if len(row) < config.O_CLIENT_ID:
             continue
         if row[config.O_CLIENT_ID - 1].strip() == str(client_id):
+            comment = row[config.O_COMMENT - 1] if len(row) >= config.O_COMMENT else ""
             out.append({
+                "row": r,
                 "date": row[config.O_DATE - 1] if len(row) >= config.O_DATE else "",
                 "set": row[config.O_SET - 1] if len(row) >= config.O_SET else "",
                 "qty": row[config.O_QTY - 1] if len(row) >= config.O_QTY else "",
                 "payment": row[config.O_PAYMENT - 1] if len(row) >= config.O_PAYMENT else "",
+                "comment": comment,
+                "canceled": is_canceled(comment),
             })
     return out[-limit:][::-1]
+
+
+def get_last_order_rows(client_id) -> list:
+    """Все строки последнего (по дате) заказа клиента — для отмены."""
+    orders = get_client_orders(client_id, limit=10**9)
+    if not orders:
+        return []
+    last_date = orders[0]["date"]  # get_client_orders уже возвращает от новых к старым
+    return [o for o in orders if o["date"] == last_date]
+
+
+def cancel_order_rows(row_nums: list):
+    """Помечает строки заказа как отменённые клиентом — не удаляет их из таблицы."""
+    ws = _ws(config.SHEET_ORDERS)
+    for r in row_nums:
+        cur = ws.cell(r, config.O_COMMENT).value or ""
+        if is_canceled(cur):
+            continue
+        new = f"{cur} | {config.CANCEL_MARKER} КЛИЕНТОМ" if cur else f"{config.CANCEL_MARKER} КЛИЕНТОМ"
+        ws.update_cell(r, config.O_COMMENT, new)
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +303,17 @@ def is_after_cutoff() -> bool:
     cutoff_h, cutoff_m = map(int, config.ORDER_CUTOFF_TIME.split(":"))
     cutoff = now.replace(hour=cutoff_h, minute=cutoff_m, second=0, microsecond=0)
     return now >= cutoff
+
+
+def is_after_cancel_cutoff() -> bool:
+    now = dt.datetime.now()
+    cutoff_h, cutoff_m = map(int, config.CANCEL_CUTOFF_TIME.split(":"))
+    cutoff = now.replace(hour=cutoff_h, minute=cutoff_m, second=0, microsecond=0)
+    return now >= cutoff
+
+
+def today_date_str() -> str:
+    return dt.datetime.now().strftime("%d.%m.%Y")
 
 
 # ---------------------------------------------------------------------------
@@ -344,10 +387,12 @@ def build_kitchen_report(date_str: str) -> str:
         name = row[config.O_NAME - 1].strip()
         if not name:
             continue
+        comment = row[config.O_COMMENT - 1].strip()
+        if is_canceled(comment):
+            continue
         set_name = row[config.O_SET - 1].strip()
         qty = row[config.O_QTY - 1].strip() or "0"
         garnish = row[config.O_GARNISH - 1].strip()
-        comment = row[config.O_COMMENT - 1].strip()
 
         try:
             q = int(qty)
@@ -398,6 +443,9 @@ def build_courier_report(date_str: str) -> str:
         zone = row[config.O_ZONE - 1].strip()
         name = row[config.O_NAME - 1].strip()
         if not zone or not name:
+            continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
             continue
         point = row[config.O_POINT - 1].strip()
         contact = row[config.O_CONTACT - 1].strip() or "Неизвестно"

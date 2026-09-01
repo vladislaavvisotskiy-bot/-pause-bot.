@@ -10,6 +10,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     b.button(text="🛒 Заказать", callback_data="order_start")
     b.button(text="📋 Мои заказы", callback_data="my_orders")
     b.button(text="💳 Реквизиты", callback_data="requisites")
+    b.button(text=texts.SUPPORT_BTN, callback_data="support")
     b.adjust(1)
     return b.as_markup()
 
@@ -22,6 +23,17 @@ def options_kb(options: list, prefix: str, back: bool = False, other: bool = Fal
         b.button(text=texts.OTHER_BTN, callback_data=f"{prefix}:__other__")
     if back:
         b.button(text=texts.BACK_BTN, callback_data=f"{prefix}:__back__")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def set_kb(sets: list) -> InlineKeyboardMarkup:
+    """Кнопки выбора сета — показывают клиенту дружелюбное название
+    («Пауза дня»/«Для тебя»), а в callback_data и в таблицу по-прежнему
+    уходит исходное название из Справочников."""
+    b = InlineKeyboardBuilder()
+    for opt in sets:
+        b.button(text=texts.display_set_name(opt), callback_data=f"set:{opt}")
     b.adjust(1)
     return b.as_markup()
 
@@ -82,7 +94,17 @@ def confirm_order_kb() -> InlineKeyboardMarkup:
 def my_orders_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.EDIT_PROFILE_BTN, callback_data="edit_profile")
+    b.button(text=texts.CANCEL_ORDER_BTN, callback_data="cancel_order_start")
+    b.button(text=texts.FEEDBACK_BTN, callback_data="leave_feedback")
     b.button(text=texts.BACK_BTN, callback_data="back_to_menu")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def cancel_confirm_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.CANCEL_CONFIRM_YES, callback_data="cancel_order_yes")
+    b.button(text=texts.CANCEL_CONFIRM_NO, callback_data="cancel_order_no")
     b.adjust(1)
     return b.as_markup()
 
