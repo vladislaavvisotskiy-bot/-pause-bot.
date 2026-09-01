@@ -96,6 +96,18 @@ def _clients_index() -> dict:
     return {str(c["id"]): c for c in _load_clients()}
 
 
+def _id_value(client_id):
+    """ID клиента для записи в ячейку — числом, если это возможно.
+
+    В Sheet1 (CRM) ID всегда хранится как число (Google Таблицы сами
+    приводят его к числу при регистрации). Если писать его в «Заказы»
+    как текст ("119"), формула ИНДЕКС/ПОИСКПОЗ в столбце «Имя» перестаёт
+    находить совпадение с числом в Sheet1 — типы разные, хотя значения
+    выглядят одинаково. Поэтому здесь тоже приводим к числу."""
+    s = str(client_id).strip()
+    return int(s) if s.isdigit() else s
+
+
 def _row_amount(row: list, prices: dict) -> int:
     """Сумма по строке заказа — считаем сами по цене сета, а не полагаемся на
     формулу в таблице (она может быть не протянута на новые строки)."""
@@ -317,7 +329,7 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
         (config.O_DATE, date_str),
         (config.O_ZONE, zone),
         (config.O_POINT, point),
-        (config.O_CLIENT_ID, str(client_id)),
+        (config.O_CLIENT_ID, _id_value(client_id)),
         (config.O_SET, set_name),
         (config.O_QTY, str(qty)),
         (config.O_GARNISH, garnish or ""),
@@ -639,7 +651,7 @@ def create_pending_order(date_str: str, zone: str, point: str, client_id, client
     ws = _ws(config.SHEET_PENDING)
     pending_id = f"P{int(time.time() * 1000)}"
     row = [
-        pending_id, date_str, zone, point, str(client_id), client_name, client_phone,
+        pending_id, date_str, zone, point, _id_value(client_id), client_name, client_phone,
         json.dumps(cart, ensure_ascii=False), payment, comment or "", screenshot or "",
         config.PENDING_STATUS_WAITING,
     ]
