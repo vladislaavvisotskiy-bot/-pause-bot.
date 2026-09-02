@@ -27,7 +27,11 @@ def _connect():
     global _client, _sheet
     if _sheet is not None:
         return _sheet
-    creds = Credentials.from_service_account_file(config.GOOGLE_CREDENTIALS_FILE, scopes=_SCOPES)
+    if config.GOOGLE_CREDENTIALS_JSON:
+        info = json.loads(config.GOOGLE_CREDENTIALS_JSON)
+        creds = Credentials.from_service_account_info(info, scopes=_SCOPES)
+    else:
+        creds = Credentials.from_service_account_file(config.GOOGLE_CREDENTIALS_FILE, scopes=_SCOPES)
     _client = gspread.authorize(creds)
     _sheet = _client.open_by_key(config.GOOGLE_SHEET_ID)
     return _sheet
