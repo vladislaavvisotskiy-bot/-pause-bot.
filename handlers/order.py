@@ -455,7 +455,7 @@ def _order_comment(data: dict) -> str:
 async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
     data = await state.get_data()
     cart = data.get("cart", [])
-    date_str = sheets.get_order_date_for_now()
+    date_str = sheets.get_active_menu_date()
     full_comment = _order_comment(data)
 
     # Новая точка через «Другое» — заказ придерживаем до подтверждения

@@ -148,7 +148,7 @@ async def edit_phone_save(message: Message, state: FSMContext, bot: Bot):
 @router.callback_query(F.data == "edit_point")
 async def edit_point_start(callback: CallbackQuery, state: FSMContext):
     zones = sheets.get_zones()
-    await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "editzone"))
+    await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "editzone", back=True))
     await state.set_state(EditProfile.choosing_zone)
     await callback.answer()
 
@@ -156,6 +156,13 @@ async def edit_point_start(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(EditProfile.choosing_zone, F.data.startswith("editzone:"))
 async def edit_point_zone(callback: CallbackQuery, state: FSMContext):
     zone = callback.data.split(":", 1)[1]
+
+    if zone == "__back__":
+        await state.clear()
+        await callback.message.answer(texts.EDIT_PROFILE_HEADER, reply_markup=kb.edit_profile_kb())
+        await callback.answer()
+        return
+
     await state.update_data(edit_zone=zone)
     points = sheets.get_points(zone)
     if points:

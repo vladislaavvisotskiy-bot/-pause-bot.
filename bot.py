@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import logging
-import datetime as dt
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -20,7 +19,7 @@ logger = logging.getLogger("pause_bot")
 async def send_morning_reports(bot: Bot):
     if not config.ADMIN_CHAT_ID:
         return
-    date_str = dt.datetime.now().strftime("%d.%m.%Y")
+    date_str = sheets.get_active_menu_date()
     try:
         kitchen = sheets.build_kitchen_report(date_str)
         courier = sheets.build_courier_report(date_str)

@@ -229,7 +229,7 @@ async def cmd_kitchen(message: Message):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
-    date_str = sheets.get_order_date_for_now()
+    date_str = sheets.get_active_menu_date()
     report = sheets.build_kitchen_report(date_str)
     await message.answer(report or "На сегодня заказов нет.")
 
@@ -239,7 +239,7 @@ async def cmd_courier(message: Message):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
-    date_str = sheets.get_order_date_for_now()
+    date_str = sheets.get_active_menu_date()
     report = sheets.build_courier_report(date_str)
     await message.answer(report or "На сегодня заказов нет.")
 
@@ -263,7 +263,7 @@ async def cmd_kitchen_pdf(message: Message, bot: Bot):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
-    date_str = sheets.get_order_date_for_now()
+    date_str = sheets.get_active_menu_date()
     await send_kitchen_pdf(bot, message.chat.id, date_str)
 
 

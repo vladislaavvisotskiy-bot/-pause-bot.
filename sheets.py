@@ -392,15 +392,6 @@ def confirm_card_payment(row_nums: list):
         ws.update_cell(r, config.O_COMMENT, new)
 
 
-def get_order_date_for_now() -> str:
-    """Заказ до времени отсечки — на сегодня, после — на завтра. Формат DD.MM.YYYY."""
-    now = dt.datetime.now()
-    cutoff_h, cutoff_m = map(int, config.ORDER_CUTOFF_TIME.split(":"))
-    cutoff = now.replace(hour=cutoff_h, minute=cutoff_m, second=0, microsecond=0)
-    target = now if now < cutoff else now + dt.timedelta(days=1)
-    return target.strftime("%d.%m.%Y")
-
-
 def is_after_cutoff() -> bool:
     now = dt.datetime.now()
     cutoff_h, cutoff_m = map(int, config.ORDER_CUTOFF_TIME.split(":"))
@@ -476,9 +467,29 @@ def get_today_menu_photos() -> tuple:
 
 
 def set_today_menu_photos(photo_ids: list, caption: str):
+    """Публикация нового меню закрывает предыдущее: дата доставки, на
+    которую действует опубликованное меню, перештамповывается на сегодня
+    (на момент публикации) — все заказы, оформленные пока это меню
+    активно, пойдут именно с этой датой (см. get_active_menu_date)."""
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_TODAY_MENU_CELL, ",".join(photo_ids))
     ws.update_acell(config.REF_TODAY_MENU2_CELL, caption or "")
+    ws.update_acell(config.REF_TODAY_MENU_DATE_CELL, today_date_str())
+
+
+def get_active_menu_date() -> str:
+    """Дата доставки, на которую действует СЕЙЧАС опубликованное меню.
+
+    Заказ должен получать дату не по текущему времени (иначе два человека,
+    заказавшие в рамках одного и того же опубликованного меню — один
+    вечером сразу после публикации, другой на следующее утро перед
+    отсечкой, — получили бы разные даты), а именно эту: дату, с которой
+    админ опубликовал текущее меню. Публикация нового меню сама
+    перештамповывает эту дату (см. set_today_menu_photos), тем самым
+    "закрывая" предыдущее."""
+    ws = _ws(config.SHEET_REFERENCE)
+    date_str = (ws.acell(config.REF_TODAY_MENU_DATE_CELL).value or "").strip()
+    return date_str or today_date_str()
 
 
 # ---------------------------------------------------------------------------
@@ -631,12 +642,17 @@ def build_kitchen_report(date_str: str) -> str:
 
 
 def build_courier_report(date_str: str) -> str:
+    """Отчёт для курьера — только куда и к кому ехать (без суммы и способа
+    оплаты). Раз в строке больше нет ничего, что различало бы несколько
+    заказов одного человека за день, — показываем каждого клиента внутри
+    направления не больше одного раза, даже если он заказывал несколько
+    сетов за день."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
     clients = _clients_index()
-    prices = get_set_prices()
     by_zone = {}
     zone_order = []
+    seen = set()  # (zone, client_id) — один человек в отчёте один раз
 
     for i, row in enumerate(rows):
         r = i + 1
@@ -653,16 +669,20 @@ def build_courier_report(date_str: str) -> str:
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
         if is_canceled(comment):
             continue
+
+        key = (zone, client_id)
+        if key in seen:
+            continue
+        seen.add(key)
+
         client = clients.get(client_id) or {}
         name = client.get("name") or row[config.O_NAME - 1].strip() or client_id
         point = row[config.O_POINT - 1].strip()
         contact = client.get("contact") or row[config.O_CONTACT - 1].strip() or "Неизвестно"
         telegram = client.get("telegram") or row[config.O_TELEGRAM - 1].strip()
-        payment = row[config.O_PAYMENT - 1].strip()
-        amount = _row_amount(row, prices)
 
         tg = f"@{telegram}" if telegram and not telegram.startswith("@") else (telegram or "—")
-        line = f"○ {name} - {contact} / {tg} - {point} - {amount:,} сум - {payment}".replace(",", " ")
+        line = f"○ {name} - {contact} / {tg} - {point}"
 
         if zone not in by_zone:
             by_zone[zone] = []
