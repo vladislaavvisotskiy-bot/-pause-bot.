@@ -253,7 +253,7 @@ async def default_point_yes(callback: CallbackQuery, state: FSMContext):
         cur_point=data.get("client_point", ""),
         is_new_point=False,
     )
-    await _ask_clarification(callback.message, state, "default_point")
+    await _ask_payment(callback.message, state)
     await callback.answer()
 
 
@@ -298,7 +298,6 @@ async def _ask_point(message: Message, state: FSMContext, zone: str):
                               reply_markup=kb.options_kb(points, "point", other=True, back=True))
         await state.set_state(Order.choosing_point)
     else:
-        await state.update_data(clarify_back_target="zone")
         await message.answer(texts.ASK_NEW_POINT)
         await state.set_state(Order.entering_new_point)
 
@@ -313,14 +312,13 @@ async def chosen_point(callback: CallbackQuery, state: FSMContext):
         return
 
     if point == "__other__":
-        await state.update_data(clarify_back_target="point")
         await callback.message.answer(texts.ASK_NEW_POINT)
         await state.set_state(Order.entering_new_point)
         await callback.answer()
         return
 
     await state.update_data(cur_point=point, is_new_point=False)
-    await _ask_clarification(callback.message, state, "point")
+    await _ask_payment(callback.message, state)
     await callback.answer()
 
 
@@ -331,56 +329,12 @@ async def entered_new_point(message: Message, state: FSMContext):
         await message.answer(texts.ASK_NEW_POINT)
         return
     await state.update_data(cur_point=point, is_new_point=True)
-    await _ask_clarification(message, state)
-
-
-# ---------------------------------------------------------------------------
-# Уточнение и оплата
-# ---------------------------------------------------------------------------
-
-async def _ask_clarification(message: Message, state: FSMContext, back_target: str = None):
-    # back_target запоминает, куда вернуть по «Назад» отсюда — на выбор
-    # точки, района (если у района вообще нет точек) или на вопрос
-    # "доставить как обычно?". None — не меняем то, что уже сохранено
-    # (используется, когда уточнение показывается после ввода нового
-    # адреса свободным текстом — там back_target уже выставлен раньше).
-    if back_target is not None:
-        await state.update_data(clarify_back_target=back_target)
-    await message.answer(texts.ASK_CLARIFICATION, reply_markup=kb.skip_kb(back=True))
-    await state.set_state(Order.entering_clarification)
-
-
-@router.callback_query(Order.entering_clarification, F.data == "clarify:__back__")
-async def clarification_back(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    target = data.get("clarify_back_target", "point")
-    if target == "default_point":
-        await callback.message.answer(
-            texts.DEFAULT_POINT_ASK.format(
-                zone=data.get("client_zone", ""), point=data.get("client_point", "")
-            ),
-            reply_markup=kb.default_point_kb(),
-        )
-        await state.set_state(Order.asking_default_point)
-    elif target == "zone":
-        await _ask_zone(callback.message, state)
-    else:
-        await _ask_point(callback.message, state, data.get("cur_zone", ""))
-    await callback.answer()
-
-
-@router.callback_query(Order.entering_clarification, F.data == "clarify:skip")
-async def skip_clarification(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(cur_comment="")
-    await _ask_payment(callback.message, state)
-    await callback.answer()
-
-
-@router.message(Order.entering_clarification)
-async def got_clarification(message: Message, state: FSMContext):
-    await state.update_data(cur_comment=(message.text or "").strip())
     await _ask_payment(message, state)
 
+
+# ---------------------------------------------------------------------------
+# Оплата
+# ---------------------------------------------------------------------------
 
 async def _ask_payment(message: Message, state: FSMContext):
     # Клиент выбирает только между наличными и картой — "В долг" ставится
@@ -470,7 +424,25 @@ async def _show_summary(message: Message, state: FSMContext):
     elif card_status == "не подтверждена":
         lines.append(texts.ORDER_PAYMENT_STATUS_LATER)
 
-    await message.answer("\n".join(lines), reply_markup=kb.confirm_order_kb())
+    await message.answer("\n".join(lines), reply_markup=kb.confirm_order_kb(has_comment=bool(data.get("cur_comment"))))
+
+
+@router.callback_query(Order.confirming, F.data == "add_comment")
+async def add_comment_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(texts.ADD_COMMENT_PROMPT)
+    await state.set_state(Order.entering_comment)
+    await callback.answer()
+
+
+@router.message(Order.entering_comment)
+async def add_comment_save(message: Message, state: FSMContext):
+    comment = (message.text or "").strip()
+    if not comment:
+        await message.answer(texts.ADD_COMMENT_PROMPT)
+        return
+    await state.update_data(cur_comment=comment)
+    await _show_summary(message, state)
+    await state.set_state(Order.confirming)
 
 
 def _order_comment(data: dict) -> str:

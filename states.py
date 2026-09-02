@@ -18,11 +18,11 @@ class Order(StatesGroup):
     choosing_zone = State()
     choosing_point = State()
     entering_new_point = State()
-    entering_clarification = State()
     choosing_payment = State()
     card_decision = State()
     waiting_card_screenshot = State()
     confirming = State()
+    entering_comment = State()
 
 
 class EditProfile(StatesGroup):

@@ -92,17 +92,6 @@ def yes_no_kb(yes_cb: str, no_cb: str, yes_text="Да", no_text="Нет") -> Inl
     return b.as_markup()
 
 
-def skip_kb(cb="clarify:skip", back: bool = False) -> InlineKeyboardMarkup:
-    b = InlineKeyboardBuilder()
-    b.button(text=texts.SKIP_BTN, callback_data=cb)
-    if back:
-        b.button(text=texts.BACK_BTN, callback_data="clarify:__back__")
-    else:
-        _home(b)
-    b.adjust(1)
-    return b.as_markup()
-
-
 def card_payment_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.CARD_SEND_NOW_BTN, callback_data="card_now")
@@ -126,9 +115,11 @@ def pending_point_admin_kb(pending_id: str) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def confirm_order_kb() -> InlineKeyboardMarkup:
+def confirm_order_kb(has_comment: bool = False) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ORDER_CONFIRM_BTN, callback_data="order_confirm")
+    comment_text = texts.EDIT_COMMENT_BTN if has_comment else texts.ADD_COMMENT_BTN
+    b.button(text=comment_text, callback_data="add_comment")
     b.button(text=texts.ORDER_CANCEL_BTN, callback_data="order_cancel")
     _home(b)
     b.adjust(1)

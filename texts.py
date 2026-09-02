@@ -101,7 +101,7 @@ CHOOSE_GARNISH_MIX2 = "И второй — смешаем 50/50:"
 
 ASK_QTY = "Сколько порций этого сета?"
 
-ASK_MORE = "Добавим ещё один сет к этому же заказу, или дальше?"
+ASK_MORE = "Добавим ещё сет к заказу?"
 
 DEFAULT_POINT_ASK = "Доставить как обычно — {zone}, {point}?"
 DEFAULT_POINT_YES_BTN = "Да"
@@ -114,8 +114,6 @@ CHOOSE_BUILDING = "Уточните дом/комплекс:"
 CHOOSE_POINT = "И конкретную точку:"
 
 ASK_NEW_POINT = "Впишите адрес — мы сохраним его на будущее."
-
-ASK_CLARIFICATION = "Напишите комментарии к заказу, или нажмите «Пропустить»."
 
 CHOOSE_PAYMENT = "Как удобнее оплатить?"
 
@@ -133,9 +131,12 @@ ORDER_PAYMENT_STATUS_LATER = "\nОплата: подтвердите позже"
 
 ORDER_CONFIRM_BTN = "Всё верно, отправить"
 ORDER_CANCEL_BTN = "Отменить"
+ADD_COMMENT_BTN = "💬 Добавить комментарий"
+EDIT_COMMENT_BTN = "✏️ Изменить комментарий"
+ADD_COMMENT_PROMPT = "Напишите комментарий к заказу:"
 
 ORDER_SENT = (
-    "☘️ Заказ принят, спасибо!\n\n"
+    "Записал 🪴, спасибо за выбор 🌿✨\n\n"
     "Ждите — мы уже готовим что-то тёплое специально для вас."
 )
 
@@ -248,7 +249,6 @@ GIVEAWAY_PARTICIPATE_BTN = "🎁 Участвовать"
 GIVEAWAY_JOINED = "Готово, записали вас — удачи 🍀"
 ADMIN_GIVEAWAY_JOIN_ALERT = "🎁 {name} (ID {client_id}) хочет участвовать в розыгрыше."
 
-SKIP_BTN = "Пропустить"
 BACK_BTN = "‹ Назад"
 OTHER_BTN = "Другое / нет в списке"
 
