@@ -22,7 +22,7 @@ def _is_card_payment(payment: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Раздел «Меню» — показ меню на сегодня и кнопка «Заказать»
+# Раздел «Меню» — показ меню на сегодня и сразу старт заказа
 # ---------------------------------------------------------------------------
 
 @router.callback_query(F.data == "menu_section")
@@ -57,30 +57,12 @@ async def menu_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
     else:
         await callback.message.answer(texts.NO_MENU_YET)
 
-    if can_order:
-        await callback.message.answer(texts.MENU_ORDER_PROMPT, reply_markup=kb.menu_section_kb(can_order=True))
-    else:
-        await callback.message.answer(texts.CUTOFF_CLOSED_NOTICE, reply_markup=kb.menu_section_kb(can_order=False))
-    await callback.answer()
-
-
-# ---------------------------------------------------------------------------
-# Старт заказа
-# ---------------------------------------------------------------------------
-
-@router.callback_query(F.data == "order_start")
-async def order_start(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    client = _require_client(callback)
-    if not client:
-        await callback.message.answer("Похоже, вы ещё не зарегистрированы — наберите /start")
+    if not can_order:
+        await callback.message.answer(texts.CUTOFF_CLOSED_NOTICE, reply_markup=kb.home_only_kb())
         await callback.answer()
         return
 
-    if sheets.is_after_cutoff():
-        await callback.message.answer(texts.CUTOFF_CLOSED_NOTICE)
-        await callback.answer()
-        return
-
+    # Меню показали — сразу в заказ, без промежуточного «Готовы заказать?».
     await state.update_data(client_id=client["id"], client_row=client["row"],
                              client_name=client["name"], client_phone=client["contact"],
                              client_zone=client.get("zone", ""), client_point=client.get("point", ""),
@@ -201,7 +183,20 @@ async def chosen_garnish_mix2(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(Order.choosing_qty, F.data.startswith("qty:"))
 async def chosen_qty(callback: CallbackQuery, state: FSMContext):
-    qty = int(callback.data.split(":", 1)[1])
+    value = callback.data.split(":", 1)[1]
+
+    if value == "__back__":
+        data = await state.get_data()
+        if (data.get("cur_set") or "").strip().lower() == "сет стандарт":
+            garnishes = data.get("garnish_options", [])
+            await callback.message.answer(texts.CHOOSE_GARNISH, reply_markup=kb.garnish_kb(garnishes, back=True))
+            await state.set_state(Order.choosing_garnish)
+        else:
+            await _ask_set(callback.message, state)
+        await callback.answer()
+        return
+
+    qty = int(value)
     data = await state.get_data()
     cart = data.get("cart", [])
     cart.append({
@@ -258,8 +253,7 @@ async def default_point_yes(callback: CallbackQuery, state: FSMContext):
         cur_point=data.get("client_point", ""),
         is_new_point=False,
     )
-    await callback.message.answer(texts.ASK_CLARIFICATION, reply_markup=kb.skip_kb())
-    await state.set_state(Order.entering_clarification)
+    await _ask_clarification(callback.message, state, "default_point")
     await callback.answer()
 
 
@@ -293,15 +287,20 @@ async def chosen_zone(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.update_data(cur_zone=zone)
+    await _ask_point(callback.message, state, zone)
+    await callback.answer()
+
+
+async def _ask_point(message: Message, state: FSMContext, zone: str):
     points = sheets.get_points(zone)
     if points:
-        await callback.message.answer(texts.CHOOSE_POINT,
-                                       reply_markup=kb.options_kb(points, "point", other=True, back=True))
+        await message.answer(texts.CHOOSE_POINT,
+                              reply_markup=kb.options_kb(points, "point", other=True, back=True))
         await state.set_state(Order.choosing_point)
     else:
-        await callback.message.answer(texts.ASK_NEW_POINT)
+        await state.update_data(clarify_back_target="zone")
+        await message.answer(texts.ASK_NEW_POINT)
         await state.set_state(Order.entering_new_point)
-    await callback.answer()
 
 
 @router.callback_query(Order.choosing_point, F.data.startswith("point:"))
@@ -314,14 +313,14 @@ async def chosen_point(callback: CallbackQuery, state: FSMContext):
         return
 
     if point == "__other__":
+        await state.update_data(clarify_back_target="point")
         await callback.message.answer(texts.ASK_NEW_POINT)
         await state.set_state(Order.entering_new_point)
         await callback.answer()
         return
 
     await state.update_data(cur_point=point, is_new_point=False)
-    await callback.message.answer(texts.ASK_CLARIFICATION, reply_markup=kb.skip_kb())
-    await state.set_state(Order.entering_clarification)
+    await _ask_clarification(callback.message, state, "point")
     await callback.answer()
 
 
@@ -332,13 +331,43 @@ async def entered_new_point(message: Message, state: FSMContext):
         await message.answer(texts.ASK_NEW_POINT)
         return
     await state.update_data(cur_point=point, is_new_point=True)
-    await message.answer(texts.ASK_CLARIFICATION, reply_markup=kb.skip_kb())
-    await state.set_state(Order.entering_clarification)
+    await _ask_clarification(message, state)
 
 
 # ---------------------------------------------------------------------------
 # Уточнение и оплата
 # ---------------------------------------------------------------------------
+
+async def _ask_clarification(message: Message, state: FSMContext, back_target: str = None):
+    # back_target запоминает, куда вернуть по «Назад» отсюда — на выбор
+    # точки, района (если у района вообще нет точек) или на вопрос
+    # "доставить как обычно?". None — не меняем то, что уже сохранено
+    # (используется, когда уточнение показывается после ввода нового
+    # адреса свободным текстом — там back_target уже выставлен раньше).
+    if back_target is not None:
+        await state.update_data(clarify_back_target=back_target)
+    await message.answer(texts.ASK_CLARIFICATION, reply_markup=kb.skip_kb(back=True))
+    await state.set_state(Order.entering_clarification)
+
+
+@router.callback_query(Order.entering_clarification, F.data == "clarify:__back__")
+async def clarification_back(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    target = data.get("clarify_back_target", "point")
+    if target == "default_point":
+        await callback.message.answer(
+            texts.DEFAULT_POINT_ASK.format(
+                zone=data.get("client_zone", ""), point=data.get("client_point", "")
+            ),
+            reply_markup=kb.default_point_kb(),
+        )
+        await state.set_state(Order.asking_default_point)
+    elif target == "zone":
+        await _ask_zone(callback.message, state)
+    else:
+        await _ask_point(callback.message, state, data.get("cur_zone", ""))
+    await callback.answer()
+
 
 @router.callback_query(Order.entering_clarification, F.data == "clarify:skip")
 async def skip_clarification(callback: CallbackQuery, state: FSMContext):
@@ -357,7 +386,7 @@ async def _ask_payment(message: Message, state: FSMContext):
     # Клиент выбирает только между наличными и картой — "В долг" ставится
     # вручную в таблице, самостоятельно клиент этот вариант не выбирает.
     options = [o for o in sheets.get_payment_options() if "долг" not in o.lower()]
-    await message.answer(texts.CHOOSE_PAYMENT, reply_markup=kb.options_kb(options, "payment"))
+    await message.answer(texts.CHOOSE_PAYMENT, reply_markup=kb.options_kb(options, "payment", home=False))
     await state.set_state(Order.choosing_payment)
 
 
@@ -367,14 +396,18 @@ async def chosen_payment(callback: CallbackQuery, state: FSMContext):
     await state.update_data(cur_payment=payment, card_screenshot=None, card_status="")
 
     if _is_card_payment(payment):
-        await callback.message.answer(
-            texts.CARD_PAYMENT_ASK.format(requisites=texts.REQUISITES_TEXT),
-            reply_markup=kb.card_payment_kb(),
-        )
+        await callback.message.answer(texts.CARD_REQUISITES_MSG.format(requisites=texts.REQUISITES_TEXT))
+        await callback.message.answer(texts.CARD_PAYMENT_ASK, reply_markup=kb.card_payment_kb())
         await state.set_state(Order.card_decision)
     else:
         await _show_summary(callback.message, state)
         await state.set_state(Order.confirming)
+    await callback.answer()
+
+
+@router.callback_query(Order.card_decision, F.data == "card_decision_back")
+async def card_decision_back(callback: CallbackQuery, state: FSMContext):
+    await _ask_payment(callback.message, state)
     await callback.answer()
 
 

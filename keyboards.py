@@ -62,7 +62,6 @@ def garnish_kb(options: list, back: bool = False) -> InlineKeyboardMarkup:
         b.button(text=texts.MIX_GARNISH_BTN, callback_data="garnish:__mix__")
     if back:
         b.button(text=texts.BACK_BTN, callback_data="garnish:__back__")
-    _home(b)
     b.adjust(1)
     return b.as_markup()
 
@@ -80,24 +79,26 @@ def qty_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for n in range(1, 6):
         b.button(text=str(n), callback_data=f"qty:{n}")
-    _home(b)
+    b.button(text=texts.BACK_BTN, callback_data="qty:__back__")
     b.adjust(5, 1)
     return b.as_markup()
 
 
-def yes_no_kb(yes_cb: str, no_cb: str, yes_text="Да, ещё один", no_text="Нет, дальше") -> InlineKeyboardMarkup:
+def yes_no_kb(yes_cb: str, no_cb: str, yes_text="Да", no_text="Нет") -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=yes_text, callback_data=yes_cb)
     b.button(text=no_text, callback_data=no_cb)
-    _home(b)
     b.adjust(1)
     return b.as_markup()
 
 
-def skip_kb(cb="clarify:skip") -> InlineKeyboardMarkup:
+def skip_kb(cb="clarify:skip", back: bool = False) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.SKIP_BTN, callback_data=cb)
-    _home(b)
+    if back:
+        b.button(text=texts.BACK_BTN, callback_data="clarify:__back__")
+    else:
+        _home(b)
     b.adjust(1)
     return b.as_markup()
 
@@ -106,7 +107,7 @@ def card_payment_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.CARD_SEND_NOW_BTN, callback_data="card_now")
     b.button(text=texts.CARD_LATER_BTN, callback_data="card_later")
-    _home(b)
+    b.button(text=texts.BACK_BTN, callback_data="card_decision_back")
     b.adjust(1)
     return b.as_markup()
 
@@ -176,19 +177,6 @@ def edit_profile_kb() -> InlineKeyboardMarkup:
     b.button(text=texts.EDIT_NAME_BTN, callback_data="edit_name")
     b.button(text=texts.EDIT_PHONE_BTN, callback_data="edit_phone")
     b.button(text=texts.EDIT_POINT_BTN, callback_data="edit_point")
-    _home(b)
-    b.adjust(1)
-    return b.as_markup()
-
-
-# ---------------------------------------------------------------------------
-# Раздел «Меню» (сегодняшнее меню + старт заказа)
-# ---------------------------------------------------------------------------
-
-def menu_section_kb(can_order: bool) -> InlineKeyboardMarkup:
-    b = InlineKeyboardBuilder()
-    if can_order:
-        b.button(text="🛒 Заказать", callback_data="order_start")
     _home(b)
     b.adjust(1)
     return b.as_markup()
