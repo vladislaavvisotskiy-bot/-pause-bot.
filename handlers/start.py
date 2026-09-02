@@ -32,7 +32,7 @@ async def got_name(message: Message, state: FSMContext):
         await message.answer(texts.ASK_NAME)
         return
     await state.update_data(reg_name=name)
-    await message.answer(texts.ASK_PHONE.format(name=name))
+    await message.answer(texts.ASK_PHONE)
     await state.set_state(Registration.waiting_phone)
 
 

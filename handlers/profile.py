@@ -167,7 +167,7 @@ async def edit_point_zone(callback: CallbackQuery, state: FSMContext):
     points = sheets.get_points(zone)
     if points:
         await callback.message.answer(texts.CHOOSE_POINT,
-                                       reply_markup=kb.options_kb(points, "editpoint", other=True))
+                                       reply_markup=kb.options_kb(points, "editpoint", other=True, back=True))
         await state.set_state(EditProfile.choosing_point)
     else:
         await callback.message.answer(texts.ASK_NEW_POINT)
@@ -178,6 +178,14 @@ async def edit_point_zone(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(EditProfile.choosing_point, F.data.startswith("editpoint:"))
 async def edit_point_point(callback: CallbackQuery, state: FSMContext, bot: Bot):
     point = callback.data.split(":", 1)[1]
+
+    if point == "__back__":
+        zones = sheets.get_zones()
+        await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "editzone", back=True))
+        await state.set_state(EditProfile.choosing_zone)
+        await callback.answer()
+        return
+
     if point == "__other__":
         await callback.message.answer(texts.ASK_NEW_POINT)
         await state.set_state(EditProfile.entering_new_point)
