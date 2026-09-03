@@ -71,8 +71,11 @@ async def draw_daily_giveaway(bot: Bot):
     каждый участник встречается столько раз, сколько у него билетов, и
     берём случайный элемент оттуда (человек с 3 билетами втрое чаще
     попадёт в список, чем с 1). Если участников не было — ничего не
-    происходит, без уведомлений."""
+    происходит, без уведомлений. Окно участия закрывается в любом
+    случае — снова открывается только публикацией следующего меню."""
     date_str = sheets.get_active_menu_date()
+    sheets.close_giveaway_window()
+
     participants = sheets.get_daily_giveaway_participants(date_str)
     if not participants:
         return

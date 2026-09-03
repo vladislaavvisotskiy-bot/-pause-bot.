@@ -37,8 +37,13 @@ async def club_section(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.answer(text, reply_markup=kb.club_kb(giveaway_active=active))
 
-    # Ежедневный розыгрыш "Пауза в подарок" — отдельный блок, виден всегда,
-    # независимо от статуса участия.
+    # Ежедневный розыгрыш "Пауза в подарок" — отдельный блок, виден только
+    # в окне между публикацией меню и подведением итогов (GIVEAWAY_TIME).
+    if sheets.is_giveaway_window_closed():
+        await callback.message.answer(texts.DAILY_GIVEAWAY_CLOSED_TEXT, reply_markup=kb.home_only_kb())
+        await callback.answer()
+        return
+
     date_str = sheets.get_active_menu_date()
     tickets = sheets.get_client_ticket_counts(date_str)
     has_order_today = tickets.get(str(client["id"]), 0) > 0
@@ -79,6 +84,11 @@ async def giveaway_join(callback: CallbackQuery, bot: Bot):
 async def daily_giveaway_join(callback: CallbackQuery):
     client = sheets.find_client_by_tg_id(callback.from_user.id)
     if not client:
+        await callback.answer()
+        return
+
+    if sheets.is_giveaway_window_closed():
+        await callback.message.answer(texts.DAILY_GIVEAWAY_CLOSED_TEXT, reply_markup=kb.home_only_kb())
         await callback.answer()
         return
 

@@ -595,9 +595,30 @@ def set_active_menu_date(date_str: str):
     меню — админ выбирает её сам при публикации ("Сегодня"/"Завтра" или
     вписывает вручную). Одна ячейка, значение просто перезаписывается —
     старая дата после этого нигде больше не используется, полностью
-    заменяется новой."""
+    заменяется новой.
+
+    Публикация нового меню также заново открывает окно участия в
+    "Паузе в подарок" (см. is_giveaway_window_closed) — оно закрывается
+    только подведением итогов (draw_daily_giveaway), а публикация меню
+    снимает это закрытие."""
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_TODAY_MENU_DATE_CELL, date_str)
+    ws.update_acell(config.REF_GIVEAWAY_CLOSED_CELL, "")
+
+
+def is_giveaway_window_closed() -> bool:
+    """Окно участия в "Паузе в подарок" закрыто, если сегодняшний
+    розыгрыш уже подведён (см. close_giveaway_window) и с тех пор ещё не
+    публиковалось новое меню (публикация снимает закрытие)."""
+    ws = _ws(config.SHEET_REFERENCE)
+    return (ws.acell(config.REF_GIVEAWAY_CLOSED_CELL).value or "").strip().lower() == "да"
+
+
+def close_giveaway_window():
+    """Отмечает, что сегодняшний розыгрыш подведён — окно участия закрыто
+    до публикации следующего меню."""
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_GIVEAWAY_CLOSED_CELL, "Да")
 
 
 def get_active_menu_date() -> str:

@@ -271,9 +271,13 @@ DAILY_GIVEAWAY_BLOCK = (
     "Итоги подводим каждый день — если это будете вы, мы напишем лично, а "
     "имя появится в канале PAUSE 🌿"
 )
-DAILY_GIVEAWAY_ORDER_BTN = "Для участия, достаточно сегодня сделать заказ 🌿"
+DAILY_GIVEAWAY_ORDER_BTN = "⬇️для участия, выбери сет⬇️"
 DAILY_GIVEAWAY_JOIN_BTN = "🎉 Участвовать"
 DAILY_GIVEAWAY_JOINED_TEXT = "Вы участвуете в сегодняшней «Паузе в подарок» 🌿 Удачи!"
+DAILY_GIVEAWAY_CLOSED_TEXT = (
+    "Сегодняшняя «Пауза в подарок» уже нашла своего героя 🤎 "
+    "Загляните завтра — будет новый повод"
+)
 DAILY_GIVEAWAY_WINNER_MSG = "🎉 Сегодня ваш заказ за наш счёт! Спасибо, что вы с нами 🌿"
 ADMIN_DAILY_GIVEAWAY_WINNER_ALERT = (
     "🤎 Победитель «Паузы в подарок»: {name} (ID {client_id}), контакт: {contact}"
