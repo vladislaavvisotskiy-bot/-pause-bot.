@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 import asyncio
+import datetime as dt
 
 from aiogram import Router, F, Bot
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 
@@ -236,24 +237,76 @@ async def admin_debtors(callback: CallbackQuery):
     await callback.answer()
 
 
+def _parse_date_arg(arg: str):
+    """Дата, присланная аргументом команды (/kitchen 25.08.2026) — строго
+    ДД.ММ.ГГГГ. None, если не распознали."""
+    arg = (arg or "").strip()
+    if not arg:
+        return None
+    try:
+        d = dt.datetime.strptime(arg, "%d.%m.%Y")
+    except ValueError:
+        return None
+    return d.strftime("%d.%m.%Y")
+
+
+async def _ask_report_date(message: Message, report_type: str):
+    dates = sheets.get_recent_order_dates()
+    if not dates:
+        await message.answer(texts.ADMIN_NO_RECENT_ORDERS)
+        return
+    await message.answer(texts.ADMIN_ASK_REPORT_DATE, reply_markup=kb.report_dates_kb(report_type, dates))
+
+
+async def _send_report_by_type(bot: Bot, chat_id: int, report_type: str, date_str: str):
+    if report_type == "kitchen":
+        report = sheets.build_kitchen_report(date_str)
+        await bot.send_message(chat_id, report or texts.ADMIN_NO_ORDERS_FOR_DATE.format(date=date_str))
+    elif report_type == "courier":
+        report = sheets.build_courier_report(date_str)
+        await bot.send_message(chat_id, report or texts.ADMIN_NO_ORDERS_FOR_DATE.format(date=date_str))
+    elif report_type == "kitchen_pdf":
+        await send_kitchen_pdf(bot, chat_id, date_str)
+
+
+@router.callback_query(F.data.startswith("adminrep:"))
+async def admin_report_date_chosen(callback: CallbackQuery, bot: Bot):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    _, report_type, date_str = callback.data.split(":", 2)
+    await _send_report_by_type(bot, callback.message.chat.id, report_type, date_str)
+    await callback.answer()
+
+
 @router.message(Command("kitchen"))
-async def cmd_kitchen(message: Message):
+async def cmd_kitchen(message: Message, bot: Bot, command: CommandObject):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
-    date_str = sheets.get_active_menu_date()
-    report = sheets.build_kitchen_report(date_str)
-    await message.answer(report or "На сегодня заказов нет.")
+    if command.args:
+        date_str = _parse_date_arg(command.args)
+        if not date_str:
+            await message.answer(texts.ADMIN_BAD_DATE_FORMAT)
+            return
+        await _send_report_by_type(bot, message.chat.id, "kitchen", date_str)
+        return
+    await _ask_report_date(message, "kitchen")
 
 
 @router.message(Command("courier"))
-async def cmd_courier(message: Message):
+async def cmd_courier(message: Message, bot: Bot, command: CommandObject):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
-    date_str = sheets.get_active_menu_date()
-    report = sheets.build_courier_report(date_str)
-    await message.answer(report or "На сегодня заказов нет.")
+    if command.args:
+        date_str = _parse_date_arg(command.args)
+        if not date_str:
+            await message.answer(texts.ADMIN_BAD_DATE_FORMAT)
+            return
+        await _send_report_by_type(bot, message.chat.id, "courier", date_str)
+        return
+    await _ask_report_date(message, "courier")
 
 
 # ---------------------------------------------------------------------------
@@ -271,12 +324,18 @@ async def send_kitchen_pdf(bot: Bot, chat_id: int, date_str: str):
 
 
 @router.message(Command("kitchen_pdf"))
-async def cmd_kitchen_pdf(message: Message, bot: Bot):
+async def cmd_kitchen_pdf(message: Message, bot: Bot, command: CommandObject):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
-    date_str = sheets.get_active_menu_date()
-    await send_kitchen_pdf(bot, message.chat.id, date_str)
+    if command.args:
+        date_str = _parse_date_arg(command.args)
+        if not date_str:
+            await message.answer(texts.ADMIN_BAD_DATE_FORMAT)
+            return
+        await _send_report_by_type(bot, message.chat.id, "kitchen_pdf", date_str)
+        return
+    await _ask_report_date(message, "kitchen_pdf")
 
 
 # ---------------------------------------------------------------------------

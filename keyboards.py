@@ -202,3 +202,13 @@ def admin_club_panel_kb() -> InlineKeyboardMarkup:
     b.button(text=texts.ADMIN_GIVEAWAY_BTN, callback_data="admin_giveaway")
     b.adjust(1)
     return b.as_markup()
+
+
+def report_dates_kb(report_type: str, dates: list) -> InlineKeyboardMarkup:
+    """Кнопки выбора даты для отчётов /kitchen, /kitchen_pdf, /courier —
+    dates в формате DD.MM.YYYY, на кнопке показываем короче — DD.MM."""
+    b = InlineKeyboardBuilder()
+    for d in dates:
+        b.button(text=d[:5], callback_data=f"adminrep:{report_type}:{d}")
+    b.adjust(4)
+    return b.as_markup()

@@ -415,6 +415,37 @@ def today_date_str() -> str:
     return dt.datetime.now().strftime("%d.%m.%Y")
 
 
+def get_recent_order_dates() -> list:
+    """Уникальные даты, реально встречающиеся в «Заказы», в окне последних
+    7 дней (включая сегодня) и завтра — источник для кнопок выбора даты в
+    отчётах администратора. Хронологический порядок, формат DD.MM.YYYY."""
+    ws = _ws(config.SHEET_ORDERS)
+    col = ws.col_values(config.O_DATE)
+    today = dt.datetime.now().date()
+    window_start = today - dt.timedelta(days=6)
+    window_end = today + dt.timedelta(days=1)
+
+    seen = set()
+    out = []
+    for i, raw in enumerate(col):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        raw = raw.strip()
+        if not raw or raw in seen:
+            continue
+        try:
+            d = dt.datetime.strptime(raw, "%d.%m.%Y").date()
+        except ValueError:
+            continue
+        if window_start <= d <= window_end:
+            seen.add(raw)
+            out.append((d, raw))
+
+    out.sort(key=lambda t: t[0])
+    return [raw for _, raw in out]
+
+
 # ---------------------------------------------------------------------------
 # Справочники (цены, меню на сегодня)
 # ---------------------------------------------------------------------------

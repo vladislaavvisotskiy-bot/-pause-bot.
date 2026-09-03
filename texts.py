@@ -302,6 +302,11 @@ ADMIN_GIVEAWAY_OFF_WORDS = {"выключить", "выключи", "нет", "�
 
 ADMIN_KITCHEN_PDF_CAPTION = "📄 PDF-отчёт для кухни — {date}"
 ADMIN_NO_ORDERS_TODAY = "На сегодня заказов нет."
+ADMIN_NO_ORDERS_FOR_DATE = "Заказов на {date} нет."
+
+ADMIN_ASK_REPORT_DATE = "За какую дату показать отчёт?"
+ADMIN_NO_RECENT_ORDERS = "Заказов пока нет."
+ADMIN_BAD_DATE_FORMAT = "Не понял дату — пришлите в формате ДД.ММ.ГГГГ, например /kitchen 25.08.2026."
 
 ADMIN_COMMANDS_LIST = (
     "Доступные команды:\n"
