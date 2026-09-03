@@ -67,38 +67,39 @@ async def send_payment_reminders(bot: Bot):
 
 
 async def draw_daily_giveaway(bot: Bot):
-    """Ежедневное подведение "Паузы в подарок" — среди тех, кто нажал
-    "Участвовать" сегодня, выбираем победителя случайно, с шансом
-    пропорциональным количеству заказанных сетов (билетов). Если
-    участников не было — ничего не происходит, без уведомлений."""
+    """Ежедневное подведение "Паузы в подарок" — строим список, где
+    каждый участник встречается столько раз, сколько у него билетов, и
+    берём случайный элемент оттуда (человек с 3 билетами втрое чаще
+    попадёт в список, чем с 1). Если участников не было — ничего не
+    происходит, без уведомлений."""
     date_str = sheets.get_active_menu_date()
     participants = sheets.get_daily_giveaway_participants(date_str)
     if not participants:
         return
 
-    tickets = sheets.get_client_ticket_counts(date_str)
-    weighted = [(cid, tickets.get(cid, 0)) for cid in participants if tickets.get(cid, 0) > 0]
-    if not weighted:
+    pool = []
+    for p in participants:
+        pool.extend([p] * max(p["tickets"], 0))
+    if not pool:
         return
 
-    ids, weights = zip(*weighted)
-    winner_id = random.choices(ids, weights=weights, k=1)[0]
-    client = sheets.get_client_by_id(winner_id)
-    if not client or not client.get("tg_id"):
-        return
+    winner = random.choice(pool)
+    sheets.mark_daily_giveaway_winner(winner["row"])
 
     try:
-        await bot.send_message(int(client["tg_id"]), texts.DAILY_GIVEAWAY_WINNER_MSG)
+        await bot.send_message(int(winner["tg_id"]), texts.DAILY_GIVEAWAY_WINNER_MSG)
     except Exception:
-        logger.exception("Не удалось отправить победителю «Паузы в подарок» ID %s", winner_id)
+        logger.exception("Не удалось отправить победителю «Паузы в подарок» tg_id %s", winner["tg_id"])
 
     if config.ADMIN_CHAT_ID:
         try:
+            client = sheets.find_client_by_tg_id(int(winner["tg_id"]))
             await bot.send_message(
                 config.ADMIN_CHAT_ID,
                 texts.ADMIN_DAILY_GIVEAWAY_WINNER_ALERT.format(
-                    name=client.get("name", ""), client_id=client.get("id", ""),
-                    contact=client.get("contact", ""),
+                    name=winner["name"],
+                    client_id=(client or {}).get("id", ""),
+                    contact=(client or {}).get("contact", ""),
                 ),
             )
         except Exception:
@@ -118,6 +119,7 @@ async def setup_commands(bot: Bot):
             BotCommand(command="courier", description="Отчёт для курьера"),
             BotCommand(command="giveaway", description="Запустить/обновить розыгрыш"),
             BotCommand(command="giveaway_finish", description="Завершить текущий розыгрыш"),
+            BotCommand(command="giveaway_today", description="Участники «Паузы в подарок» сегодня"),
         ]
         try:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))

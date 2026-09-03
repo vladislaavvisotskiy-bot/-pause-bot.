@@ -42,7 +42,7 @@ async def club_section(callback: CallbackQuery, state: FSMContext):
     date_str = sheets.get_active_menu_date()
     tickets = sheets.get_client_ticket_counts(date_str)
     has_order_today = tickets.get(str(client["id"]), 0) > 0
-    is_participating = has_order_today and sheets.is_in_daily_giveaway(date_str, client["id"])
+    is_participating = has_order_today and sheets.is_in_daily_giveaway(date_str, client.get("tg_id"))
 
     dg_text = texts.DAILY_GIVEAWAY_BLOCK
     if is_participating:
@@ -83,6 +83,6 @@ async def daily_giveaway_join(callback: CallbackQuery):
         return
 
     date_str = sheets.get_active_menu_date()
-    sheets.join_daily_giveaway(date_str, client["id"])
+    sheets.join_daily_giveaway(date_str, client)
     await callback.message.answer(texts.DAILY_GIVEAWAY_JOINED_TEXT, reply_markup=kb.home_only_kb())
     await callback.answer()

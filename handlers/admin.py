@@ -442,3 +442,41 @@ async def cmd_giveaway_finish(message: Message):
         return
     sheets.set_giveaway("", False)
     await message.answer(texts.ADMIN_GIVEAWAY_OFF)
+
+
+# ---------------------------------------------------------------------------
+# Ежедневный розыгрыш "Пауза в подарок" — просмотр участников в реальном
+# времени, отдельно от /giveaway.
+# ---------------------------------------------------------------------------
+
+def _tickets_word(n: int) -> str:
+    n_abs = abs(n) % 100
+    if 11 <= n_abs <= 14:
+        return "билетов"
+    last = n_abs % 10
+    if last == 1:
+        return "билет"
+    if 2 <= last <= 4:
+        return "билета"
+    return "билетов"
+
+
+@router.message(Command("giveaway_today"))
+async def cmd_giveaway_today(message: Message):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    date_str = sheets.get_active_menu_date()
+    participants = sheets.get_daily_giveaway_participants(date_str)
+    if not participants:
+        await message.answer(texts.ADMIN_GIVEAWAY_TODAY_EMPTY)
+        return
+
+    lines = [texts.ADMIN_GIVEAWAY_TODAY_HEADER.format(date=date_str), ""]
+    total = 0
+    for p in participants:
+        lines.append(f"○ {p['name']} — {p['tickets']} {_tickets_word(p['tickets'])}")
+        total += p["tickets"]
+    lines.append("")
+    lines.append(f"Всего билетов: {total} {_tickets_word(total)}")
+    await message.answer("\n".join(lines))

@@ -669,32 +669,40 @@ def set_club_info_text(text: str):
 # работает каждый день сам по себе на дату активного меню.
 # ---------------------------------------------------------------------------
 
-def is_in_daily_giveaway(date_str: str, client_id) -> bool:
+def is_in_daily_giveaway(date_str: str, tg_id) -> bool:
     ws = _ws(config.SHEET_DAILY_GIVEAWAY)
     rows = ws.get_all_values()
-    target = str(client_id)
+    target = str(tg_id)
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.DG_DATA_START_ROW:
             continue
-        if len(row) < config.DG_CLIENT_ID:
+        if len(row) < config.DG_TG_ID:
             continue
-        if row[config.DG_DATE - 1].strip() == date_str and row[config.DG_CLIENT_ID - 1].strip() == target:
+        if row[config.DG_DATE - 1].strip() == date_str and row[config.DG_TG_ID - 1].strip() == target:
             return True
     return False
 
 
-def join_daily_giveaway(date_str: str, client_id):
+def join_daily_giveaway(date_str: str, client: dict):
     """Записывает клиента участником сегодняшнего розыгрыша — без
-    дубликатов, повторное нажатие "Участвовать" ничего не ломает."""
-    if is_in_daily_giveaway(date_str, client_id):
+    дубликатов, повторное нажатие "Участвовать" ничего не ломает.
+    Билеты считаются заново на момент нажатия (сумма количества всех
+    сетов, заказанных клиентом сегодня)."""
+    tg_id = client.get("tg_id")
+    if not tg_id or is_in_daily_giveaway(date_str, tg_id):
         return
+    tickets = get_client_ticket_counts(date_str).get(str(client.get("id")), 0)
     ws = _ws(config.SHEET_DAILY_GIVEAWAY)
-    ws.append_row([date_str, _id_value(client_id)], value_input_option="RAW")
+    ws.append_row(
+        [date_str, str(tg_id), client.get("name", ""), tickets, ""],
+        value_input_option="RAW",
+    )
 
 
 def get_daily_giveaway_participants(date_str: str) -> list:
-    """ID клиентов, участвующих в розыгрыше на эту дату."""
+    """Участники розыгрыша на дату:
+    [{"row", "tg_id", "name", "tickets", "winner"}]."""
     ws = _ws(config.SHEET_DAILY_GIVEAWAY)
     rows = ws.get_all_values()
     out = []
@@ -702,13 +710,32 @@ def get_daily_giveaway_participants(date_str: str) -> list:
         r = i + 1
         if r < config.DG_DATA_START_ROW:
             continue
-        if len(row) < config.DG_CLIENT_ID:
+        if len(row) < config.DG_TICKETS:
             continue
-        if row[config.DG_DATE - 1].strip() == date_str:
-            cid = row[config.DG_CLIENT_ID - 1].strip()
-            if cid:
-                out.append(cid)
+        if row[config.DG_DATE - 1].strip() != date_str:
+            continue
+
+        def cell(col, row=row):
+            idx = col - 1
+            return row[idx] if idx < len(row) else ""
+
+        try:
+            tickets = int((cell(config.DG_TICKETS) or "0").strip())
+        except ValueError:
+            tickets = 0
+        out.append({
+            "row": r,
+            "tg_id": cell(config.DG_TG_ID).strip(),
+            "name": cell(config.DG_NAME).strip(),
+            "tickets": tickets,
+            "winner": cell(config.DG_WINNER).strip(),
+        })
     return out
+
+
+def mark_daily_giveaway_winner(row_num: int):
+    ws = _ws(config.SHEET_DAILY_GIVEAWAY)
+    ws.update_cell(row_num, config.DG_WINNER, "Да")
 
 
 def get_client_ticket_counts(date_str: str) -> dict:

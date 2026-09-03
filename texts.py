@@ -278,6 +278,8 @@ DAILY_GIVEAWAY_WINNER_MSG = "🎉 Сегодня ваш заказ за наш �
 ADMIN_DAILY_GIVEAWAY_WINNER_ALERT = (
     "🤎 Победитель «Паузы в подарок»: {name} (ID {client_id}), контакт: {contact}"
 )
+ADMIN_GIVEAWAY_TODAY_HEADER = "🤎 Участники «Паузы в подарок» на {date}:"
+ADMIN_GIVEAWAY_TODAY_EMPTY = "Пока никто не участвует в сегодняшней «Паузе в подарок»."
 ORDER_SENT_GIVEAWAY_HINT = (
     "Кстати, загляните в 🌿 Pause Club — сегодня разыгрывается "
     "«Пауза в подарок», вы уже можете участвовать 🎉"
@@ -359,7 +361,8 @@ ADMIN_COMMANDS_LIST = (
     "/kitchen_pdf — PDF-отчёт для кухни\n"
     "/courier — отчёт для курьера\n"
     "/giveaway — запустить или обновить розыгрыш\n"
-    "/giveaway_finish — завершить текущий розыгрыш"
+    "/giveaway_finish — завершить текущий розыгрыш\n"
+    "/giveaway_today — участники сегодняшней «Паузы в подарок»"
 )
 
 CARE_LINES = [
