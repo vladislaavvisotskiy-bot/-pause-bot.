@@ -477,10 +477,19 @@ def get_unconfirmed_card_orders(date_str: str) -> list:
 
 
 def is_after_cutoff() -> bool:
-    now = dt.datetime.now()
+    """Приём заказов закрывается не по времени суток "сегодня", а строго в
+    ORDER_CUTOFF_TIME того дня, на который указана дата активного меню.
+    Если меню опубликовано вечером на завтра — приём открыт весь вечер,
+    всю ночь и всё утро, до ORDER_CUTOFF_TIME именно завтрашнего дня, а
+    не "сегодняшних" 10:00 по часам."""
+    active_date = get_active_menu_date()
+    try:
+        active_day = dt.datetime.strptime(active_date, "%d.%m.%Y").date()
+    except ValueError:
+        active_day = dt.datetime.now().date()
     cutoff_h, cutoff_m = map(int, config.ORDER_CUTOFF_TIME.split(":"))
-    cutoff = now.replace(hour=cutoff_h, minute=cutoff_m, second=0, microsecond=0)
-    return now >= cutoff
+    cutoff_moment = dt.datetime.combine(active_day, dt.time(cutoff_h, cutoff_m))
+    return dt.datetime.now() >= cutoff_moment
 
 
 def is_after_cancel_cutoff() -> bool:
