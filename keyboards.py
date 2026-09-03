@@ -212,3 +212,18 @@ def report_dates_kb(report_type: str, dates: list) -> InlineKeyboardMarkup:
         b.button(text=d[:5], callback_data=f"adminrep:{report_type}:{d}")
     b.adjust(4)
     return b.as_markup()
+
+
+def admin_menu_date_kb(today_str: str, tomorrow_str: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_DATE_TODAY_BTN.format(date=today_str), callback_data=f"menudate:{today_str}")
+    b.button(text=texts.ADMIN_DATE_TOMORROW_BTN.format(date=tomorrow_str), callback_data=f"menudate:{tomorrow_str}")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def reminder_screenshot_kb(rows_str: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.CARD_SEND_NOW_BTN, callback_data=f"sendscreen:{rows_str}")
+    b.adjust(1)
+    return b.as_markup()

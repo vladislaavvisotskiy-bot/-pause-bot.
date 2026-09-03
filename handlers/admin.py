@@ -31,6 +31,7 @@ async def admin_panel(message: Message):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
+    await message.answer(texts.ADMIN_ACTIVE_MENU_DATE.format(date=sheets.get_active_menu_date()))
     await message.answer(texts.ADMIN_COMMANDS_LIST)
     await message.answer("Панель администратора:", reply_markup=kb.admin_panel_kb())
 
@@ -80,9 +81,37 @@ async def _flush_album(bot: Bot, media_group_id: str):
 async def _save_menu_and_notify(bot: Bot, chat_id: int, photo_ids: list, caption: str, state: FSMContext):
     sheets.set_today_menu_photos(photo_ids, caption)
     await bot.send_message(chat_id, texts.ADMIN_MENU_SAVED)
+    today = sheets.today_date_str()
+    tomorrow = (dt.datetime.now() + dt.timedelta(days=1)).strftime("%d.%m.%Y")
+    await bot.send_message(chat_id, texts.ADMIN_ASK_MENU_DATE, reply_markup=kb.admin_menu_date_kb(today, tomorrow))
+    await state.set_state(AdminMenu.waiting_date)
+
+
+async def _finish_menu_date(bot: Bot, chat_id: int, date_str: str, state: FSMContext):
+    sheets.set_active_menu_date(date_str)
+    await bot.send_message(chat_id, texts.ADMIN_MENU_DATE_SAVED.format(date=date_str))
     await _broadcast_new_menu(bot)
     await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_GARNISH)
     await state.set_state(AdminMenu.waiting_garnishes)
+
+
+@router.callback_query(AdminMenu.waiting_date, F.data.startswith("menudate:"))
+async def admin_menu_date_chosen(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    date_str = callback.data.split(":", 1)[1]
+    await _finish_menu_date(bot, callback.message.chat.id, date_str, state)
+    await callback.answer()
+
+
+@router.message(AdminMenu.waiting_date)
+async def admin_menu_date_manual(message: Message, state: FSMContext, bot: Bot):
+    date_str = _parse_date_arg(message.text or "")
+    if not date_str:
+        await message.answer(texts.ADMIN_BAD_DATE_FORMAT)
+        return
+    await _finish_menu_date(bot, message.chat.id, date_str, state)
 
 
 async def _broadcast_new_menu(bot: Bot):

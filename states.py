@@ -36,10 +36,15 @@ class Feedback(StatesGroup):
     waiting_text = State()
 
 
+class PaymentReminder(StatesGroup):
+    waiting_screenshot = State()
+
+
 class AdminClub(StatesGroup):
     waiting_info = State()
     waiting_giveaway = State()
 
 
 class AdminMenu(StatesGroup):
+    waiting_date = State()
     waiting_garnishes = State()

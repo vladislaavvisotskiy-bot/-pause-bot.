@@ -15,6 +15,7 @@ ORDER_CUTOFF_TIME = os.getenv("ORDER_CUTOFF_TIME", "10:00")
 CANCEL_CUTOFF_TIME = os.getenv("CANCEL_CUTOFF_TIME", "09:00")
 MORNING_REPORT_TIME = os.getenv("MORNING_REPORT_TIME", "10:05")
 WARM_BROADCAST_TIME = os.getenv("WARM_BROADCAST_TIME", "08:00")
+PAYMENT_REMINDER_TIME = os.getenv("PAYMENT_REMINDER_TIME", "14:30")
 
 # Отметка в комментарии заказа, по которой бот считает его отменённым клиентом
 # (отчёты кухни/курьера и подсчёт долга такие строки пропускают)

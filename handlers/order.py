@@ -7,7 +7,7 @@ import sheets
 import texts
 import keyboards as kb
 import config
-from states import Order
+from states import Order, PaymentReminder
 
 router = Router()
 
@@ -550,3 +550,57 @@ async def restart_order(callback: CallbackQuery, state: FSMContext):
     })
     await _ask_set(callback.message, state)
     await callback.answer()
+
+
+# ---------------------------------------------------------------------------
+# Напоминание об оплате картой ("пришлю скрин позже") — клиент присылает
+# скрин уже после заказа, не в рамках активного FSM оформления заказа.
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data.startswith("sendscreen:"))
+async def reminder_send_screenshot_start(callback: CallbackQuery, state: FSMContext):
+    rows_str = callback.data.split(":", 1)[1]
+    await state.update_data(reminder_rows=rows_str)
+    await callback.message.answer(texts.CARD_SEND_SCREENSHOT)
+    await state.set_state(PaymentReminder.waiting_screenshot)
+    await callback.answer()
+
+
+@router.message(PaymentReminder.waiting_screenshot, F.photo)
+async def reminder_screenshot_received(message: Message, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    rows_str = data.get("reminder_rows", "")
+    row_nums = [int(r) for r in rows_str.split(",") if r.strip().isdigit()]
+    file_id = message.photo[-1].file_id
+
+    sheets.mark_screenshot_sent(row_nums)
+    await message.answer(texts.CARD_SCREENSHOT_RECEIVED)
+    await state.clear()
+
+    if row_nums and config.ADMIN_CHAT_ID:
+        try:
+            client = sheets.find_client_by_tg_id(message.from_user.id) or {}
+            order_rows = sheets.get_order_rows(row_nums)
+            prices = sheets.get_set_prices()
+            total = sum(prices.get(o["set"], 0) * int(o["qty"] or 0) for o in order_rows)
+            items_text = ", ".join(
+                f"{o['qty']}× {texts.display_set_name(o['set'])}" + (f" ({o['garnish']})" if o["garnish"] else "")
+                for o in order_rows
+            )
+            caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
+                name=client.get("name", ""),
+                client_id=client.get("id", ""),
+                items=items_text,
+                sum=f"{total:,}".replace(",", " "),
+            )
+            await bot.send_photo(
+                config.ADMIN_CHAT_ID, file_id, caption=caption,
+                reply_markup=kb.card_confirm_admin_kb(rows_str),
+            )
+        except Exception:
+            pass
+
+
+@router.message(PaymentReminder.waiting_screenshot)
+async def reminder_screenshot_not_photo(message: Message):
+    await message.answer(texts.CARD_SCREENSHOT_EXPECTED)

@@ -397,6 +397,85 @@ def confirm_card_payment(row_nums: list):
         ws.update_cell(r, config.O_COMMENT, new)
 
 
+def mark_screenshot_sent(row_nums: list):
+    """Отмечает в комментарии заказа, что клиент прислал скрин оплаты
+    (например, в ответ на напоминание) — статус переходит с "не
+    подтверждена" на "на проверке", дальше — обычное подтверждение
+    администратором (confirm_card_payment)."""
+    ws = _ws(config.SHEET_ORDERS)
+    for r in row_nums:
+        cur = ws.cell(r, config.O_COMMENT).value or ""
+        new = cur.replace("оплата не подтверждена", "оплата на проверке")
+        if new == cur and cur:
+            new = cur + " | оплата на проверке"
+        elif not cur:
+            new = "оплата на проверке"
+        ws.update_cell(r, config.O_COMMENT, new)
+
+
+def get_order_rows(row_nums: list) -> list:
+    """Состав заказа (сет/кол-во/гарнир) по номерам строк — нужно, когда
+    строки уже существуют в таблице, а не собираются из FSM (например,
+    когда клиент присылает скрин оплаты повторно, по напоминанию)."""
+    ws = _ws(config.SHEET_ORDERS)
+    out = []
+    for r in row_nums:
+        row = ws.row_values(r)
+
+        def cell(col, row=row):
+            idx = col - 1
+            return row[idx] if idx < len(row) else ""
+
+        out.append({
+            "set": cell(config.O_SET),
+            "qty": cell(config.O_QTY),
+            "garnish": cell(config.O_GARNISH),
+        })
+    return out
+
+
+def get_unconfirmed_card_orders(date_str: str) -> list:
+    """Клиенты, оплатившие картой и выбравшие "пришлю скрин позже", но
+    так и не приславшие его — источник для дневного напоминания об
+    оплате. Группируем по клиенту (несколько строк одного заказа — одно
+    напоминание). Возвращает [{"client_id", "tg_id", "rows": [...]}]."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    clients = _clients_index()
+    by_client = {}
+    order = []
+
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_COMMENT:
+            continue
+        if row[config.O_DATE - 1].strip() != date_str:
+            continue
+        payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
+        if "карт" not in payment.lower():
+            continue
+        comment = row[config.O_COMMENT - 1].strip()
+        if is_canceled(comment):
+            continue
+        if "оплата не подтверждена" not in comment:
+            continue
+        client_id = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
+        if not client_id:
+            continue
+        client = clients.get(client_id)
+        tg_id = (client or {}).get("tg_id")
+        if not tg_id:
+            continue
+        if client_id not in by_client:
+            by_client[client_id] = {"client_id": client_id, "tg_id": tg_id, "rows": []}
+            order.append(client_id)
+        by_client[client_id]["rows"].append(r)
+
+    return [by_client[cid] for cid in order]
+
+
 def is_after_cutoff() -> bool:
     now = dt.datetime.now()
     cutoff_h, cutoff_m = map(int, config.ORDER_CUTOFF_TIME.split(":"))
@@ -503,14 +582,22 @@ def get_today_menu_photos() -> tuple:
 
 
 def set_today_menu_photos(photo_ids: list, caption: str):
-    """Публикация нового меню закрывает предыдущее: дата доставки, на
-    которую действует опубликованное меню, перештамповывается на сегодня
-    (на момент публикации) — все заказы, оформленные пока это меню
-    активно, пойдут именно с этой датой (см. get_active_menu_date)."""
+    """Сохраняет фото/подпись меню. Дату доставки, на которую действует
+    меню, бот больше не угадывает сам — её явно задаёт админ отдельным
+    шагом сразу после публикации (см. set_active_menu_date)."""
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_TODAY_MENU_CELL, ",".join(photo_ids))
     ws.update_acell(config.REF_TODAY_MENU2_CELL, caption or "")
-    ws.update_acell(config.REF_TODAY_MENU_DATE_CELL, today_date_str())
+
+
+def set_active_menu_date(date_str: str):
+    """Явно задаёт дату доставки, на которую действует опубликованное
+    меню — админ выбирает её сам при публикации ("Сегодня"/"Завтра" или
+    вписывает вручную). Одна ячейка, значение просто перезаписывается —
+    старая дата после этого нигде больше не используется, полностью
+    заменяется новой."""
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_TODAY_MENU_DATE_CELL, date_str)
 
 
 def get_active_menu_date() -> str:
@@ -519,10 +606,10 @@ def get_active_menu_date() -> str:
     Заказ должен получать дату не по текущему времени (иначе два человека,
     заказавшие в рамках одного и того же опубликованного меню — один
     вечером сразу после публикации, другой на следующее утро перед
-    отсечкой, — получили бы разные даты), а именно эту: дату, с которой
-    админ опубликовал текущее меню. Публикация нового меню сама
-    перештамповывает эту дату (см. set_today_menu_photos), тем самым
-    "закрывая" предыдущее."""
+    отсечкой, — получили бы разные даты), а именно эту: дату, которую
+    админ явно выбрал при публикации текущего меню (см.
+    set_active_menu_date) — публикация новой даты сама заменяет
+    предыдущую, тем самым "закрывая" её."""
     ws = _ws(config.SHEET_REFERENCE)
     date_str = (ws.acell(config.REF_TODAY_MENU_DATE_CELL).value or "").strip()
     return date_str or today_date_str()
