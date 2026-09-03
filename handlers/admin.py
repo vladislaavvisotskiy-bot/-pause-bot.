@@ -475,7 +475,7 @@ async def cmd_giveaway_today(message: Message):
     lines = [texts.ADMIN_GIVEAWAY_TODAY_HEADER.format(date=date_str), ""]
     total = 0
     for p in participants:
-        lines.append(f"○ {p['name']} — {p['tickets']} {_tickets_word(p['tickets'])}")
+        lines.append(f"○ {p['name']} (ID {p['client_id']}) — {p['tickets']} {_tickets_word(p['tickets'])}")
         total += p["tickets"]
     lines.append("")
     lines.append(f"Всего билетов: {total} {_tickets_word(total)}")

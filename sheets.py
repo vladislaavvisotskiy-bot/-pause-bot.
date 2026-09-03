@@ -695,14 +695,14 @@ def join_daily_giveaway(date_str: str, client: dict):
     tickets = get_client_ticket_counts(date_str).get(str(client.get("id")), 0)
     ws = _ws(config.SHEET_DAILY_GIVEAWAY)
     ws.append_row(
-        [date_str, str(tg_id), client.get("name", ""), tickets, ""],
+        [date_str, _id_value(client.get("id")), str(tg_id), client.get("name", ""), tickets, ""],
         value_input_option="RAW",
     )
 
 
 def get_daily_giveaway_participants(date_str: str) -> list:
     """Участники розыгрыша на дату:
-    [{"row", "tg_id", "name", "tickets", "winner"}]."""
+    [{"row", "client_id", "tg_id", "name", "tickets", "winner"}]."""
     ws = _ws(config.SHEET_DAILY_GIVEAWAY)
     rows = ws.get_all_values()
     out = []
@@ -725,6 +725,7 @@ def get_daily_giveaway_participants(date_str: str) -> list:
             tickets = 0
         out.append({
             "row": r,
+            "client_id": cell(config.DG_CLIENT_ID).strip(),
             "tg_id": cell(config.DG_TG_ID).strip(),
             "name": cell(config.DG_NAME).strip(),
             "tickets": tickets,

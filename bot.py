@@ -98,7 +98,7 @@ async def draw_daily_giveaway(bot: Bot):
                 config.ADMIN_CHAT_ID,
                 texts.ADMIN_DAILY_GIVEAWAY_WINNER_ALERT.format(
                     name=winner["name"],
-                    client_id=(client or {}).get("id", ""),
+                    client_id=winner["client_id"],
                     contact=(client or {}).get("contact", ""),
                 ),
             )
