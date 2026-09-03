@@ -96,6 +96,11 @@ def get_client_by_id(client_id) -> Optional[dict]:
     return None
 
 
+def get_broadcast_clients() -> list:
+    """Клиенты с привязанным Telegram ID — адресаты авторассылок."""
+    return [c for c in _load_clients() if c.get("tg_id")]
+
+
 def _clients_index() -> dict:
     return {str(c["id"]): c for c in _load_clients()}
 

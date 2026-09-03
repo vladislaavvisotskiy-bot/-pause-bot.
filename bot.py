@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import logging
+import random
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -30,6 +31,21 @@ async def send_morning_reports(bot: Bot):
         await admin.send_kitchen_pdf(bot, config.ADMIN_CHAT_ID, date_str)
     except Exception as e:
         logger.exception("Не удалось отправить утренний отчёт: %s", e)
+
+
+async def send_warm_broadcast(bot: Bot):
+    """Ежедневная тёплая рассылка всем зарегистрированным клиентам —
+    персональное приветствие по имени + общая фраза дня."""
+    clients = sheets.get_broadcast_clients()
+    if not clients:
+        return
+    line = random.choice(texts.CARE_LINES)
+    for c in clients:
+        try:
+            greeting = texts.MORNING_GREETING.format(name=c.get("name") or "")
+            await bot.send_message(int(c["tg_id"]), f"{greeting}\n\n{line}")
+        except Exception:
+            logger.exception("Не удалось отправить тёплое утреннее сообщение клиенту ID %s", c.get("id"))
 
 
 async def setup_commands(bot: Bot):
@@ -73,6 +89,8 @@ async def main():
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
     h, m = map(int, config.MORNING_REPORT_TIME.split(":"))
     scheduler.add_job(send_morning_reports, "cron", hour=h, minute=m, args=[bot])
+    wh, wm = map(int, config.WARM_BROADCAST_TIME.split(":"))
+    scheduler.add_job(send_warm_broadcast, "cron", hour=wh, minute=wm, args=[bot])
     scheduler.start()
 
     logger.info("PAUSE бот запущен.")

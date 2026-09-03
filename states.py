@@ -14,7 +14,6 @@ class Order(StatesGroup):
     choosing_garnish_mix2 = State()
     choosing_qty = State()
     asking_more = State()
-    asking_default_point = State()
     choosing_zone = State()
     choosing_point = State()
     entering_new_point = State()

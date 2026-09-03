@@ -79,8 +79,20 @@ async def _flush_album(bot: Bot, media_group_id: str):
 async def _save_menu_and_notify(bot: Bot, chat_id: int, photo_ids: list, caption: str, state: FSMContext):
     sheets.set_today_menu_photos(photo_ids, caption)
     await bot.send_message(chat_id, texts.ADMIN_MENU_SAVED)
+    await _broadcast_new_menu(bot)
     await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_GARNISH)
     await state.set_state(AdminMenu.waiting_garnishes)
+
+
+async def _broadcast_new_menu(bot: Bot):
+    """Персональное оповещение всем клиентам о том, что меню на сегодня
+    опубликовано — по имени, в тёплом духе, с кнопкой сразу в «Меню»."""
+    for c in sheets.get_broadcast_clients():
+        try:
+            greeting = texts.NEW_MENU_GREETING.format(name=c.get("name") or "")
+            await bot.send_message(int(c["tg_id"]), greeting, reply_markup=kb.menu_broadcast_kb())
+        except Exception:
+            continue
 
 
 @router.message(AdminMenu.waiting_garnishes)

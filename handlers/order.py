@@ -223,44 +223,22 @@ async def done_adding(callback: CallbackQuery, state: FSMContext):
     zone = data.get("client_zone", "")
     point = data.get("client_point", "")
     if zone and point:
-        await callback.message.answer(
-            texts.DEFAULT_POINT_ASK.format(zone=zone, point=point),
-            reply_markup=kb.default_point_kb(),
-        )
-        await state.set_state(Order.asking_default_point)
+        # Точка по умолчанию уже есть — используем её без единого вопроса,
+        # сменить её можно только через «Профиль», не в процессе заказа.
+        await state.update_data(cur_zone=zone, cur_point=point, is_new_point=False)
+        await _ask_payment(callback.message, state)
     else:
-        await _ask_zone(callback.message, state, from_default=False)
+        await _ask_zone(callback.message, state, first_time=True)
     await callback.answer()
 
 
-async def _ask_zone(message: Message, state: FSMContext, from_default: bool = None):
-    # from_default запоминает, откуда пришли на этот шаг — нужно, чтобы
-    # кнопка «Назад» отсюда вернула на правильный предыдущий экран
-    # (к вопросу "как обычно?" или к "добавить ещё один сет?"). None — не
-    # меняем то, что уже сохранено (используется при возврате со «Точки»).
-    if from_default is not None:
-        await state.update_data(zone_back_target="default_point" if from_default else "asking_more")
+async def _ask_zone(message: Message, state: FSMContext, first_time: bool = False):
     zones = sheets.get_zones()
-    await message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "zone", back=True))
+    text = texts.CHOOSE_ZONE
+    if first_time:
+        text = f"{texts.FIRST_TIME_ZONE_INTRO}\n\n{text}"
+    await message.answer(text, reply_markup=kb.options_kb(zones, "zone", back=True))
     await state.set_state(Order.choosing_zone)
-
-
-@router.callback_query(Order.asking_default_point, F.data == "default_point_yes")
-async def default_point_yes(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    await state.update_data(
-        cur_zone=data.get("client_zone", ""),
-        cur_point=data.get("client_point", ""),
-        is_new_point=False,
-    )
-    await _ask_payment(callback.message, state)
-    await callback.answer()
-
-
-@router.callback_query(Order.asking_default_point, F.data == "default_point_change")
-async def default_point_change(callback: CallbackQuery, state: FSMContext):
-    await _ask_zone(callback.message, state, from_default=True)
-    await callback.answer()
 
 
 # ---------------------------------------------------------------------------
@@ -272,17 +250,7 @@ async def chosen_zone(callback: CallbackQuery, state: FSMContext):
     zone = callback.data.split(":", 1)[1]
 
     if zone == "__back__":
-        data = await state.get_data()
-        if data.get("zone_back_target") == "default_point":
-            await callback.message.answer(
-                texts.DEFAULT_POINT_ASK.format(
-                    zone=data.get("client_zone", ""), point=data.get("client_point", "")
-                ),
-                reply_markup=kb.default_point_kb(),
-            )
-            await state.set_state(Order.asking_default_point)
-        else:
-            await _back_to_asking_more(callback.message, state)
+        await _back_to_asking_more(callback.message, state)
         await callback.answer()
         return
 
@@ -565,9 +533,20 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await callback.answer()
 
 
-@router.callback_query(Order.confirming, F.data == "order_cancel")
-async def cancel_order(callback: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await callback.message.answer(texts.ORDER_CANCELLED)
-    await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+@router.callback_query(Order.confirming, F.data == "order_restart")
+async def restart_order(callback: CallbackQuery, state: FSMContext):
+    # Начинаем собирать заказ заново с чистого листа — не точечная правка,
+    # а полный перезапуск; данные клиента (id, точка по умолчанию и т.п.)
+    # сохраняем, чтобы не проходить регистрацию/точку заново.
+    data = await state.get_data()
+    await state.set_data({
+        "client_id": data.get("client_id"),
+        "client_row": data.get("client_row"),
+        "client_name": data.get("client_name"),
+        "client_phone": data.get("client_phone"),
+        "client_zone": data.get("client_zone", ""),
+        "client_point": data.get("client_point", ""),
+        "cart": [],
+    })
+    await _ask_set(callback.message, state)
     await callback.answer()

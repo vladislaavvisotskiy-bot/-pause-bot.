@@ -66,15 +66,6 @@ def garnish_kb(options: list, back: bool = False) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def default_point_kb() -> InlineKeyboardMarkup:
-    b = InlineKeyboardBuilder()
-    b.button(text=texts.DEFAULT_POINT_YES_BTN, callback_data="default_point_yes")
-    b.button(text=texts.DEFAULT_POINT_CHANGE_BTN, callback_data="default_point_change")
-    _home(b)
-    b.adjust(1)
-    return b.as_markup()
-
-
 def qty_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for n in range(1, 6):
@@ -120,8 +111,14 @@ def confirm_order_kb(has_comment: bool = False) -> InlineKeyboardMarkup:
     b.button(text=texts.ORDER_CONFIRM_BTN, callback_data="order_confirm")
     comment_text = texts.EDIT_COMMENT_BTN if has_comment else texts.ADD_COMMENT_BTN
     b.button(text=comment_text, callback_data="add_comment")
-    b.button(text=texts.ORDER_CANCEL_BTN, callback_data="order_cancel")
-    _home(b)
+    b.button(text=texts.ORDER_RESTART_BTN, callback_data="order_restart")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def menu_broadcast_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.MENU_BROADCAST_BTN, callback_data="menu_section")
     b.adjust(1)
     return b.as_markup()
 
