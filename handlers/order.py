@@ -380,11 +380,11 @@ async def _show_summary(message: Message, state: FSMContext):
         lines.append(line)
 
     lines.append("")
-    lines.append(f"Итого: {total:,} сум".replace(",", " "))
-    lines.append(f"Куда: {data.get('cur_zone', '')}, {data.get('cur_point', '')}")
+    lines.append(f"💰 Итого: {total:,} сум".replace(",", " "))
+    lines.append(f"📍 Куда: {data.get('cur_zone', '')}, {data.get('cur_point', '')}")
     if data.get("cur_comment"):
-        lines.append(f"Комментарий: {data['cur_comment']}")
-    lines.append(f"Оплата: {data.get('cur_payment', '')}")
+        lines.append(f"💬 Комментарий: {data['cur_comment']}")
+    lines.append(f"💳 Оплата: {data.get('cur_payment', '')}")
 
     card_status = data.get("card_status", "")
     if card_status == "на проверке":
