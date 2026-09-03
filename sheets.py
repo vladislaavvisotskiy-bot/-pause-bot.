@@ -476,20 +476,37 @@ def get_unconfirmed_card_orders(date_str: str) -> list:
     return [by_client[cid] for cid in order]
 
 
+def _active_menu_day() -> dt.date:
+    active_date = get_active_menu_date()
+    try:
+        return dt.datetime.strptime(active_date, "%d.%m.%Y").date()
+    except ValueError:
+        return dt.datetime.now().date()
+
+
 def is_after_cutoff() -> bool:
     """Приём заказов закрывается не по времени суток "сегодня", а строго в
     ORDER_CUTOFF_TIME того дня, на который указана дата активного меню.
     Если меню опубликовано вечером на завтра — приём открыт весь вечер,
     всю ночь и всё утро, до ORDER_CUTOFF_TIME именно завтрашнего дня, а
     не "сегодняшних" 10:00 по часам."""
-    active_date = get_active_menu_date()
-    try:
-        active_day = dt.datetime.strptime(active_date, "%d.%m.%Y").date()
-    except ValueError:
-        active_day = dt.datetime.now().date()
     cutoff_h, cutoff_m = map(int, config.ORDER_CUTOFF_TIME.split(":"))
-    cutoff_moment = dt.datetime.combine(active_day, dt.time(cutoff_h, cutoff_m))
+    cutoff_moment = dt.datetime.combine(_active_menu_day(), dt.time(cutoff_h, cutoff_m))
     return dt.datetime.now() >= cutoff_moment
+
+
+def is_before_open_time() -> bool:
+    """Приём заказов не открывается раньше ORDER_OPEN_TIME (по умолчанию
+    18:00) дня, предшествующего дате активного меню — даже если админ
+    опубликовал меню раньше этого времени."""
+    open_h, open_m = map(int, config.ORDER_OPEN_TIME.split(":"))
+    open_day = _active_menu_day() - dt.timedelta(days=1)
+    open_moment = dt.datetime.combine(open_day, dt.time(open_h, open_m))
+    return dt.datetime.now() < open_moment
+
+
+def is_order_window_open() -> bool:
+    return not is_before_open_time() and not is_after_cutoff()
 
 
 def is_after_cancel_cutoff() -> bool:
