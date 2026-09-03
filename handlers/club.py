@@ -36,6 +36,20 @@ async def club_section(callback: CallbackQuery, state: FSMContext):
     text += giveaway_text if active and giveaway_text else sheets.get_club_info_text()
 
     await callback.message.answer(text, reply_markup=kb.club_kb(giveaway_active=active))
+
+    # Ежедневный розыгрыш "Пауза в подарок" — отдельный блок, виден всегда,
+    # независимо от статуса участия.
+    date_str = sheets.get_active_menu_date()
+    tickets = sheets.get_client_ticket_counts(date_str)
+    has_order_today = tickets.get(str(client["id"]), 0) > 0
+    is_participating = has_order_today and sheets.is_in_daily_giveaway(date_str, client["id"])
+
+    dg_text = texts.DAILY_GIVEAWAY_BLOCK
+    if is_participating:
+        dg_text += f"\n\n{texts.DAILY_GIVEAWAY_JOINED_TEXT}"
+    await callback.message.answer(
+        dg_text, reply_markup=kb.daily_giveaway_kb(has_order_today, is_participating)
+    )
     await callback.answer()
 
 
@@ -58,4 +72,17 @@ async def giveaway_join(callback: CallbackQuery, bot: Bot):
             )
         except Exception:
             pass
+    await callback.answer()
+
+
+@router.callback_query(F.data == "daily_giveaway_join")
+async def daily_giveaway_join(callback: CallbackQuery):
+    client = sheets.find_client_by_tg_id(callback.from_user.id)
+    if not client:
+        await callback.answer()
+        return
+
+    date_str = sheets.get_active_menu_date()
+    sheets.join_daily_giveaway(date_str, client["id"])
+    await callback.message.answer(texts.DAILY_GIVEAWAY_JOINED_TEXT, reply_markup=kb.home_only_kb())
     await callback.answer()

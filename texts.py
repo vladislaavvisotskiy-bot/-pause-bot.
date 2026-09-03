@@ -251,12 +251,33 @@ SUPPORT_INFO = (
 # --- Раздел «Pause Club» ---
 CLUB_STATUS_TEMPLATE = "{emoji} Статус: {label}\nЗаказов сделано: {order_count}"
 CLUB_NEXT_LEVEL_LINE = "\nЕщё {left} до уровня «{next_emoji} {next_label}»"
-CLUB_MAX_LEVEL_LINE = "\nВы на максимальном уровне 👑"
+CLUB_MAX_LEVEL_LINE = "\nВы на максимальном уровне 🌄"
 CLUB_NEWS_HEADER = "\n\n🗞 Новости и события\n"
 
 GIVEAWAY_PARTICIPATE_BTN = "🎁 Участвовать"
 GIVEAWAY_JOINED = "Готово, записали вас — удачи 🍀"
 ADMIN_GIVEAWAY_JOIN_ALERT = "🎁 {name} (ID {client_id}) хочет участвовать в розыгрыше."
+
+# --- Ежедневный розыгрыш "Пауза в подарок" (отдельно от /giveaway) ---
+DAILY_GIVEAWAY_BLOCK = (
+    "🤎 Пауза в подарок\n\n"
+    "Каждый день мы выбираем одного человека и дарим ему сегодняшний обед — "
+    "просто так, без повода. Чем больше сетов вы заказали сегодня, тем выше "
+    "шанс, что сегодня повезёт именно вам.\n\n"
+    "Итоги подводим каждый день — если выиграете, мы напишем лично, а имя "
+    "победителя появится в канале PAUSE 🌿"
+)
+DAILY_GIVEAWAY_ORDER_BTN = "🛒 Сделать заказ"
+DAILY_GIVEAWAY_JOIN_BTN = "🎉 Участвовать"
+DAILY_GIVEAWAY_JOINED_TEXT = "Вы участвуете в сегодняшней «Паузе в подарок» 🌿 Удачи!"
+DAILY_GIVEAWAY_WINNER_MSG = "🎉 Сегодня ваш заказ за наш счёт! Спасибо, что вы с нами 🌿"
+ADMIN_DAILY_GIVEAWAY_WINNER_ALERT = (
+    "🤎 Победитель «Паузы в подарок»: {name} (ID {client_id}), контакт: {contact}"
+)
+ORDER_SENT_GIVEAWAY_HINT = (
+    "Кстати, загляните в 🌿 Pause Club — сегодня разыгрывается "
+    "«Пауза в подарок», вы уже можете участвовать 🎉"
+)
 
 BACK_BTN = "‹ Назад"
 OTHER_BTN = "Другое / нет в списке"

@@ -16,6 +16,7 @@ CANCEL_CUTOFF_TIME = os.getenv("CANCEL_CUTOFF_TIME", "09:00")
 MORNING_REPORT_TIME = os.getenv("MORNING_REPORT_TIME", "10:05")
 WARM_BROADCAST_TIME = os.getenv("WARM_BROADCAST_TIME", "08:00")
 PAYMENT_REMINDER_TIME = os.getenv("PAYMENT_REMINDER_TIME", "14:30")
+GIVEAWAY_TIME = os.getenv("GIVEAWAY_TIME", "10:00")
 
 # Отметка в комментарии заказа, по которой бот считает его отменённым клиентом
 # (отчёты кухни/курьера и подсчёт долга такие строки пропускают)
@@ -80,10 +81,10 @@ CLUB_INFO_TEXT_CELL = "B3"       # общий текст о клубе (когд
 
 # Пороги уровней Pause Club — по количеству заказов (столбец O в CRM)
 CLUB_LEVELS = [
-    (0, "🌱", "Новичок"),
-    (3, "☘️", "Свой человек"),
-    (10, "🪴", "Друг Паузы"),
-    (25, "👑", "VIP Паузы"),
+    (0, "🕊", "Гость PAUSE"),
+    (3, "🤍", "Свой человек"),
+    (10, "🧡", "Круг PAUSE"),
+    (25, "🌄", "Амбассадор PAUSE"),
 ]
 
 # --- PDF-отчёт для кухни ---
@@ -109,3 +110,10 @@ P_STATUS = 12
 PENDING_STATUS_WAITING = "ожидает"
 PENDING_STATUS_APPROVED = "подтверждено"
 PENDING_STATUS_DENIED = "отклонено"
+
+# --- Ежедневный розыгрыш "Пауза в подарок" — участники дня ---
+SHEET_DAILY_GIVEAWAY = "Пауза в подарок"
+DG_HEADER_ROW = 1
+DG_DATA_START_ROW = 2
+DG_DATE = 1        # A
+DG_CLIENT_ID = 2   # B

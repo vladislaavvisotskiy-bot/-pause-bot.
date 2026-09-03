@@ -665,6 +665,83 @@ def set_club_info_text(text: str):
 
 
 # ---------------------------------------------------------------------------
+# Ежедневный розыгрыш "Пауза в подарок" — отдельный от /giveaway механизм,
+# работает каждый день сам по себе на дату активного меню.
+# ---------------------------------------------------------------------------
+
+def is_in_daily_giveaway(date_str: str, client_id) -> bool:
+    ws = _ws(config.SHEET_DAILY_GIVEAWAY)
+    rows = ws.get_all_values()
+    target = str(client_id)
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.DG_DATA_START_ROW:
+            continue
+        if len(row) < config.DG_CLIENT_ID:
+            continue
+        if row[config.DG_DATE - 1].strip() == date_str and row[config.DG_CLIENT_ID - 1].strip() == target:
+            return True
+    return False
+
+
+def join_daily_giveaway(date_str: str, client_id):
+    """Записывает клиента участником сегодняшнего розыгрыша — без
+    дубликатов, повторное нажатие "Участвовать" ничего не ломает."""
+    if is_in_daily_giveaway(date_str, client_id):
+        return
+    ws = _ws(config.SHEET_DAILY_GIVEAWAY)
+    ws.append_row([date_str, _id_value(client_id)], value_input_option="RAW")
+
+
+def get_daily_giveaway_participants(date_str: str) -> list:
+    """ID клиентов, участвующих в розыгрыше на эту дату."""
+    ws = _ws(config.SHEET_DAILY_GIVEAWAY)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.DG_DATA_START_ROW:
+            continue
+        if len(row) < config.DG_CLIENT_ID:
+            continue
+        if row[config.DG_DATE - 1].strip() == date_str:
+            cid = row[config.DG_CLIENT_ID - 1].strip()
+            if cid:
+                out.append(cid)
+    return out
+
+
+def get_client_ticket_counts(date_str: str) -> dict:
+    """client_id (строкой) -> суммарное количество сетов, заказанных в эту
+    дату (без отменённых) — "билеты" в дневном розыгрыше "Пауза в
+    подарок": несколько заказанных сетов = несколько билетов."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    counts = {}
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_COMMENT:
+            continue
+        if row[config.O_DATE - 1].strip() != date_str:
+            continue
+        comment = row[config.O_COMMENT - 1].strip()
+        if is_canceled(comment):
+            continue
+        client_id = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
+        if not client_id:
+            continue
+        qty_raw = row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else ""
+        try:
+            qty = int(qty_raw)
+        except ValueError:
+            qty = 0
+        counts[client_id] = counts.get(client_id, 0) + qty
+    return counts
+
+
+# ---------------------------------------------------------------------------
 # Отчёты для кухни / курьера — те же формулы, что и в самой таблице,
 # просто пересчитанные тут, чтобы бот мог прислать их сам
 # ---------------------------------------------------------------------------

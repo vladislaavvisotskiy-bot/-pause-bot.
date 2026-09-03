@@ -529,6 +529,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
     await state.clear()
     await callback.message.answer(texts.ORDER_SENT)
+    await callback.message.answer(texts.ORDER_SENT_GIVEAWAY_HINT)
     await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
     await callback.answer()
 

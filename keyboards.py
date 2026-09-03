@@ -183,6 +183,18 @@ def club_kb(giveaway_active: bool) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def daily_giveaway_kb(has_order_today: bool, is_participating: bool) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    if not has_order_today:
+        # Тот же переход, что и по кнопке "💌 Меню" — показ меню и сразу в заказ.
+        b.button(text=texts.DAILY_GIVEAWAY_ORDER_BTN, callback_data="menu_section")
+    elif not is_participating:
+        b.button(text=texts.DAILY_GIVEAWAY_JOIN_BTN, callback_data="daily_giveaway_join")
+    _home(b)
+    b.adjust(1)
+    return b.as_markup()
+
+
 # ---------------------------------------------------------------------------
 # Админ
 # ---------------------------------------------------------------------------
