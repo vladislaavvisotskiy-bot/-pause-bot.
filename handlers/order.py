@@ -34,7 +34,7 @@ async def menu_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
         await callback.answer()
         return
 
-    can_order = sheets.is_order_window_open()
+    can_order = not sheets.is_after_cutoff()
 
     photo_ids, caption = sheets.get_today_menu_photos()
     if photo_ids:
@@ -58,11 +58,7 @@ async def menu_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
         await callback.message.answer(texts.NO_MENU_YET)
 
     if not can_order:
-        if sheets.is_before_open_time():
-            notice = texts.ORDER_NOT_OPEN_YET_NOTICE.format(time=config.ORDER_OPEN_TIME)
-        else:
-            notice = texts.CUTOFF_CLOSED_NOTICE
-        await callback.message.answer(notice, reply_markup=kb.home_only_kb())
+        await callback.message.answer(texts.CUTOFF_CLOSED_NOTICE, reply_markup=kb.home_only_kb())
         await callback.answer()
         return
 

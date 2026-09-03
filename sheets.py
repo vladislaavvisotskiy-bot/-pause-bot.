@@ -495,20 +495,6 @@ def is_after_cutoff() -> bool:
     return dt.datetime.now() >= cutoff_moment
 
 
-def is_before_open_time() -> bool:
-    """Приём заказов не открывается раньше ORDER_OPEN_TIME (по умолчанию
-    18:00) дня, предшествующего дате активного меню — даже если админ
-    опубликовал меню раньше этого времени."""
-    open_h, open_m = map(int, config.ORDER_OPEN_TIME.split(":"))
-    open_day = _active_menu_day() - dt.timedelta(days=1)
-    open_moment = dt.datetime.combine(open_day, dt.time(open_h, open_m))
-    return dt.datetime.now() < open_moment
-
-
-def is_order_window_open() -> bool:
-    return not is_before_open_time() and not is_after_cutoff()
-
-
 def is_after_cancel_cutoff() -> bool:
     now = dt.datetime.now()
     cutoff_h, cutoff_m = map(int, config.CANCEL_CUTOFF_TIME.split(":"))
