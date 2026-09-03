@@ -50,6 +50,7 @@ async def got_phone(message: Message, state: FSMContext):
     existing = sheets.find_client_by_phone(phone)
     if existing:
         sheets.link_tg_id_to_client(existing["row"], message.from_user.id)
+        greeting_name = existing.get("name") or name
     else:
         sheets.create_client(
             tg_id=message.from_user.id,
@@ -57,8 +58,9 @@ async def got_phone(message: Message, state: FSMContext):
             phone=phone,
             telegram_username=username,
         )
+        greeting_name = name
     await state.clear()
-    await message.answer(texts.REGISTERED)
+    await message.answer(texts.REGISTERED.format(name=greeting_name))
     await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
 
 
