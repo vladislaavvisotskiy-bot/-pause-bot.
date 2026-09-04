@@ -7,6 +7,7 @@ import json
 import time
 import datetime as dt
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -16,6 +17,18 @@ import config
 _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
+
+# Весь бизнес (отсечки заказов, дата активного меню и т.п.) живёт по
+# времени Ташкента — сервер (например, Railway) может физически работать
+# в другом часовом поясе (обычно UTC), поэтому голое datetime.now() без
+# явной таймзоны для сравнений "сейчас" использовать нельзя: результат
+# будет зависеть от того, где именно запущен процесс, а не от реального
+# времени в Ташкенте.
+TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
+
+
+def _now() -> dt.datetime:
+    return dt.datetime.now(TASHKENT_TZ)
 
 _client = None
 _sheet = None
@@ -481,7 +494,7 @@ def _active_menu_day() -> dt.date:
     try:
         return dt.datetime.strptime(active_date, "%d.%m.%Y").date()
     except ValueError:
-        return dt.datetime.now().date()
+        return _now().date()
 
 
 def is_after_cutoff() -> bool:
@@ -489,21 +502,28 @@ def is_after_cutoff() -> bool:
     ORDER_CUTOFF_TIME того дня, на который указана дата активного меню.
     Если меню опубликовано вечером на завтра — приём открыт весь вечер,
     всю ночь и всё утро, до ORDER_CUTOFF_TIME именно завтрашнего дня, а
-    не "сегодняшних" 10:00 по часам."""
+    не "сегодняшних" 10:00 по часам. Сравнение — по времени Ташкента,
+    независимо от того, в каком часовом поясе физически работает сервер."""
     cutoff_h, cutoff_m = map(int, config.ORDER_CUTOFF_TIME.split(":"))
-    cutoff_moment = dt.datetime.combine(_active_menu_day(), dt.time(cutoff_h, cutoff_m))
-    return dt.datetime.now() >= cutoff_moment
+    cutoff_moment = dt.datetime.combine(
+        _active_menu_day(), dt.time(cutoff_h, cutoff_m), tzinfo=TASHKENT_TZ
+    )
+    return _now() >= cutoff_moment
 
 
 def is_after_cancel_cutoff() -> bool:
-    now = dt.datetime.now()
+    now = _now()
     cutoff_h, cutoff_m = map(int, config.CANCEL_CUTOFF_TIME.split(":"))
     cutoff = now.replace(hour=cutoff_h, minute=cutoff_m, second=0, microsecond=0)
     return now >= cutoff
 
 
 def today_date_str() -> str:
-    return dt.datetime.now().strftime("%d.%m.%Y")
+    return _now().strftime("%d.%m.%Y")
+
+
+def get_tomorrow_date_str() -> str:
+    return (_now() + dt.timedelta(days=1)).strftime("%d.%m.%Y")
 
 
 def get_recent_order_dates() -> list:
@@ -512,7 +532,7 @@ def get_recent_order_dates() -> list:
     отчётах администратора. Хронологический порядок, формат DD.MM.YYYY."""
     ws = _ws(config.SHEET_ORDERS)
     col = ws.col_values(config.O_DATE)
-    today = dt.datetime.now().date()
+    today = _now().date()
     window_start = today - dt.timedelta(days=6)
     window_end = today + dt.timedelta(days=1)
 

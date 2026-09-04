@@ -82,7 +82,7 @@ async def _save_menu_and_notify(bot: Bot, chat_id: int, photo_ids: list, caption
     sheets.set_today_menu_photos(photo_ids, caption)
     await bot.send_message(chat_id, texts.ADMIN_MENU_SAVED)
     today = sheets.today_date_str()
-    tomorrow = (dt.datetime.now() + dt.timedelta(days=1)).strftime("%d.%m.%Y")
+    tomorrow = sheets.get_tomorrow_date_str()
     await bot.send_message(chat_id, texts.ADMIN_ASK_MENU_DATE, reply_markup=kb.admin_menu_date_kb(today, tomorrow))
     await state.set_state(AdminMenu.waiting_date)
 
