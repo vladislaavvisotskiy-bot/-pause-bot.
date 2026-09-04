@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import logging
+
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
@@ -10,6 +12,7 @@ import config
 from states import Order, PaymentReminder
 
 router = Router()
+logger = logging.getLogger("pause_bot")
 
 
 def _require_client(callback_or_message):
@@ -39,21 +42,26 @@ async def menu_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
     photo_ids, caption = sheets.get_today_menu_photos()
     if photo_ids:
         formatted = texts.format_menu_text(caption) if caption else None
-        if len(photo_ids) == 1:
-            await callback.message.answer_photo(
-                photo_ids[0], caption=formatted or None,
-                parse_mode="HTML" if formatted else None,
-            )
-        else:
-            media = [
-                InputMediaPhoto(
-                    media=pid,
-                    caption=(formatted if i == 0 else None),
-                    parse_mode=("HTML" if i == 0 and formatted else None),
+        try:
+            if len(photo_ids) == 1:
+                await callback.message.answer_photo(
+                    photo_ids[0], caption=formatted or None,
+                    parse_mode="HTML" if formatted else None,
                 )
-                for i, pid in enumerate(photo_ids)
-            ]
-            await bot.send_media_group(callback.message.chat.id, media)
+            else:
+                media = [
+                    InputMediaPhoto(
+                        media=pid,
+                        caption=(formatted if i == 0 else None),
+                        parse_mode=("HTML" if i == 0 and formatted else None),
+                    )
+                    for i, pid in enumerate(photo_ids)
+                ]
+                await bot.send_media_group(callback.message.chat.id, media)
+        except Exception:
+            # Битый/просроченный file_id не должен блокировать весь раздел —
+            # клиент всё равно должен увидеть возможность заказать.
+            logger.exception("Не удалось отправить фото меню клиенту %s", callback.from_user.id)
     else:
         await callback.message.answer(texts.NO_MENU_YET)
 
