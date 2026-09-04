@@ -395,8 +395,13 @@ async def cmd_payments(message: Message, bot: Bot, command: CommandObject):
         )
         try:
             await bot.send_photo(message.chat.id, entry["screenshot"], caption=caption)
-        except Exception:
-            logger.exception("Не удалось отправить скрин оплаты клиента %s", entry.get("client_id"))
+        except Exception as e:
+            logger.exception("Не удалось отправить скрин оплаты клиента %s (строка %s)", entry.get("client_id"), entry.get("row"))
+            await message.answer(
+                texts.ADMIN_PAYMENT_SEND_FAILED.format(
+                    name=entry["name"], row=entry.get("row"), error=e,
+                )
+            )
 
 
 # ---------------------------------------------------------------------------

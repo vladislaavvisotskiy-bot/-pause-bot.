@@ -361,6 +361,7 @@ ADMIN_BAD_DATE_FORMAT = "Не понял дату — пришлите в фор
 ADMIN_NO_PAYMENTS_FOR_DATE = "Скринов оплаты за {date} нет."
 ADMIN_PAYMENTS_HEADER = "💳 Скрины оплаты за {date} — {count} шт.:"
 ADMIN_PAYMENT_ITEM_CAPTION = "{name} — {sum} сум"
+ADMIN_PAYMENT_SEND_FAILED = "⚠️ Не удалось отправить скрин {name} (строка {row}): {error}"
 
 ADMIN_COMMANDS_LIST = (
     "Доступные команды:\n"
