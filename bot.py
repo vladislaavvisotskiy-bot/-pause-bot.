@@ -120,6 +120,7 @@ async def setup_commands(bot: Bot):
             BotCommand(command="kitchen", description="Текстовый отчёт для кухни"),
             BotCommand(command="kitchen_pdf", description="PDF-отчёт для кухни"),
             BotCommand(command="courier", description="Отчёт для курьера"),
+            BotCommand(command="payments", description="Скрины оплаты за дату"),
             BotCommand(command="giveaway", description="Запустить/обновить розыгрыш"),
             BotCommand(command="giveaway_finish", description="Завершить текущий розыгрыш"),
             BotCommand(command="giveaway_today", description="Участники «Паузы в подарок» сегодня"),

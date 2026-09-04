@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import datetime as dt
+import logging
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandObject
@@ -15,6 +16,7 @@ import pdf_report
 from states import AdminClub, AdminMenu
 
 router = Router()
+logger = logging.getLogger("pause_bot")
 
 # Буфер для сбора альбома фотографий меню (Telegram присылает каждое фото
 # альбома отдельным сообщением с одним и тем же media_group_id).
@@ -365,6 +367,36 @@ async def cmd_kitchen_pdf(message: Message, bot: Bot, command: CommandObject):
         await _send_report_by_type(bot, message.chat.id, "kitchen_pdf", date_str)
         return
     await _ask_report_date(message, "kitchen_pdf")
+
+
+@router.message(Command("payments"))
+async def cmd_payments(message: Message, bot: Bot, command: CommandObject):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    if command.args:
+        date_str = _parse_date_arg(command.args)
+        if not date_str:
+            await message.answer(texts.ADMIN_BAD_DATE_FORMAT)
+            return
+    else:
+        date_str = sheets.today_date_str()
+
+    entries = sheets.get_payment_screenshots(date_str)
+    if not entries:
+        await message.answer(texts.ADMIN_NO_PAYMENTS_FOR_DATE.format(date=date_str))
+        return
+
+    await message.answer(texts.ADMIN_PAYMENTS_HEADER.format(date=date_str, count=len(entries)))
+    for entry in entries:
+        caption = texts.ADMIN_PAYMENT_ITEM_CAPTION.format(
+            name=entry["name"],
+            sum=f"{entry['sum']:,}".replace(",", " "),
+        )
+        try:
+            await bot.send_photo(message.chat.id, entry["screenshot"], caption=caption)
+        except Exception:
+            logger.exception("Не удалось отправить скрин оплаты клиента %s", entry.get("client_id"))
 
 
 # ---------------------------------------------------------------------------

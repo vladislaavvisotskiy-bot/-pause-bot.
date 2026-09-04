@@ -358,12 +358,17 @@ ADMIN_ASK_REPORT_DATE = "За какую дату показать отчёт?"
 ADMIN_NO_RECENT_ORDERS = "Заказов пока нет."
 ADMIN_BAD_DATE_FORMAT = "Не понял дату — пришлите в формате ДД.ММ.ГГГГ, например 25.08.2026."
 
+ADMIN_NO_PAYMENTS_FOR_DATE = "Скринов оплаты за {date} нет."
+ADMIN_PAYMENTS_HEADER = "💳 Скрины оплаты за {date} — {count} шт.:"
+ADMIN_PAYMENT_ITEM_CAPTION = "{name} — {sum} сум"
+
 ADMIN_COMMANDS_LIST = (
     "Доступные команды:\n"
     "/admin — панель администратора (это меню)\n"
     "/kitchen — текстовый отчёт для кухни\n"
     "/kitchen_pdf — PDF-отчёт для кухни\n"
     "/courier — отчёт для курьера\n"
+    "/payments — скрины оплаты за дату (без даты — за сегодня)\n"
     "/giveaway — запустить или обновить розыгрыш\n"
     "/giveaway_finish — завершить текущий розыгрыш\n"
     "/giveaway_today — участники сегодняшней «Паузы в подарок»"

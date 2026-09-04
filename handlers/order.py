@@ -500,6 +500,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             garnish=item["garnish"],
             payment=data["cur_payment"],
             comment=full_comment,
+            screenshot=data.get("card_screenshot") or "",
         )
         row_nums.append(row_num)
 
@@ -583,6 +584,7 @@ async def reminder_screenshot_received(message: Message, state: FSMContext, bot:
     file_id = message.photo[-1].file_id
 
     sheets.mark_screenshot_sent(row_nums)
+    sheets.set_order_screenshot(row_nums, file_id)
     await message.answer(texts.CARD_SCREENSHOT_RECEIVED)
     await state.clear()
 

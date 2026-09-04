@@ -377,7 +377,8 @@ def _next_empty_order_row() -> int:
 
 
 def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
-                  qty: int, garnish: str, payment: str, comment: str = "") -> int:
+                  qty: int, garnish: str, payment: str, comment: str = "",
+                  screenshot: str = "") -> int:
     """Добавляет строку заказа, возвращает номер строки (нужен для подтверждения оплаты картой)."""
     ws = _ws(config.SHEET_ORDERS)
     row_num = _next_empty_order_row()
@@ -392,9 +393,21 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
         (config.O_PAYMENT, payment),
         (config.O_COMMENT, comment or ""),
     ]
+    if screenshot:
+        updates.append((config.O_SCREENSHOT, screenshot))
     cells = [gspread.Cell(row_num, col, value) for col, value in updates]
     ws.update_cells(cells)
     return row_num
+
+
+def set_order_screenshot(row_nums: list, file_id: str):
+    """Сохраняет file_id скрина оплаты в скрытый столбец «Заказы» задним
+    числом — для уже существующих строк заказа (например, когда клиент
+    присылает скрин повторно по напоминанию, а не в момент оформления)."""
+    ws = _ws(config.SHEET_ORDERS)
+    cells = [gspread.Cell(r, config.O_SCREENSHOT, file_id) for r in row_nums]
+    if cells:
+        ws.update_cells(cells)
 
 
 def confirm_card_payment(row_nums: list):
@@ -487,6 +500,46 @@ def get_unconfirmed_card_orders(date_str: str) -> list:
         by_client[client_id]["rows"].append(r)
 
     return [by_client[cid] for cid in order]
+
+
+def get_payment_screenshots(date_str: str) -> list:
+    """Все скрины оплаты картой, сохранённые в «Заказы» за указанную дату —
+    источник для /payments. Группируем по клиенту: несколько строк одного
+    заказа (несколько сетов) — одна запись с общей суммой заказа и одним
+    скрином. Отменённые заказы пропускаем."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    prices = get_set_prices()
+    clients = _clients_index()
+    by_client = {}
+    order = []
+
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_DATE or row[config.O_DATE - 1].strip() != date_str:
+            continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
+            continue
+        client_id = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
+        if not client_id:
+            continue
+        screenshot = row[config.O_SCREENSHOT - 1].strip() if len(row) >= config.O_SCREENSHOT else ""
+
+        if client_id not in by_client:
+            client = clients.get(client_id) or {}
+            name = client.get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or client_id
+            by_client[client_id] = {"client_id": client_id, "name": name, "sum": 0, "screenshot": ""}
+            order.append(client_id)
+
+        entry = by_client[client_id]
+        entry["sum"] += _row_amount(row, prices)
+        if screenshot and not entry["screenshot"]:
+            entry["screenshot"] = screenshot
+
+    return [by_client[cid] for cid in order if by_client[cid]["screenshot"]]
 
 
 def _active_menu_day() -> dt.date:
