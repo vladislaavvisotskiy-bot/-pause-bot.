@@ -703,6 +703,21 @@ def close_giveaway_window():
     ws.update_acell(config.REF_GIVEAWAY_CLOSED_CELL, "Да")
 
 
+def is_broadcasts_disabled() -> bool:
+    """Все автоматические push-рассылки клиентам (тёплая утренняя в 8:00,
+    напоминание об оплате в 14:30, ежедневный розыгрыш "Пауза в подарок")
+    временно отключены админом через /broadcasts_off — до /broadcasts_on.
+    Хранится в ячейке "Справочники", переживает перезапуск/деплой бота.
+    Утренний отчёт для кухни клиентам не идёт и этим флагом не управляется."""
+    ws = _ws(config.SHEET_REFERENCE)
+    return (ws.acell(config.REF_BROADCASTS_OFF_CELL).value or "").strip().lower() == "да"
+
+
+def set_broadcasts_disabled(disabled: bool):
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_BROADCASTS_OFF_CELL, "Да" if disabled else "")
+
+
 def get_active_menu_date() -> str:
     """Дата доставки, на которую действует СЕЙЧАС опубликованное меню.
 

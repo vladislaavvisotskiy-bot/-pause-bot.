@@ -37,6 +37,8 @@ async def send_morning_reports(bot: Bot):
 async def send_warm_broadcast(bot: Bot):
     """Ежедневная тёплая рассылка всем зарегистрированным клиентам —
     персональное приветствие по имени + общая фраза дня."""
+    if sheets.is_broadcasts_disabled():
+        return
     clients = sheets.get_broadcast_clients()
     if not clients:
         return
@@ -53,6 +55,8 @@ async def send_payment_reminders(bot: Bot):
     """Ежедневная проверка — кто выбрал оплату картой "пришлю скрин позже"
     по сегодняшнему (активному) заказу и так и не прислал его до сих пор.
     Каждому такому клиенту — тёплое напоминание с кнопкой "Прислать скрин"."""
+    if sheets.is_broadcasts_disabled():
+        return
     date_str = sheets.get_active_menu_date()
     groups = sheets.get_unconfirmed_card_orders(date_str)
     for g in groups:
@@ -73,6 +77,8 @@ async def draw_daily_giveaway(bot: Bot):
     попадёт в список, чем с 1). Если участников не было — ничего не
     происходит, без уведомлений. Окно участия закрывается в любом
     случае — снова открывается только публикацией следующего меню."""
+    if sheets.is_broadcasts_disabled():
+        return
     date_str = sheets.get_active_menu_date()
     sheets.close_giveaway_window()
 
@@ -124,6 +130,9 @@ async def setup_commands(bot: Bot):
             BotCommand(command="giveaway", description="Запустить/обновить розыгрыш"),
             BotCommand(command="giveaway_finish", description="Завершить текущий розыгрыш"),
             BotCommand(command="giveaway_today", description="Участники «Паузы в подарок» сегодня"),
+            BotCommand(command="broadcasts_off", description="Выключить автоматические рассылки клиентам"),
+            BotCommand(command="broadcasts_on", description="Включить автоматические рассылки клиентам"),
+            BotCommand(command="broadcasts_status", description="Статус автоматических рассылок"),
         ]
         try:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))

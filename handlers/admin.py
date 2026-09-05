@@ -517,3 +517,36 @@ async def cmd_giveaway_today(message: Message):
     lines.append("")
     lines.append(f"Всего билетов: {total} {_tickets_word(total)}")
     await message.answer("\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# Включение/выключение автоматических рассылок клиентам одной командой
+# ---------------------------------------------------------------------------
+
+@router.message(Command("broadcasts_off"))
+async def cmd_broadcasts_off(message: Message):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    sheets.set_broadcasts_disabled(True)
+    await message.answer(texts.ADMIN_BROADCASTS_OFF)
+
+
+@router.message(Command("broadcasts_on"))
+async def cmd_broadcasts_on(message: Message):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    sheets.set_broadcasts_disabled(False)
+    await message.answer(texts.ADMIN_BROADCASTS_ON)
+
+
+@router.message(Command("broadcasts_status"))
+async def cmd_broadcasts_status(message: Message):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    if sheets.is_broadcasts_disabled():
+        await message.answer(texts.ADMIN_BROADCASTS_STATUS_OFF)
+    else:
+        await message.answer(texts.ADMIN_BROADCASTS_STATUS_ON)
