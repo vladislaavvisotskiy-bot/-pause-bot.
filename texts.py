@@ -201,6 +201,18 @@ PROFILE_TEMPLATE = (
 )
 MY_ORDERS_LINK_BTN = "📋 Мои заказы"
 
+# --- Цифровые "послания дня" ---
+CARE_MESSAGE_FORMAT = (
+    "PAUSE  {number}/{total}\n\n"
+    "«{phrase}»\n\n"
+    "спасибо что сделал паузу.\n"
+    "ты важен."
+)
+MY_MESSAGES_BTN = "💬 Мои послания"
+MY_MESSAGES_EMPTY = "Здесь появятся ваши послания после первого заказа 🌿"
+MY_MESSAGES_HEADER = "Ваши послания:"
+MY_MESSAGES_ITEM = "PAUSE {number}/{total} — {date}\n\n«{text}»"
+
 EDIT_PROFILE_BTN = "✏️ Изменить данные"
 EDIT_NAME_BTN = "Имя"
 EDIT_PHONE_BTN = "Телефон"

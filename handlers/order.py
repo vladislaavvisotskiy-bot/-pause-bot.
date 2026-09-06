@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+import random
 
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, InputMediaPhoto
@@ -9,6 +10,7 @@ import sheets
 import texts
 import keyboards as kb
 import config
+from care_phrases import CARE_PHRASES
 from states import Order, PaymentReminder
 
 router = Router()
@@ -421,6 +423,17 @@ async def add_comment_save(message: Message, state: FSMContext):
     await state.set_state(Order.confirming)
 
 
+async def _send_care_message(message: Message, tg_id: int, name: str):
+    """Одно "послание дня" на один заказ — номер строго последовательный
+    (1019, 1020, ...), не зависит от количества сетов в заказе."""
+    number = sheets.get_next_message_number()
+    phrase = random.choice(CARE_PHRASES)
+    date_str = sheets.today_date_str()
+    sheets.save_care_message(number, tg_id, name, date_str, phrase)
+    text = texts.CARE_MESSAGE_FORMAT.format(number=number, total=config.CARE_MESSAGE_TOTAL, phrase=phrase)
+    await message.answer(text)
+
+
 def _order_comment(data: dict) -> str:
     base_comment = data.get("cur_comment", "")
     card_status = data.get("card_status", "")
@@ -538,6 +551,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
     await state.clear()
     await callback.message.answer(texts.ORDER_SENT)
+    await _send_care_message(callback.message, callback.from_user.id, data.get("client_name", ""))
     await callback.message.answer(texts.ORDER_SENT_GIVEAWAY_HINT)
     await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
     await callback.answer()

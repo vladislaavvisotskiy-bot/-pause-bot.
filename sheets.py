@@ -718,6 +718,54 @@ def set_broadcasts_disabled(disabled: bool):
     ws.update_acell(config.REF_BROADCASTS_OFF_CELL, "Да" if disabled else "")
 
 
+# ---------------------------------------------------------------------------
+# Цифровые "послания дня" — замена бумажным карточкам с номерами
+# ---------------------------------------------------------------------------
+
+def get_next_message_number() -> int:
+    """Следующий номер послания — строго последовательно, без пропусков и
+    повторов, начиная с CARE_MESSAGE_START_NUMBER. Последний выданный номер
+    хранится в ячейке "Справочники" — переживает перезапуск/деплой бота."""
+    ws = _ws(config.SHEET_REFERENCE)
+    raw = (ws.acell(config.REF_LAST_MESSAGE_NUMBER_CELL).value or "").strip()
+    try:
+        last = int(raw)
+    except ValueError:
+        last = config.CARE_MESSAGE_START_NUMBER - 1
+    next_number = last + 1
+    ws.update_acell(config.REF_LAST_MESSAGE_NUMBER_CELL, str(next_number))
+    return next_number
+
+
+def save_care_message(number: int, tg_id, name: str, date_str: str, phrase: str):
+    ws = _ws(config.SHEET_MESSAGES)
+    ws.append_row([number, str(tg_id), name, date_str, phrase], value_input_option="RAW")
+
+
+def get_client_messages(tg_id) -> list:
+    """Все послания клиента — [{"number", "date", "text"}], в порядке
+    записи в таблице (старые сначала); сортировку "последние сначала"
+    делает вызывающий код."""
+    ws = _ws(config.SHEET_MESSAGES)
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.MSG_DATA_START_ROW:
+            continue
+        if len(row) < config.MSG_TEXT:
+            continue
+        if row[config.MSG_TG_ID - 1].strip() != target:
+            continue
+        out.append({
+            "number": row[config.MSG_NUMBER - 1].strip(),
+            "date": row[config.MSG_DATE - 1].strip(),
+            "text": row[config.MSG_TEXT - 1].strip(),
+        })
+    return out
+
+
 def get_active_menu_date() -> str:
     """Дата доставки, на которую действует СЕЙЧАС опубликованное меню.
 

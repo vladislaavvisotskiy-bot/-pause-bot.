@@ -94,6 +94,44 @@ async def my_orders(callback: CallbackQuery):
 
 
 # ---------------------------------------------------------------------------
+# Мои послания
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data == "my_messages")
+async def my_messages(callback: CallbackQuery):
+    messages = sheets.get_client_messages(callback.from_user.id)
+    if not messages:
+        await callback.message.answer(texts.MY_MESSAGES_EMPTY)
+        await callback.answer()
+        return
+
+    messages = list(reversed(messages))
+    cards = [
+        texts.MY_MESSAGES_ITEM.format(
+            number=m["number"], total=config.CARE_MESSAGE_TOTAL, date=m["date"], text=m["text"],
+        )
+        for m in messages
+    ]
+
+    # Телеграм ограничивает сообщение ~4096 символами — при большой истории
+    # разбиваем карточки на несколько сообщений, а не обрезаем историю.
+    chunks = []
+    current = texts.MY_MESSAGES_HEADER
+    for card in cards:
+        piece = "\n\n———\n\n" + card
+        if len(current) + len(piece) > 3500:
+            chunks.append(current)
+            current = card
+        else:
+            current += piece
+    chunks.append(current)
+
+    for chunk in chunks:
+        await callback.message.answer(chunk)
+    await callback.answer()
+
+
+# ---------------------------------------------------------------------------
 # Редактирование своих данных
 # ---------------------------------------------------------------------------
 

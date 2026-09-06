@@ -79,6 +79,19 @@ REF_TODAY_GARNISH_CELL = "J3"     # гарниры, доступные сего�
 REF_TODAY_MENU_DATE_CELL = "J4"   # дата доставки, на которую действует опубликованное меню — бот пишет сам
 REF_GIVEAWAY_CLOSED_CELL = "J5"   # "Да" — сегодняшняя "Пауза в подарок" уже подведена, окно участия закрыто
 REF_BROADCASTS_OFF_CELL = "J6"    # "Да" — админ временно выключил все автоматические рассылки клиентам
+REF_LAST_MESSAGE_NUMBER_CELL = "J7"  # последний выданный номер "послания дня" — бот пишет сам
+
+# --- Цифровые "послания дня" (замена бумажным карточкам с номерами) ---
+SHEET_MESSAGES = "Послания"
+MSG_HEADER_ROW = 1
+MSG_DATA_START_ROW = 2
+MSG_NUMBER = 1     # A
+MSG_TG_ID = 2      # B
+MSG_NAME = 3       # C
+MSG_DATE = 4       # D
+MSG_TEXT = 5       # E
+CARE_MESSAGE_START_NUMBER = 1019
+CARE_MESSAGE_TOTAL = 1518
 
 # --- Pause Club: лист "Клуб" ---
 SHEET_CLUB = "Клуб"

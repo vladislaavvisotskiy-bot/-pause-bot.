@@ -131,6 +131,7 @@ def profile_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.EDIT_PROFILE_BTN, callback_data="edit_profile")
     b.button(text=texts.MY_ORDERS_LINK_BTN, callback_data="my_orders")
+    b.button(text=texts.MY_MESSAGES_BTN, callback_data="my_messages")
     _home(b)
     b.adjust(1)
     return b.as_markup()
