@@ -127,7 +127,7 @@ async def my_messages(callback: CallbackQuery):
     chunks.append(current)
 
     for chunk in chunks:
-        await callback.message.answer(chunk)
+        await callback.message.answer(chunk, parse_mode="HTML")
     await callback.answer()
 
 

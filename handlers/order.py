@@ -431,7 +431,7 @@ async def _send_care_message(message: Message, tg_id: int, name: str):
     date_str = sheets.today_date_str()
     sheets.save_care_message(number, tg_id, name, date_str, phrase)
     text = texts.CARE_MESSAGE_FORMAT.format(number=number, total=config.CARE_MESSAGE_TOTAL, phrase=phrase)
-    await message.answer(text)
+    await message.answer(text, parse_mode="HTML")
 
 
 def _order_comment(data: dict) -> str:
