@@ -519,6 +519,18 @@ async def cmd_giveaway_today(message: Message):
     await message.answer("\n".join(lines))
 
 
+@router.message(Command("giveaway_close"))
+async def cmd_giveaway_close(message: Message):
+    """Ручное закрытие приёма участников — админ сам решает, когда подводить
+    итоги (например, перед live-эфиром с розыгрышем). Снова открывается
+    автоматически при публикации следующего меню (set_active_menu_date)."""
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    sheets.close_giveaway_window()
+    await message.answer(texts.ADMIN_GIVEAWAY_CLOSED)
+
+
 # ---------------------------------------------------------------------------
 # Включение/выключение автоматических рассылок клиентам одной командой
 # ---------------------------------------------------------------------------

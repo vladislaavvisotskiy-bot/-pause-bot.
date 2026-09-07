@@ -286,16 +286,18 @@ DAILY_GIVEAWAY_BLOCK = (
 DAILY_GIVEAWAY_ORDER_BTN = "⬇️для участия, выбери сет⬇️"
 DAILY_GIVEAWAY_JOIN_BTN = "🎉 Участвовать"
 DAILY_GIVEAWAY_JOINED_TEXT = "Вы участвуете в сегодняшней «Паузе в подарок» 🌿 Удачи!"
-DAILY_GIVEAWAY_CLOSED_TEXT = (
-    "Сегодняшняя «Пауза в подарок» уже нашла своего героя 🤎 "
-    "Загляните завтра — будет новый повод"
-)
+DAILY_GIVEAWAY_CLOSED_TEXT = "Сегодняшний список участников уже закрыт — увидимся в следующий раз 🌿"
 DAILY_GIVEAWAY_WINNER_MSG = "🎉 Сегодня ваш заказ за наш счёт! Спасибо, что вы с нами 🌿"
 ADMIN_DAILY_GIVEAWAY_WINNER_ALERT = (
     "🤎 Победитель «Паузы в подарок»: {name} (ID {client_id}), контакт: {contact}"
 )
 ADMIN_GIVEAWAY_TODAY_HEADER = "🤎 Участники «Паузы в подарок» на {date}:"
 ADMIN_GIVEAWAY_TODAY_EMPTY = "Пока никто не участвует в сегодняшней «Паузе в подарок»."
+ADMIN_GIVEAWAY_CLOSED = (
+    "🔒 Приём участников «Паузы в подарок» закрыт.\n"
+    "Список участников и билеты доступны через /giveaway_today.\n"
+    "Снова откроется автоматически при публикации следующего меню."
+)
 ORDER_SENT_GIVEAWAY_HINT = (
     "Кстати, загляните в 🌿 Pause Club — сегодня разыгрывается "
     "«Пауза в подарок», вы уже можете участвовать 🎉"
@@ -396,6 +398,7 @@ ADMIN_COMMANDS_LIST = (
     "/giveaway — запустить или обновить розыгрыш\n"
     "/giveaway_finish — завершить текущий розыгрыш\n"
     "/giveaway_today — участники сегодняшней «Паузы в подарок»\n"
+    "/giveaway_close — закрыть приём участников (перед ручным подведением итогов)\n"
     "/broadcasts_off — выключить автоматические рассылки клиентам\n"
     "/broadcasts_on — включить обратно\n"
     "/broadcasts_status — текущий статус рассылок"

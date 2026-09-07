@@ -85,6 +85,7 @@ async def setup_commands(bot: Bot):
             BotCommand(command="giveaway", description="Запустить/обновить розыгрыш"),
             BotCommand(command="giveaway_finish", description="Завершить текущий розыгрыш"),
             BotCommand(command="giveaway_today", description="Участники «Паузы в подарок» сегодня"),
+            BotCommand(command="giveaway_close", description="Закрыть приём участников вручную"),
             BotCommand(command="broadcasts_off", description="Выключить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_on", description="Включить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_status", description="Статус автоматических рассылок"),
