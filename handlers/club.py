@@ -37,8 +37,10 @@ async def club_section(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.answer(text, reply_markup=kb.club_kb(giveaway_active=active))
 
-    # Ежедневный розыгрыш "Пауза в подарок" — отдельный блок, виден только
-    # в окне между публикацией меню и подведением итогов (GIVEAWAY_TIME).
+    # Ежедневный розыгрыш "Пауза в подарок" — отдельный блок. Победителя
+    # бот больше не выбирает сам (выбор — вручную, вне бота); блок остаётся
+    # виден и доступен для участия, пока админ вручную не закроет окно
+    # (close_giveaway_window) — снова открывается публикацией нового меню.
     if sheets.is_giveaway_window_closed():
         await callback.message.answer(texts.DAILY_GIVEAWAY_CLOSED_TEXT, reply_markup=kb.home_only_kb())
         await callback.answer()

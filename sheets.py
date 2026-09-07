@@ -681,8 +681,9 @@ def set_active_menu_date(date_str: str):
 
     Публикация нового меню также заново открывает окно участия в
     "Паузе в подарок" (см. is_giveaway_window_closed) — оно закрывается
-    только подведением итогов (draw_daily_giveaway), а публикация меню
-    снимает это закрытие."""
+    только вызовом close_giveaway_window (сейчас ничто не вызывает его
+    автоматически: выбор победителя происходит вручную, вне бота), а
+    публикация меню снимает это закрытие."""
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_TODAY_MENU_DATE_CELL, date_str)
     ws.update_acell(config.REF_GIVEAWAY_CLOSED_CELL, "")

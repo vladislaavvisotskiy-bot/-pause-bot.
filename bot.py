@@ -70,51 +70,6 @@ async def send_payment_reminders(bot: Bot):
             logger.exception("Не удалось отправить напоминание об оплате клиенту ID %s", g.get("client_id"))
 
 
-async def draw_daily_giveaway(bot: Bot):
-    """Ежедневное подведение "Паузы в подарок" — строим список, где
-    каждый участник встречается столько раз, сколько у него билетов, и
-    берём случайный элемент оттуда (человек с 3 билетами втрое чаще
-    попадёт в список, чем с 1). Если участников не было — ничего не
-    происходит, без уведомлений. Окно участия закрывается в любом
-    случае — снова открывается только публикацией следующего меню."""
-    if sheets.is_broadcasts_disabled():
-        return
-    date_str = sheets.get_active_menu_date()
-    sheets.close_giveaway_window()
-
-    participants = sheets.get_daily_giveaway_participants(date_str)
-    if not participants:
-        return
-
-    pool = []
-    for p in participants:
-        pool.extend([p] * max(p["tickets"], 0))
-    if not pool:
-        return
-
-    winner = random.choice(pool)
-    sheets.mark_daily_giveaway_winner(winner["row"])
-
-    try:
-        await bot.send_message(int(winner["tg_id"]), texts.DAILY_GIVEAWAY_WINNER_MSG)
-    except Exception:
-        logger.exception("Не удалось отправить победителю «Паузы в подарок» tg_id %s", winner["tg_id"])
-
-    if config.ADMIN_CHAT_ID:
-        try:
-            client = sheets.find_client_by_tg_id(int(winner["tg_id"]))
-            await bot.send_message(
-                config.ADMIN_CHAT_ID,
-                texts.ADMIN_DAILY_GIVEAWAY_WINNER_ALERT.format(
-                    name=winner["name"],
-                    client_id=winner["client_id"],
-                    contact=(client or {}).get("contact", ""),
-                ),
-            )
-        except Exception:
-            pass
-
-
 async def setup_commands(bot: Bot):
     await bot.set_my_commands(
         [BotCommand(command="start", description="Начать / открыть главное меню")],
@@ -165,8 +120,6 @@ async def main():
     scheduler.add_job(send_warm_broadcast, "cron", hour=wh, minute=wm, args=[bot])
     prh, prm = map(int, config.PAYMENT_REMINDER_TIME.split(":"))
     scheduler.add_job(send_payment_reminders, "cron", hour=prh, minute=prm, args=[bot])
-    gh, gm = map(int, config.GIVEAWAY_TIME.split(":"))
-    scheduler.add_job(draw_daily_giveaway, "cron", hour=gh, minute=gm, args=[bot])
     scheduler.start()
 
     logger.info("PAUSE бот запущен.")
