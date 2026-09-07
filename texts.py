@@ -240,7 +240,9 @@ CANCEL_DONE = "Готово, заказ отменён. Если что — мы
 CANCEL_KEPT = "Хорошо, оставили заказ в силе."
 
 ADMIN_ORDER_CANCELLED_ALERT = (
-    "❌ Клиент {name} (ID {client_id}) отменил заказ на {date}:\n{items}"
+    "❌ Клиент {name} (ID {client_id}, {contact}) отменил заказ на {date}:\n"
+    "{items}\n"
+    "📍 Район: {zone}"
 )
 
 FEEDBACK_BTN = "⭐ Оставить отзыв: {date}"

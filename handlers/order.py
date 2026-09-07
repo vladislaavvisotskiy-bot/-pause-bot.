@@ -316,8 +316,12 @@ async def entered_new_point(message: Message, state: FSMContext):
 
 async def _ask_payment(message: Message, state: FSMContext):
     # Клиент выбирает только между наличными и картой — "В долг" ставится
-    # вручную в таблице, самостоятельно клиент этот вариант не выбирает.
-    options = [o for o in sheets.get_payment_options() if "долг" not in o.lower()]
+    # вручную в таблице, а "На проверке" бот проставляет сам после присылки
+    # скрина оплаты; ни то ни другое клиент выбрать не может.
+    options = [
+        o for o in sheets.get_payment_options()
+        if "долг" not in o.lower() and "проверке" not in o.lower()
+    ]
     await message.answer(texts.CHOOSE_PAYMENT, reply_markup=kb.options_kb(options, "payment", home=False))
     await state.set_state(Order.choosing_payment)
 
@@ -435,14 +439,17 @@ async def _send_care_message(message: Message, tg_id: int, name: str):
 
 
 def _order_comment(data: dict) -> str:
-    base_comment = data.get("cur_comment", "")
-    card_status = data.get("card_status", "")
-    marker = ""
-    if card_status == "на проверке":
-        marker = "оплата на проверке"
-    elif card_status == "не подтверждена":
-        marker = "оплата не подтверждена"
-    return " | ".join(p for p in [base_comment, marker] if p)
+    return data.get("cur_comment", "")
+
+
+def _order_payment_value(data: dict) -> str:
+    """Статус оплаты для столбца K: если клиент уже прислал скрин (сразу
+    при заказе), пишем "На проверке" — дальше это подтверждает админ
+    (см. sheets.confirm_card_payment). Иначе — выбранный способ оплаты
+    как есть."""
+    if data.get("card_status") == "на проверке":
+        return "На проверке"
+    return data.get("cur_payment", "")
 
 
 @router.callback_query(Order.confirming, F.data == "order_confirm")
@@ -451,6 +458,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
     cart = data.get("cart", [])
     date_str = sheets.get_active_menu_date()
     full_comment = _order_comment(data)
+    payment_value = _order_payment_value(data)
 
     # Новая точка через «Другое» — заказ придерживаем до подтверждения
     # координатором, в «Заказы» (и отчёты кухни/курьера) пока не попадает.
@@ -463,7 +471,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             client_name=data.get("client_name", ""),
             client_phone=data.get("client_phone", ""),
             cart=cart,
-            payment=data["cur_payment"],
+            payment=payment_value,
             comment=full_comment,
             screenshot=data.get("card_screenshot") or "",
         )
@@ -511,7 +519,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             set_name=item["set"],
             qty=item["qty"],
             garnish=item["garnish"],
-            payment=data["cur_payment"],
+            payment=payment_value,
             comment=full_comment,
             screenshot=data.get("card_screenshot") or "",
         )

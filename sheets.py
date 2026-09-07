@@ -305,6 +305,7 @@ def get_client_orders(client_id, limit=10) -> list:
             out.append({
                 "row": r,
                 "date": row[config.O_DATE - 1] if len(row) >= config.O_DATE else "",
+                "zone": row[config.O_ZONE - 1] if len(row) >= config.O_ZONE else "",
                 "set": row[config.O_SET - 1] if len(row) >= config.O_SET else "",
                 "qty": row[config.O_QTY - 1] if len(row) >= config.O_QTY else "",
                 "payment": row[config.O_PAYMENT - 1] if len(row) >= config.O_PAYMENT else "",
@@ -325,6 +326,7 @@ def get_client_order_groups(client_id, limit=10) -> list:
         if key not in groups:
             groups[key] = {
                 "date": r["date"],
+                "zone": r["zone"],
                 "items": [],
                 "rows": [],
                 "payment": r["payment"],
@@ -411,32 +413,22 @@ def set_order_screenshot(row_nums: list, file_id: str):
 
 
 def confirm_card_payment(row_nums: list):
-    """Отмечает в комментарии заказа, что скрин оплаты картой проверен и подтверждён."""
+    """Админ подтвердил присланный скрин оплаты картой — статус оплаты
+    (столбец K) становится "Картой", формула столбца L автоматически
+    показывает "ОПЛАЧЕНО"."""
     ws = _ws(config.SHEET_ORDERS)
     for r in row_nums:
-        cur = ws.cell(r, config.O_COMMENT).value or ""
-        new = cur.replace("оплата на проверке", "оплата подтверждена")
-        if new == cur and cur:
-            new = cur + " | оплата подтверждена"
-        elif not cur:
-            new = "оплата подтверждена"
-        ws.update_cell(r, config.O_COMMENT, new)
+        ws.update_cell(r, config.O_PAYMENT, "Картой")
 
 
 def mark_screenshot_sent(row_nums: list):
-    """Отмечает в комментарии заказа, что клиент прислал скрин оплаты
-    (например, в ответ на напоминание) — статус переходит с "не
-    подтверждена" на "на проверке", дальше — обычное подтверждение
-    администратором (confirm_card_payment)."""
+    """Клиент прислал скрин оплаты картой (сразу при заказе или позже) —
+    статус оплаты (столбец K) становится "На проверке", формула столбца L
+    показывает "НЕ ОПЛАЧЕНО" до подтверждения администратором
+    (confirm_card_payment)."""
     ws = _ws(config.SHEET_ORDERS)
     for r in row_nums:
-        cur = ws.cell(r, config.O_COMMENT).value or ""
-        new = cur.replace("оплата не подтверждена", "оплата на проверке")
-        if new == cur and cur:
-            new = cur + " | оплата на проверке"
-        elif not cur:
-            new = "оплата на проверке"
-        ws.update_cell(r, config.O_COMMENT, new)
+        ws.update_cell(r, config.O_PAYMENT, "На проверке")
 
 
 def get_order_rows(row_nums: list) -> list:
@@ -561,11 +553,24 @@ def is_after_cutoff() -> bool:
     return _now() >= cutoff_moment
 
 
-def is_after_cancel_cutoff() -> bool:
-    now = _now()
+def is_after_cancel_cutoff(order_date_str: str = None) -> bool:
+    """Отмена заказа клиентом разрешена до CANCEL_CUTOFF_TIME дня, на который
+    оформлен заказ (обычно совпадает с датой активного меню), а не до 09:00
+    текущих календарных суток — та же логика, что и is_after_cutoff() для
+    приёма заказов (см. её комментарий). Если конкретная дата заказа
+    известна (обычный случай — передаётся дата из group["date"]), сравниваем
+    именно с ней; иначе — с датой активного меню."""
     cutoff_h, cutoff_m = map(int, config.CANCEL_CUTOFF_TIME.split(":"))
-    cutoff = now.replace(hour=cutoff_h, minute=cutoff_m, second=0, microsecond=0)
-    return now >= cutoff
+    day = None
+    if order_date_str:
+        try:
+            day = dt.datetime.strptime(order_date_str, "%d.%m.%Y").date()
+        except ValueError:
+            day = None
+    if day is None:
+        day = _active_menu_day()
+    cutoff_moment = dt.datetime.combine(day, dt.time(cutoff_h, cutoff_m), tzinfo=TASHKENT_TZ)
+    return _now() >= cutoff_moment
 
 
 def today_date_str() -> str:

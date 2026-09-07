@@ -20,14 +20,15 @@ def _order_items_text(items: list) -> str:
     return ", ".join(f"{i['qty']}× {texts.display_set_name(i['set'])}" for i in items)
 
 
-def _card_pending_status(comment: str) -> str:
-    """Если по заказу уже принята оплата картой (на проверке/подтверждена) —
-    возвращает статус для сообщения; иначе пустую строку (можно отменять)."""
-    c = (comment or "").lower()
-    if "оплата подтверждена" in c:
-        return "подтверждена"
-    if "оплата на проверке" in c:
+def _card_pending_status(payment: str) -> str:
+    """Оплата картой (независимо от стадии — ждёт проверки или уже
+    подтверждена) — самостоятельная отмена недоступна, нужна помощь
+    поддержки. Наличные и "В долг" сюда не попадают, отмена как обычно."""
+    p = (payment or "").strip()
+    if p == "На проверке":
         return "на проверке"
+    if p == "Картой":
+        return "подтверждена"
     return ""
 
 
@@ -288,13 +289,13 @@ async def cancel_order_start(callback: CallbackQuery):
         await callback.message.answer(texts.CANCEL_ALREADY)
         await callback.answer()
         return
-    if sheets.is_after_cancel_cutoff():
+    if sheets.is_after_cancel_cutoff(g["date"]):
         await callback.message.answer(
             texts.CANCEL_TOO_LATE.format(cutoff=config.CANCEL_CUTOFF_TIME, support=texts.SUPPORT_USERNAME)
         )
         await callback.answer()
         return
-    status = _card_pending_status(g["comment"])
+    status = _card_pending_status(g["payment"])
     if status:
         await callback.message.answer(
             texts.CANCEL_CARD_REDIRECT.format(status=status, support=texts.SUPPORT_USERNAME)
@@ -322,13 +323,13 @@ async def cancel_order_yes(callback: CallbackQuery, bot: Bot):
         await callback.answer()
         return
     g = groups[0]
-    if sheets.is_after_cancel_cutoff():
+    if sheets.is_after_cancel_cutoff(g["date"]):
         await callback.message.answer(
             texts.CANCEL_TOO_LATE.format(cutoff=config.CANCEL_CUTOFF_TIME, support=texts.SUPPORT_USERNAME)
         )
         await callback.answer()
         return
-    status = _card_pending_status(g["comment"])
+    status = _card_pending_status(g["payment"])
     if status:
         await callback.message.answer(
             texts.CANCEL_CARD_REDIRECT.format(status=status, support=texts.SUPPORT_USERNAME)
@@ -346,7 +347,9 @@ async def cancel_order_yes(callback: CallbackQuery, bot: Bot):
                 texts.ADMIN_ORDER_CANCELLED_ALERT.format(
                     name=client.get("name", ""),
                     client_id=client.get("id", ""),
+                    contact=client.get("contact", ""),
                     date=g["date"],
+                    zone=g.get("zone", ""),
                     items=_order_items_text(g["items"]),
                 ),
             )
