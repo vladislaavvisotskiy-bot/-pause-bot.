@@ -189,6 +189,16 @@ MY_ORDERS_HEADER = "Ваша история с нами:"
 MY_DEBT_LINE = "\n\nТекущий долг: {sum:,} сум".replace(",", " ")
 MY_ORDERS_CANCELED_TAG = " (отменён)"
 
+ORDER_STATUS_ACCEPTED = "🌿 Принят"
+ORDER_STATUS_PENDING_POINT = "🕊 На рассмотрении"
+ORDER_STATUS_COMPLETE = "✅ Завершён"
+
+PAYMENT_STATUS_WAITING = "💳 Ожидает оплаты"
+PAYMENT_STATUS_CHECKING = "🕊 Оплата на проверке"
+PAYMENT_STATUS_PAID = "✅ Оплачено"
+
+MY_ORDERS_STATUS_LINE = "Статус: {fulfillment} · Оплата: {payment}"
+
 # --- Раздел «Профиль» ---
 PROFILE_NOT_SET = "не указано"
 PROFILE_TEMPLATE = (

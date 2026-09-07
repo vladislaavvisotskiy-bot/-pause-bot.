@@ -575,6 +575,18 @@ def is_after_cancel_cutoff(order_date_str: str = None) -> bool:
     return _now() >= cutoff_moment
 
 
+def is_order_complete(order_date_str: str) -> bool:
+    """Заказ считается "Завершён" после ORDER_COMPLETE_TIME дня, на который
+    он оформлен (по времени Ташкента) — до этого момента статус "Принят"."""
+    complete_h, complete_m = map(int, config.ORDER_COMPLETE_TIME.split(":"))
+    try:
+        day = dt.datetime.strptime(order_date_str, "%d.%m.%Y").date()
+    except ValueError:
+        return False
+    complete_moment = dt.datetime.combine(day, dt.time(complete_h, complete_m), tzinfo=TASHKENT_TZ)
+    return _now() >= complete_moment
+
+
 def today_date_str() -> str:
     return _now().strftime("%d.%m.%Y")
 
@@ -1156,3 +1168,41 @@ def get_pending_order(pending_id: str) -> Optional[dict]:
 def set_pending_status(row_num: int, status: str):
     ws = _ws(config.SHEET_PENDING)
     ws.update_cell(row_num, config.P_STATUS, status)
+
+
+def get_client_pending_orders(client_id) -> list:
+    """Заказы клиента на новую точку, ещё ждущие подтверждения координатором
+    (в "Заказы" пока не попали) — источник для статуса "На рассмотрении" в
+    "Мои заказы". Только со статусом "ожидает"."""
+    ws = _ws(config.SHEET_PENDING)
+    rows = ws.get_all_values()
+    target = str(client_id)
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.PENDING_DATA_START_ROW:
+            continue
+        if len(row) < config.P_STATUS:
+            continue
+        if row[config.P_CLIENT_ID - 1].strip() != target:
+            continue
+        if row[config.P_STATUS - 1].strip() != config.PENDING_STATUS_WAITING:
+            continue
+
+        def cell(col, row=row):
+            idx = col - 1
+            return row[idx] if idx < len(row) else ""
+
+        cart_raw = cell(config.P_CART_JSON)
+        try:
+            cart = json.loads(cart_raw) if cart_raw else []
+        except ValueError:
+            cart = []
+        out.append({
+            "row": r,
+            "date": cell(config.P_DATE),
+            "items": [{"set": i.get("set", ""), "qty": i.get("qty", "")} for i in cart],
+            "payment": cell(config.P_PAYMENT),
+            "screenshot": cell(config.P_SCREENSHOT),
+        })
+    return out[::-1]

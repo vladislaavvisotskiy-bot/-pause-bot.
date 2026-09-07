@@ -62,6 +62,23 @@ async def profile_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
 # Мои заказы
 # ---------------------------------------------------------------------------
 
+def _payment_status_label(payment: str) -> str:
+    p = (payment or "").strip()
+    if p == "На проверке":
+        return texts.PAYMENT_STATUS_CHECKING
+    if p in ("Наличными", "Картой"):
+        return texts.PAYMENT_STATUS_PAID
+    return texts.PAYMENT_STATUS_WAITING
+
+
+def _fulfillment_status_label(order_date: str, is_pending_point: bool) -> str:
+    if is_pending_point:
+        return texts.ORDER_STATUS_PENDING_POINT
+    if sheets.is_order_complete(order_date):
+        return texts.ORDER_STATUS_COMPLETE
+    return texts.ORDER_STATUS_ACCEPTED
+
+
 @router.callback_query(F.data == "my_orders")
 async def my_orders(callback: CallbackQuery):
     client = sheets.find_client_by_tg_id(callback.from_user.id)
@@ -70,13 +87,26 @@ async def my_orders(callback: CallbackQuery):
         await callback.answer()
         return
 
+    pending = sheets.get_client_pending_orders(client["id"])
     groups = sheets.get_client_order_groups(client["id"], limit=10)
-    if not groups:
+    if not pending and not groups:
         await callback.message.answer(texts.MY_ORDERS_EMPTY, reply_markup=kb.my_orders_kb([], show_cancel=False))
         await callback.answer()
         return
 
     lines = [texts.MY_ORDERS_HEADER, ""]
+
+    # Заказы на новую точку, ещё ждущие подтверждения координатором — их
+    # ещё нет в "Заказы", поэтому берём отдельно из "Ожидают подтверждения"
+    # и показываем первыми (они самые свежие и требуют внимания).
+    for p in pending:
+        lines.append(f"{p['date']} — {_order_items_text(p['items'])}")
+        lines.append(texts.MY_ORDERS_STATUS_LINE.format(
+            fulfillment=_fulfillment_status_label(p["date"], is_pending_point=True),
+            payment=_payment_status_label(p["payment"]),
+        ))
+        lines.append("")
+
     for g in groups:
         line = f"{g['date']} — {_order_items_text(g['items'])}"
         if g["payment"] == "В долг":
@@ -84,13 +114,19 @@ async def my_orders(callback: CallbackQuery):
         if g["canceled"]:
             line += texts.MY_ORDERS_CANCELED_TAG
         lines.append(line)
+        if not g["canceled"]:
+            lines.append(texts.MY_ORDERS_STATUS_LINE.format(
+                fulfillment=_fulfillment_status_label(g["date"], is_pending_point=False),
+                payment=_payment_status_label(g["payment"]),
+            ))
+        lines.append("")
 
     debt = sheets.get_client_debt(client["id"])
-    text = "\n".join(lines)
+    text = "\n".join(lines).rstrip()
     if debt > 0:
         text += texts.MY_DEBT_LINE.format(sum=debt)
 
-    await callback.message.answer(text, reply_markup=kb.my_orders_kb(groups, show_cancel=True))
+    await callback.message.answer(text, reply_markup=kb.my_orders_kb(groups, show_cancel=bool(groups)))
     await callback.answer()
 
 
