@@ -94,7 +94,7 @@ def card_payment_kb() -> InlineKeyboardMarkup:
 
 def card_confirm_admin_kb(rows_str: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.button(text="✅ Подтверждено", callback_data=f"cardok:{rows_str}")
+    b.button(text="✅ Подтвердить", callback_data=f"cardok:{rows_str}")
     return b.as_markup()
 
 

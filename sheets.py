@@ -524,6 +524,8 @@ def get_payment_screenshots(date_str: str) -> list:
             "row": r,
             "client_id": client_id,
             "name": name,
+            "set": row[config.O_SET - 1].strip() if len(row) >= config.O_SET else "",
+            "qty": row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else "",
             "sum": _row_amount(row, prices),
             "screenshot": screenshot,
         })

@@ -298,6 +298,8 @@ async def _send_report_by_type(bot: Bot, chat_id: int, report_type: str, date_st
         await bot.send_message(chat_id, report or texts.ADMIN_NO_ORDERS_FOR_DATE.format(date=date_str))
     elif report_type == "kitchen_pdf":
         await send_kitchen_pdf(bot, chat_id, date_str)
+    elif report_type == "payments":
+        await _send_payments_for_date(bot, chat_id, date_str)
 
 
 @router.callback_query(F.data.startswith("adminrep:"))
@@ -379,28 +381,37 @@ async def cmd_payments(message: Message, bot: Bot, command: CommandObject):
         if not date_str:
             await message.answer(texts.ADMIN_BAD_DATE_FORMAT)
             return
-    else:
-        date_str = sheets.today_date_str()
+        await _send_payments_for_date(bot, message.chat.id, date_str)
+        return
+    await _ask_report_date(message, "payments")
 
+
+async def _send_payments_for_date(bot: Bot, chat_id: int, date_str: str):
     entries = sheets.get_payment_screenshots(date_str)
     if not entries:
-        await message.answer(texts.ADMIN_NO_PAYMENTS_FOR_DATE.format(date=date_str))
+        await bot.send_message(chat_id, texts.ADMIN_NO_PAYMENTS_FOR_DATE.format(date=date_str))
         return
 
-    await message.answer(texts.ADMIN_PAYMENTS_HEADER.format(date=date_str, count=len(entries)))
+    await bot.send_message(chat_id, texts.ADMIN_PAYMENTS_HEADER.format(date=date_str, count=len(entries)))
     for entry in entries:
         caption = texts.ADMIN_PAYMENT_ITEM_CAPTION.format(
             name=entry["name"],
+            qty=entry["qty"],
+            set_name=texts.display_set_name(entry["set"]) if entry.get("set") else "",
             sum=f"{entry['sum']:,}".replace(",", " "),
         )
         try:
-            await bot.send_photo(message.chat.id, entry["screenshot"], caption=caption)
+            await bot.send_photo(
+                chat_id, entry["screenshot"], caption=caption,
+                reply_markup=kb.card_confirm_admin_kb(str(entry["row"])),
+            )
         except Exception as e:
             logger.exception("Не удалось отправить скрин оплаты клиента %s (строка %s)", entry.get("client_id"), entry.get("row"))
-            await message.answer(
+            await bot.send_message(
+                chat_id,
                 texts.ADMIN_PAYMENT_SEND_FAILED.format(
                     name=entry["name"], row=entry.get("row"), error=e,
-                )
+                ),
             )
 
 
