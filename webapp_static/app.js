@@ -348,15 +348,58 @@
     document.getElementById("retry-btn").hidden = false;
   }
 
+  var reorderInFlight = false;
+  var reorderQueued = null;
+
+  function saveReorder(order) {
+    reorderInFlight = true;
+    api("/api/route/reorder", { method: "POST", body: { date: state.date, order: order } })
+      .then(function () {
+        // Раз сохранили — обновляем и локальный state.points, чтобы карточки
+        // больше не перерисовывались из уже устаревших данных, даже если
+        // следующий loadRoute() задержится или временно не пройдёт.
+        state.points = state.points.slice().sort(function (a, b) {
+          return (order[a.point] || 0) - (order[b.point] || 0);
+        });
+      })
+      .catch(function (err) {
+        // Сохранить не удалось — не оставляем на экране порядок, который
+        // существует только в браузере и не записан в таблицу: перезагружаем
+        // настоящий порядок с сервера, а не молчим. Это и есть тот самый
+        // "откат к исходному состоянию" — он теперь ожидаемый и подписанный,
+        // а не выглядит как необъяснимый сбой.
+        toast("Не удалось сохранить порядок, показываю сохранённый: " + err.message);
+        return loadRoute();
+      })
+      .then(function () {
+        reorderInFlight = false;
+        if (reorderQueued) {
+          var next = reorderQueued;
+          reorderQueued = null;
+          saveReorder(next);
+        }
+      });
+  }
+
   function onReorder() {
     var container = document.getElementById("cards");
     var order = {};
     Array.prototype.forEach.call(container.children, function (card, idx) {
       order[card.dataset.point] = idx + 1;
     });
-    api("/api/route/reorder", { method: "POST", body: { date: state.date, order: order } })
-      .then(function () { return loadRoute(); })
-      .catch(function (err) { toast("Не сохранилось: " + err.message); });
+
+    // Если админ перетаскивает вторую карточку, пока сохранение первой ещё
+    // не вернулось — это создаёт гонку двух параллельных запросов, где более
+    // медленный (например, после повтора на 429) может "победить" и
+    // затереть в таблице более свежий, только что сохранённый порядок.
+    // Пока предыдущее сохранение не завершилось — новое ставим в очередь
+    // (перезаписывая предыдущее ожидающее), чтобы в итоге сохранился только
+    // САМЫЙ последний порядок, а не устаревший промежуточный.
+    if (reorderInFlight) {
+      reorderQueued = order;
+      return;
+    }
+    saveReorder(order);
   }
 
   function removePoint(point) {

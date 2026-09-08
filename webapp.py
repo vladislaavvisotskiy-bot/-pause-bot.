@@ -17,6 +17,7 @@ https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
 (HMAC-SHA256 по BOT_TOKEN) — так сервер точно знает Telegram ID отправителя
 и не может быть обманут одним лишь URL-параметром.
 """
+import asyncio
 import hashlib
 import hmac
 import json
@@ -86,28 +87,41 @@ def _extract_tg_id(request: web.Request):
         return None
 
 
-def _retry_sheets(fn, *args, retries: int = 1, delay: float = 1.5, **kwargs):
+async def _retry_sheets(fn, *args, retries: int = 1, delay: float = 1.5, **kwargs):
     """Google Sheets API иногда на секунду-другую отвечает 429 (Quota
-    exceeded for quota metric 'Read requests') под нагрузкой — это ровно
-    то, что несколько раз ловилось вживую при разработке этого проекта.
-    Один быстрый повтор чаще всего решает дело сам, вместо того чтобы
-    курьер/админ видел ошибку из-за случайного всплеска."""
+    exceeded for quota metric 'Read requests'/'Write requests') под нагрузкой
+    — это ровно то, что несколько раз ловилось вживую при разработке этого
+    проекта. Один быстрый повтор чаще всего решает дело сам, вместо того
+    чтобы курьер/админ видел ошибку из-за случайного всплеска.
+
+    gspread делает обычный синхронный HTTP-запрос. Раньше он вызывался прямо
+    в корутине — это блокирует ВЕСЬ event loop процесса (тот же самый, на
+    котором работает polling бота, см. bot.py и docstring выше) на всё время
+    запроса, а при повторе — ещё и на время time.sleep(delay) сверху. Из-за
+    этого один медленный запрос (или ожидание перед повтором) от одного
+    клиента фактически "вешал" все остальные запросы к Mini App и сам бот на
+    это время — под реальной нагрузкой (например, бот параллельно обрабатывает
+    заказ клиента) это ровно то, что могло выглядеть как случайная ошибка при
+    перетаскивании точки в Mini App: запрос упирается в чужую блокировку
+    event loop и не укладывается в таймаут WebView. Поэтому сам вызов и
+    задержка перед повтором вынесены в отдельный поток (asyncio.to_thread) —
+    других клиентов они больше не блокируют."""
     last_exc = None
     for attempt in range(retries + 1):
         try:
-            return fn(*args, **kwargs)
+            return await asyncio.to_thread(fn, *args, **kwargs)
         except gspread.exceptions.APIError as e:
             last_exc = e
             if e.code != 429 or attempt == retries:
                 raise
-            time.sleep(delay)
+            await asyncio.sleep(delay)
     raise last_exc
 
 
-def _role_for(tg_id) -> str:
+async def _role_for(tg_id) -> str:
     if config.ADMIN_CHAT_ID and tg_id == config.ADMIN_CHAT_ID:
         return "admin"
-    if _retry_sheets(sheets.is_active_courier, tg_id):
+    if await _retry_sheets(sheets.is_active_courier, tg_id):
         return "courier"
     return ""
 
@@ -136,7 +150,7 @@ async def auth_middleware(request: web.Request, handler):
         tg_id = _extract_tg_id(request)
         if tg_id is None:
             return web.json_response({"error": "unauthorized"}, status=401)
-        role = _role_for(tg_id)
+        role = await _role_for(tg_id)
         if not role:
             return web.json_response({"error": "forbidden"}, status=403)
         request["tg_id"] = tg_id
@@ -159,7 +173,7 @@ async def api_me(request: web.Request):
 async def api_route_get(request: web.Request):
     date_str = request.query.get("date") or _today()
     role = request["role"]
-    route = _retry_sheets(sheets.get_route_for_date, date_str)
+    route = await _retry_sheets(sheets.get_route_for_date, date_str)
     if role == "courier":
         tg_id = str(request["tg_id"])
         route = [p for p in route if p["courier_tg_id"] == tg_id]
@@ -169,7 +183,7 @@ async def api_route_get(request: web.Request):
 async def api_delivery_points(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
-    return web.json_response({"points": _retry_sheets(sheets.get_delivery_points)})
+    return web.json_response({"points": await _retry_sheets(sheets.get_delivery_points)})
 
 
 async def api_route_reorder(request: web.Request):
@@ -178,7 +192,10 @@ async def api_route_reorder(request: web.Request):
     body = await request.json()
     date_str = body.get("date") or _today()
     order_map = body.get("order") or {}
-    _retry_sheets(sheets.reorder_route, date_str, order_map)
+    # Это осознанное действие админа (перетащил карточку) — потерять его
+    # обиднее, чем лишний повторный показ маршрута, поэтому здесь два повтора
+    # вместо одного.
+    await _retry_sheets(sheets.reorder_route, date_str, order_map, retries=2)
     return web.json_response({"ok": True})
 
 
@@ -190,7 +207,7 @@ async def api_route_add(request: web.Request):
     point = (body.get("point") or "").strip()
     if not point:
         return web.json_response({"error": "point required"}, status=400)
-    _retry_sheets(sheets.add_route_point, date_str, point)
+    await _retry_sheets(sheets.add_route_point, date_str, point)
     return web.json_response({"ok": True})
 
 
@@ -200,7 +217,7 @@ async def api_route_remove(request: web.Request):
     body = await request.json()
     date_str = body.get("date") or _today()
     point = (body.get("point") or "").strip()
-    _retry_sheets(sheets.remove_route_point, date_str, point)
+    await _retry_sheets(sheets.remove_route_point, date_str, point)
     return web.json_response({"ok": True})
 
 
@@ -212,11 +229,11 @@ async def api_route_complete(request: web.Request):
         return web.json_response({"error": "point required"}, status=400)
     if request["role"] == "courier":
         # курьер может отмечать сданными только свои собственные точки
-        route = _retry_sheets(sheets.get_route_for_date, date_str)
+        route = await _retry_sheets(sheets.get_route_for_date, date_str)
         mine = {p["point"] for p in route if p["courier_tg_id"] == str(request["tg_id"])}
         if point not in mine:
             return web.json_response({"error": "forbidden"}, status=403)
-    _retry_sheets(sheets.mark_route_delivered, date_str, point)
+    await _retry_sheets(sheets.mark_route_delivered, date_str, point, retries=2)
     return web.json_response({"ok": True})
 
 
@@ -224,7 +241,7 @@ async def api_earnings(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
     date_str = request.query.get("date") or _today()
-    total = _retry_sheets(sheets.get_courier_earnings, request["tg_id"], date_str)
+    total = await _retry_sheets(sheets.get_courier_earnings, request["tg_id"], date_str)
     return web.json_response({"date": date_str, "total": total})
 
 
@@ -237,7 +254,7 @@ async def api_earnings_month(request: web.Request):
     except (TypeError, ValueError):
         now = sheets._now()
         year, month = now.year, now.month
-    total = _retry_sheets(sheets.get_courier_earnings_month, request["tg_id"], year, month)
+    total = await _retry_sheets(sheets.get_courier_earnings_month, request["tg_id"], year, month)
     return web.json_response({"year": year, "month": month, "total": total})
 
 
