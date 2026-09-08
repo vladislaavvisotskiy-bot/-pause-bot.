@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+import config
+import sheets
 import texts
 
 
@@ -15,12 +17,26 @@ def home_only_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def main_menu_kb() -> InlineKeyboardMarkup:
+def main_menu_kb(tg_id: int = None) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.PROFILE_BTN, callback_data="profile_section")
     b.button(text=texts.MENU_BTN, callback_data="menu_section")
     b.button(text=texts.CLUB_BTN, callback_data="club_section")
     b.button(text=texts.SUPPORT_BTN, callback_data="support")
+
+    # Кнопка маршрута — тот же Mini App и для курьера, и для админа, но
+    # режим (можно ли редактировать) определяется на сервере по роли из
+    # initData, а не по URL, так что сама ссылка всегда одна и та же.
+    # Пока WEBAPP_URL не задан (например, публичный домен на Railway ещё
+    # не сгенерирован) — кнопку вообще не показываем, чтобы не давать
+    # клиентам нерабочую ссылку.
+    if config.WEBAPP_URL and tg_id is not None:
+        url = f"{config.WEBAPP_URL}/miniapp"
+        if config.ADMIN_CHAT_ID and tg_id == config.ADMIN_CHAT_ID:
+            b.button(text=texts.ADMIN_ROUTE_BTN, web_app=WebAppInfo(url=url))
+        elif sheets.is_active_courier(tg_id):
+            b.button(text=texts.COURIER_ROUTE_BTN, web_app=WebAppInfo(url=url))
+
     b.adjust(1)
     return b.as_markup()
 

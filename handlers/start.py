@@ -17,7 +17,7 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     client = sheets.find_client_by_tg_id(message.from_user.id)
     if client:
-        await message.answer(texts.WELCOME_BACK, reply_markup=kb.main_menu_kb())
+        await message.answer(texts.WELCOME_BACK, reply_markup=kb.main_menu_kb(message.from_user.id))
         return
 
     await message.answer(texts.WELCOME_NEW, reply_markup=ReplyKeyboardRemove())
@@ -61,7 +61,7 @@ async def got_phone(message: Message, state: FSMContext):
         greeting_name = name
     await state.clear()
     await message.answer(texts.REGISTERED.format(name=greeting_name))
-    await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(message.from_user.id))
 
 
 @router.callback_query(F.data == "support")
@@ -74,5 +74,5 @@ async def show_support(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(callback.from_user.id))
     await callback.answer()

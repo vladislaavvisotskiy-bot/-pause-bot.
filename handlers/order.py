@@ -511,7 +511,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
         await state.clear()
         await callback.message.answer(texts.ORDER_PENDING_NEW_POINT.format(support=texts.SUPPORT_USERNAME))
-        await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+        await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(callback.from_user.id))
         await callback.answer()
         return
 
@@ -567,7 +567,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await callback.message.answer(texts.ORDER_SENT)
     await _send_care_message(callback.message, callback.from_user.id, data.get("client_name", ""))
     await callback.message.answer(texts.ORDER_SENT_GIVEAWAY_HINT)
-    await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(callback.from_user.id))
     await callback.answer()
 
 

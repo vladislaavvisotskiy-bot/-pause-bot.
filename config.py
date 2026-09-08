@@ -18,6 +18,13 @@ MORNING_REPORT_TIME = os.getenv("MORNING_REPORT_TIME", "10:05")
 WARM_BROADCAST_TIME = os.getenv("WARM_BROADCAST_TIME", "08:00")
 PAYMENT_REMINDER_TIME = os.getenv("PAYMENT_REMINDER_TIME", "13:30")
 
+# --- Telegram Mini App (курьерский маршрут) ---
+# Публичный HTTPS-адрес, по которому Railway отдаёт веб-сервис (см. README) —
+# без него кнопки маршрута в меню бота не показываются.
+WEBAPP_URL = os.getenv("WEBAPP_URL", "").rstrip("/")
+# Railway сам прокидывает PORT для сервисов с публичным доменом.
+WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8080")))
+
 # Отметка в комментарии заказа, по которой бот считает его отменённым клиентом
 # (отчёты кухни/курьера и подсчёт долга такие строки пропускают)
 CANCEL_MARKER = "ОТМЕНЁН"
@@ -141,3 +148,36 @@ DG_TG_ID = 3       # C  Telegram ID
 DG_NAME = 4        # D  Имя
 DG_TICKETS = 5     # E  Билеты
 DG_WINNER = 6      # F  Победитель
+
+# --- Курьерский маршрут (Telegram Mini App) ---
+SHEET_DELIVERY_POINTS = "Точки доставки"
+DP_HEADER_ROW = 1
+DP_DATA_START_ROW = 2
+DP_NAME = 1        # A  Точка (совпадает с "Точка" в "Заказы")
+DP_ADDRESS = 2     # B  Адрес
+DP_LAT = 3         # C  Широта
+DP_LON = 4         # D  Долгота
+DP_PRIORITY = 5    # E  Приоритет по умолчанию
+DP_RATE = 6        # F  Ставка курьеру за точку (сум)
+
+SHEET_COURIERS = "Курьеры"
+COURIER_HEADER_ROW = 1
+COURIER_DATA_START_ROW = 2
+COURIER_TG_ID = 1  # A
+COURIER_NAME = 2   # B
+COURIER_STATUS = 3  # C
+COURIER_STATUS_ACTIVE = "Активен"
+COURIER_STATUS_INACTIVE = "Неактивен"
+
+SHEET_ROUTE = "Маршрут"
+ROUTE_HEADER_ROW = 1
+ROUTE_DATA_START_ROW = 2
+ROUTE_DATE = 1          # A
+ROUTE_POINT = 2         # B
+ROUTE_COURIER_TG_ID = 3  # C
+ROUTE_ORDER = 4         # D  Порядок (число)
+ROUTE_STATUS = 5        # E
+ROUTE_DELIVERED_AT = 6  # F  Время сдачи (заполняется автоматически)
+ROUTE_STATUS_WAITING = "Ожидает"
+ROUTE_STATUS_IN_PROGRESS = "В пути"
+ROUTE_STATUS_DELIVERED = "Сдано"

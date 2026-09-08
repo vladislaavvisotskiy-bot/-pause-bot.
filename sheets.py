@@ -32,7 +32,7 @@ def _now() -> dt.datetime:
 
 _client = None
 _sheet = None
-_cache = {"clients": None, "clients_ts": 0}
+_cache = {"clients": None, "clients_ts": 0, "couriers": None, "couriers_ts": 0}
 _CACHE_TTL = 60  # секунд — не дёргаем таблицу на каждый чих
 
 
@@ -1206,3 +1206,317 @@ def get_client_pending_orders(client_id) -> list:
             "screenshot": cell(config.P_SCREENSHOT),
         })
     return out[::-1]
+
+
+# ---------------------------------------------------------------------------
+# Курьерский маршрут (Telegram Mini App)
+# ---------------------------------------------------------------------------
+
+def get_delivery_points() -> list:
+    """Справочник точек доставки — [{"name","address","lat","lon","priority","rate"}]."""
+    ws = _ws(config.SHEET_DELIVERY_POINTS)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.DP_DATA_START_ROW:
+            continue
+        if len(row) < config.DP_NAME or not row[config.DP_NAME - 1].strip():
+            continue
+
+        def cell(col, row=row):
+            idx = col - 1
+            return row[idx] if idx < len(row) else ""
+
+        try:
+            priority = float(cell(config.DP_PRIORITY) or 0)
+        except ValueError:
+            priority = 0
+        try:
+            rate = int(str(cell(config.DP_RATE)).replace(" ", "").replace(",", "") or 0)
+        except ValueError:
+            rate = 0
+        out.append({
+            "name": cell(config.DP_NAME).strip(),
+            "address": cell(config.DP_ADDRESS).strip(),
+            "lat": cell(config.DP_LAT).strip(),
+            "lon": cell(config.DP_LON).strip(),
+            "priority": priority,
+            "rate": rate,
+        })
+    return out
+
+
+def _delivery_points_index() -> dict:
+    return {p["name"]: p for p in get_delivery_points()}
+
+
+def get_couriers() -> list:
+    """Все записи из "Курьеры" — [{"tg_id","name","status"}]. Кэшируется на
+    _CACHE_TTL секунд — is_active_courier() дёргается на каждом показе
+    главного меню бота, каждый раз ходить в Sheets незачем."""
+    now = time.time()
+    if _cache["couriers"] is not None and now - _cache["couriers_ts"] < _CACHE_TTL:
+        return _cache["couriers"]
+
+    ws = _ws(config.SHEET_COURIERS)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.COURIER_DATA_START_ROW:
+            continue
+        if len(row) < config.COURIER_TG_ID or not row[config.COURIER_TG_ID - 1].strip():
+            continue
+        out.append({
+            "tg_id": row[config.COURIER_TG_ID - 1].strip(),
+            "name": row[config.COURIER_NAME - 1].strip() if len(row) >= config.COURIER_NAME else "",
+            "status": row[config.COURIER_STATUS - 1].strip() if len(row) >= config.COURIER_STATUS else "",
+        })
+    _cache["couriers"] = out
+    _cache["couriers_ts"] = now
+    return out
+
+
+def is_active_courier(tg_id) -> bool:
+    target = str(tg_id)
+    return any(c["tg_id"] == target and c["status"] == config.COURIER_STATUS_ACTIVE for c in get_couriers())
+
+
+def _active_couriers() -> list:
+    return [c for c in get_couriers() if c["status"] == config.COURIER_STATUS_ACTIVE]
+
+
+def get_route_people(date_str: str) -> dict:
+    """Люди с реальными (неотменёнными) заказами на дату, сгруппированные по
+    точке доставки, затем по клиенту — {точка: [{"client_id","name",
+    "contact","comment","items":[{"set","qty"}]}]}."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    clients = _clients_index()
+    by_point = {}
+
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_TELEGRAM:
+            row = row + [""] * (config.O_TELEGRAM - len(row))
+        if row[config.O_DATE - 1].strip() != date_str:
+            continue
+        point = row[config.O_POINT - 1].strip()
+        client_id = row[config.O_CLIENT_ID - 1].strip()
+        if not point or not client_id:
+            continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
+            continue
+
+        client = clients.get(client_id) or {}
+        name = client.get("name") or row[config.O_NAME - 1].strip() or client_id
+        contact = client.get("contact") or row[config.O_CONTACT - 1].strip() or "Неизвестно"
+
+        people = by_point.setdefault(point, {})
+        person = people.setdefault(client_id, {
+            "client_id": client_id, "name": name, "contact": contact,
+            "comment": comment, "items": [],
+        })
+        person["items"].append({
+            "set": row[config.O_SET - 1].strip(),
+            "qty": row[config.O_QTY - 1].strip() or "0",
+        })
+
+    return {point: list(people.values()) for point, people in by_point.items()}
+
+
+def sync_daily_route(date_str: str):
+    """Гарантирует, что для каждой точки с реальным заказом на дату есть
+    строка в "Маршрут" — не трогает уже существующие строки (порядок,
+    статус, курьера), только добавляет недостающие. Идемпотентно, безопасно
+    вызывать при каждом открытии экрана — актуальность не кэшируется."""
+    points_with_orders = set(get_route_people(date_str).keys())
+    if not points_with_orders:
+        return
+
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    existing = set()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() == date_str:
+            existing.add(row[config.ROUTE_POINT - 1].strip())
+
+    missing = points_with_orders - existing
+    if not missing:
+        return
+
+    dp_index = _delivery_points_index()
+    couriers = _active_couriers()
+    default_courier = couriers[0]["tg_id"] if couriers else ""
+
+    new_rows = [
+        [date_str, point, default_courier, dp_index.get(point, {}).get("priority", 0),
+         config.ROUTE_STATUS_WAITING, ""]
+        for point in missing
+    ]
+    new_rows.sort(key=lambda row: row[3] if isinstance(row[3], (int, float)) else 0)
+    ws.append_rows(new_rows, value_input_option="RAW")
+
+
+def get_route_for_date(date_str: str) -> list:
+    """Полный маршрут на дату — точки с людьми, координатами, ставкой,
+    статусом, отсортирован по "Порядок". Сначала синхронизирует новые точки
+    (см. sync_daily_route) — данные всегда актуальны на момент вызова."""
+    sync_daily_route(date_str)
+
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    dp_index = _delivery_points_index()
+    people = get_route_people(date_str)
+
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() != date_str:
+            continue
+
+        def cell(col, row=row):
+            idx = col - 1
+            return row[idx] if idx < len(row) else ""
+
+        point_name = cell(config.ROUTE_POINT).strip()
+        dp = dp_index.get(point_name, {})
+        try:
+            order_num = float(cell(config.ROUTE_ORDER) or 0)
+        except ValueError:
+            order_num = 0
+
+        out.append({
+            "row": r,
+            "point": point_name,
+            "address": dp.get("address", ""),
+            "lat": dp.get("lat", ""),
+            "lon": dp.get("lon", ""),
+            "rate": dp.get("rate", 0),
+            "courier_tg_id": cell(config.ROUTE_COURIER_TG_ID).strip(),
+            "order": order_num,
+            "status": cell(config.ROUTE_STATUS).strip() or config.ROUTE_STATUS_WAITING,
+            "delivered_at": cell(config.ROUTE_DELIVERED_AT).strip(),
+            "people": people.get(point_name, []),
+        })
+
+    out.sort(key=lambda p: p["order"])
+    return out
+
+
+def reorder_route(date_str: str, order_map: dict):
+    """order_map: {точка: новый порядок (число)} — сохраняет сразу в
+    столбец "Порядок" листа "Маршрут"."""
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    cells = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() != date_str:
+            continue
+        point = row[config.ROUTE_POINT - 1].strip()
+        if point in order_map:
+            cells.append(gspread.Cell(r, config.ROUTE_ORDER, order_map[point]))
+    if cells:
+        ws.update_cells(cells)
+
+
+def add_route_point(date_str: str, point_name: str):
+    """Добавляет точку в маршрут вручную (админ), даже если реальных
+    заказов на неё сегодня нет — ставится в конец маршрута."""
+    existing = get_route_for_date(date_str)  # заодно синхронизирует
+    if any(p["point"] == point_name for p in existing):
+        return
+
+    ws = _ws(config.SHEET_ROUTE)
+    couriers = _active_couriers()
+    default_courier = couriers[0]["tg_id"] if couriers else ""
+    max_order = max([p["order"] for p in existing], default=0)
+    ws.append_row(
+        [date_str, point_name, default_courier, max_order + 1, config.ROUTE_STATUS_WAITING, ""],
+        value_input_option="RAW",
+    )
+
+
+def remove_route_point(date_str: str, point_name: str):
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
+            ws.delete_rows(r)
+            return
+
+
+def mark_route_delivered(date_str: str, point_name: str):
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
+            ws.update_cell(r, config.ROUTE_STATUS, config.ROUTE_STATUS_DELIVERED)
+            ws.update_cell(r, config.ROUTE_DELIVERED_AT, _now().strftime("%H:%M"))
+            return
+
+
+def get_courier_earnings(courier_tg_id, date_str: str) -> int:
+    """Сумма ставок всех сданных ("Сдано") точек курьера за дату."""
+    route = get_route_for_date(date_str)
+    target = str(courier_tg_id)
+    return sum(
+        p["rate"] for p in route
+        if p["courier_tg_id"] == target and p["status"] == config.ROUTE_STATUS_DELIVERED
+    )
+
+
+def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
+    """Сумма ставок всех сданных точек курьера за календарный месяц."""
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    dp_index = _delivery_points_index()
+    target = str(courier_tg_id)
+    total = 0
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_STATUS:
+            continue
+        try:
+            d = dt.datetime.strptime(row[config.ROUTE_DATE - 1].strip(), "%d.%m.%Y").date()
+        except ValueError:
+            continue
+        if d.year != year or d.month != month:
+            continue
+        if row[config.ROUTE_COURIER_TG_ID - 1].strip() != target:
+            continue
+        if row[config.ROUTE_STATUS - 1].strip() != config.ROUTE_STATUS_DELIVERED:
+            continue
+        point = row[config.ROUTE_POINT - 1].strip()
+        total += dp_index.get(point, {}).get("rate", 0)
+    return total

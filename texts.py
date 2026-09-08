@@ -67,6 +67,8 @@ PROFILE_BTN = "👤 Профиль"
 MENU_BTN = "💌 Меню"
 CLUB_BTN = "🌿 Pause Club"
 SUPPORT_BTN = "🤍 Поддержка"
+COURIER_ROUTE_BTN = "🚚 Мой маршрут"
+ADMIN_ROUTE_BTN = "🗺 Маршрут (админ)"
 
 REQUISITES_TEXT = "5614 6829 1627 0798\nVladislav Visotskiy"
 

@@ -12,6 +12,7 @@ import config
 import sheets
 import texts
 import keyboards as kb
+import webapp
 from handlers import start, order, profile, club, admin
 
 logging.basicConfig(level=logging.INFO)
@@ -129,6 +130,8 @@ async def main():
     prh, prm = map(int, config.PAYMENT_REMINDER_TIME.split(":"))
     scheduler.add_job(send_payment_reminders, "cron", hour=prh, minute=prm, args=[bot])
     scheduler.start()
+
+    await webapp.run_webapp()
 
     logger.info("PAUSE бот запущен.")
     await dp.start_polling(bot)

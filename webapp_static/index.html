@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Маршрут PAUSE</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="/miniapp/static/styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <header id="header">
+    <h1 id="header-title">🚚 Маршрут</h1>
+    <button id="earnings-toggle-btn" class="ghost-btn" hidden>💰 Заработок</button>
+  </header>
+
+  <div id="route-screen" class="screen">
+    <div id="map"></div>
+
+    <div id="empty-state" class="empty-state" hidden>
+      <p>На сегодня точек с заказами пока нет 🌿</p>
+    </div>
+
+    <div id="cards"></div>
+
+    <button id="add-point-btn" class="primary-btn" hidden>+ Добавить точку</button>
+  </div>
+
+  <div id="earnings-screen" class="screen" hidden>
+    <div class="earnings-card">
+      <div class="earnings-label">Сегодня</div>
+      <div id="earnings-today" class="earnings-value">—</div>
+    </div>
+
+    <div class="date-picker-row">
+      <button id="earnings-prev-day" class="icon-btn">‹</button>
+      <input id="earnings-date" type="date">
+      <button id="earnings-next-day" class="icon-btn">›</button>
+    </div>
+    <div class="earnings-card">
+      <div class="earnings-label" id="earnings-day-label">За выбранный день</div>
+      <div id="earnings-day" class="earnings-value">—</div>
+    </div>
+
+    <div class="earnings-card">
+      <div class="earnings-label" id="earnings-month-label">За месяц</div>
+      <div id="earnings-month" class="earnings-value">—</div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <div id="add-point-modal" class="modal" hidden>
+    <div class="modal-sheet">
+      <div class="modal-title">Добавить точку</div>
+      <div id="add-point-list" class="modal-list"></div>
+      <button id="add-point-cancel" class="ghost-btn">Отмена</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="/miniapp/static/app.js"></script>
+</body>
+</html>

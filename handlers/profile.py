@@ -395,13 +395,13 @@ async def cancel_order_yes(callback: CallbackQuery, bot: Bot):
         except Exception:
             pass
 
-    await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(callback.from_user.id))
     await callback.answer()
 
 
 @router.callback_query(F.data == "cancel_order_no")
 async def cancel_order_no(callback: CallbackQuery):
-    await callback.message.answer(texts.CANCEL_KEPT, reply_markup=kb.main_menu_kb())
+    await callback.message.answer(texts.CANCEL_KEPT, reply_markup=kb.main_menu_kb(callback.from_user.id))
     await callback.answer()
 
 
@@ -463,4 +463,4 @@ async def feedback_save(message: Message, state: FSMContext, bot: Bot):
             pass
 
     await message.answer(texts.FEEDBACK_THANKS)
-    await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb())
+    await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(message.from_user.id))
