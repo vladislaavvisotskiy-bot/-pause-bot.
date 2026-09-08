@@ -25,6 +25,7 @@ import os
 import time
 from urllib.parse import parse_qsl
 
+import gspread
 from aiohttp import web
 
 import config
@@ -85,12 +86,48 @@ def _extract_tg_id(request: web.Request):
         return None
 
 
+def _retry_sheets(fn, *args, retries: int = 1, delay: float = 1.5, **kwargs):
+    """Google Sheets API иногда на секунду-другую отвечает 429 (Quota
+    exceeded for quota metric 'Read requests') под нагрузкой — это ровно
+    то, что несколько раз ловилось вживую при разработке этого проекта.
+    Один быстрый повтор чаще всего решает дело сам, вместо того чтобы
+    курьер/админ видел ошибку из-за случайного всплеска."""
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            return fn(*args, **kwargs)
+        except gspread.exceptions.APIError as e:
+            last_exc = e
+            if e.code != 429 or attempt == retries:
+                raise
+            time.sleep(delay)
+    raise last_exc
+
+
 def _role_for(tg_id) -> str:
     if config.ADMIN_CHAT_ID and tg_id == config.ADMIN_CHAT_ID:
         return "admin"
-    if sheets.is_active_courier(tg_id):
+    if _retry_sheets(sheets.is_active_courier, tg_id):
         return "courier"
     return ""
+
+
+@web.middleware
+async def error_middleware(request: web.Request, handler):
+    """Последняя линия обороны: если что-то ниже по цепочке (включая саму
+    проверку роли в auth_middleware) упадёт необработанным исключением —
+    например, Google Sheets на секунду ответит с ошибкой — отдаём аккуратный
+    JSON-ответ вместо голого HTTP 500. Именно отсутствие такой защиты вокруг
+    проверки роли (она дёргается на КАЖДЫЙ запрос к /api/*, чаще всего
+    остального) и было причиной "маршрут загрузился, а потом пропал с
+    ошибкой 500" — воспроизведено и подтверждено локально перед фиксом."""
+    try:
+        return await handler(request)
+    except web.HTTPException:
+        raise
+    except Exception:
+        logger.exception("Необработанная ошибка на %s %s", request.method, request.path)
+        return web.json_response({"error": "server_error"}, status=503)
 
 
 @web.middleware
@@ -122,11 +159,7 @@ async def api_me(request: web.Request):
 async def api_route_get(request: web.Request):
     date_str = request.query.get("date") or _today()
     role = request["role"]
-    try:
-        route = sheets.get_route_for_date(date_str)
-    except Exception:
-        logger.exception("Не удалось получить маршрут на %s", date_str)
-        return web.json_response({"error": "sheets_error"}, status=502)
+    route = _retry_sheets(sheets.get_route_for_date, date_str)
     if role == "courier":
         tg_id = str(request["tg_id"])
         route = [p for p in route if p["courier_tg_id"] == tg_id]
@@ -136,7 +169,7 @@ async def api_route_get(request: web.Request):
 async def api_delivery_points(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
-    return web.json_response({"points": sheets.get_delivery_points()})
+    return web.json_response({"points": _retry_sheets(sheets.get_delivery_points)})
 
 
 async def api_route_reorder(request: web.Request):
@@ -145,7 +178,7 @@ async def api_route_reorder(request: web.Request):
     body = await request.json()
     date_str = body.get("date") or _today()
     order_map = body.get("order") or {}
-    sheets.reorder_route(date_str, order_map)
+    _retry_sheets(sheets.reorder_route, date_str, order_map)
     return web.json_response({"ok": True})
 
 
@@ -157,7 +190,7 @@ async def api_route_add(request: web.Request):
     point = (body.get("point") or "").strip()
     if not point:
         return web.json_response({"error": "point required"}, status=400)
-    sheets.add_route_point(date_str, point)
+    _retry_sheets(sheets.add_route_point, date_str, point)
     return web.json_response({"ok": True})
 
 
@@ -167,7 +200,7 @@ async def api_route_remove(request: web.Request):
     body = await request.json()
     date_str = body.get("date") or _today()
     point = (body.get("point") or "").strip()
-    sheets.remove_route_point(date_str, point)
+    _retry_sheets(sheets.remove_route_point, date_str, point)
     return web.json_response({"ok": True})
 
 
@@ -179,11 +212,11 @@ async def api_route_complete(request: web.Request):
         return web.json_response({"error": "point required"}, status=400)
     if request["role"] == "courier":
         # курьер может отмечать сданными только свои собственные точки
-        route = sheets.get_route_for_date(date_str)
+        route = _retry_sheets(sheets.get_route_for_date, date_str)
         mine = {p["point"] for p in route if p["courier_tg_id"] == str(request["tg_id"])}
         if point not in mine:
             return web.json_response({"error": "forbidden"}, status=403)
-    sheets.mark_route_delivered(date_str, point)
+    _retry_sheets(sheets.mark_route_delivered, date_str, point)
     return web.json_response({"ok": True})
 
 
@@ -191,7 +224,7 @@ async def api_earnings(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
     date_str = request.query.get("date") or _today()
-    total = sheets.get_courier_earnings(request["tg_id"], date_str)
+    total = _retry_sheets(sheets.get_courier_earnings, request["tg_id"], date_str)
     return web.json_response({"date": date_str, "total": total})
 
 
@@ -204,7 +237,7 @@ async def api_earnings_month(request: web.Request):
     except (TypeError, ValueError):
         now = sheets._now()
         year, month = now.year, now.month
-    total = sheets.get_courier_earnings_month(request["tg_id"], year, month)
+    total = _retry_sheets(sheets.get_courier_earnings_month, request["tg_id"], year, month)
     return web.json_response({"year": year, "month": month, "total": total})
 
 
@@ -213,7 +246,7 @@ async def index_page(request: web.Request):
 
 
 def create_app() -> web.Application:
-    app = web.Application(middlewares=[auth_middleware])
+    app = web.Application(middlewares=[error_middleware, auth_middleware])
     app.router.add_get("/miniapp", index_page)
     app.router.add_get("/miniapp/", index_page)
     app.router.add_static("/miniapp/static/", STATIC_DIR, show_index=False)

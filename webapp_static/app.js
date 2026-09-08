@@ -308,6 +308,11 @@
   }
 
   function render() {
+    // Раз мы тут — запрос успешно отработал, так что любая ошибка/кнопка
+    // "Повторить" от прошлой неудачной попытки больше не актуальна.
+    document.getElementById("empty-state-text").textContent = "На сегодня точек с заказами пока нет 🌿";
+    document.getElementById("retry-btn").hidden = true;
+
     document.getElementById("empty-state").hidden = state.points.length > 0;
     document.getElementById("cards").hidden = state.points.length === 0;
     document.getElementById("add-point-btn").hidden = state.role !== "admin";
@@ -326,7 +331,21 @@
       render();
     }).catch(function (err) {
       toast("Не удалось загрузить маршрут: " + err.message);
+      // Если это самая первая загрузка (карточек ещё не было) — показываем
+      // явную ошибку с кнопкой "Повторить", а не молчаливый тост. Если
+      // маршрут уже был показан раньше — оставляем его на экране как есть,
+      // а не стираем из-за одной неудачной попытки.
+      if (!state.points.length) {
+        showLoadError("Не получилось загрузить маршрут — временная проблема с сервером.");
+      }
     });
+  }
+
+  function showLoadError(message) {
+    document.getElementById("cards").innerHTML = "";
+    document.getElementById("empty-state").hidden = false;
+    document.getElementById("empty-state-text").textContent = message;
+    document.getElementById("retry-btn").hidden = false;
   }
 
   function onReorder() {
@@ -460,17 +479,32 @@
     document.getElementById("earnings-prev-day").addEventListener("click", function () { shiftEarningsDate(-1); });
     document.getElementById("earnings-next-day").addEventListener("click", function () { shiftEarningsDate(1); });
 
+    document.getElementById("retry-btn").addEventListener("click", function () {
+      document.getElementById("retry-btn").hidden = true;
+      startApp();
+    });
+
+    startApp();
+  }
+
+  function startApp() {
+    document.getElementById("empty-state").hidden = true;
     api("/api/me").then(function (me) {
       state.role = me.role;
       state.tgId = me.tg_id;
       document.getElementById("earnings-toggle-btn").hidden = me.role !== "courier";
       return loadRoute();
     }).catch(function (err) {
-      toast("Доступ запрещён: " + err.message);
-      document.getElementById("cards").innerHTML = "";
-      document.getElementById("empty-state").hidden = false;
-      document.getElementById("empty-state").querySelector("p").textContent =
-        "Этот экран доступен только зарегистрированным курьерам и админу.";
+      // 401/403 — реально не тот человек (не курьер и не админ), кнопка
+      // "Повторить" тут не поможет. Всё остальное (503 и т.п.) — временная
+      // проблема связи с сервером, а не запрет доступа — и стоит дать
+      // попробовать ещё раз, не отправляя человека переоткрывать Telegram.
+      if (err.status === 401 || err.status === 403) {
+        showLoadError("Этот экран доступен только зарегистрированным курьерам и админу.");
+      } else {
+        toast("Временная проблема связи с сервером");
+        showLoadError("Не получилось загрузить маршрут — временная проблема с сервером.");
+      }
     });
   }
 
