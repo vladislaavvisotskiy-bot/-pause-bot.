@@ -28,6 +28,30 @@ def _is_admin(user_id: int) -> bool:
     return config.ADMIN_CHAT_ID and user_id == config.ADMIN_CHAT_ID
 
 
+@router.message(Command("webapp_debug"))
+async def cmd_webapp_debug(message: Message):
+    """Диагностика кнопки Mini App прямо на живом сервере — специально без
+    проверки _is_admin: если сама проблема в том, что ADMIN_CHAT_ID не
+    совпадает, обычная admin-only команда молчала бы и ничего бы не
+    объяснила. Команда не в /admin и не в списке команд бота — набирается
+    вручную."""
+    tg_id = message.from_user.id
+    is_admin = bool(config.ADMIN_CHAT_ID) and tg_id == config.ADMIN_CHAT_ID
+    is_courier = sheets.is_active_courier(tg_id)
+
+    lines = [
+        f"Ваш Telegram ID: {tg_id}",
+        "WEBAPP_URL на сервере: " + (config.WEBAPP_URL if config.WEBAPP_URL else "⚠️ НЕ ЗАДАН (пусто)"),
+        "ADMIN_CHAT_ID задан: " + ("да" if config.ADMIN_CHAT_ID else "⚠️ НЕТ (0 или пусто)"),
+        "Ваш ID совпадает с ADMIN_CHAT_ID: " + ("да" if is_admin else "нет"),
+        "Вы активный курьер (лист «Курьеры»): " + ("да" if is_courier else "нет"),
+    ]
+    should_show = bool(config.WEBAPP_URL) and (is_admin or is_courier)
+    lines.append("")
+    lines.append("Кнопка маршрута должна показываться: " + ("ДА ✅" if should_show else "НЕТ ❌"))
+    await message.answer("\n".join(lines))
+
+
 @router.message(Command("admin"))
 async def admin_panel(message: Message):
     if not _is_admin(message.from_user.id):
