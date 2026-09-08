@@ -107,9 +107,14 @@
     });
 
     if (!state.map) {
-      state.map = L.map("map", { zoomControl: false, attributionControl: false });
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      state.map = L.map("map", { zoomControl: false, attributionControl: true });
+      // CartoDB Positron — визуально спокойнее и чище дефолтного OSM Mapnik,
+      // бесплатно и без API-ключа; тёплый sepia-фильтр поверх (см. styles.css
+      // #map .leaflet-tile-pane) подстраивает его под палитру PAUSE.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
         maxZoom: 19,
+        subdomains: "abcd",
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
       }).addTo(state.map);
     }
 
@@ -133,7 +138,7 @@
       latlngs.push([lat, lon]);
     });
 
-    state.polyline = L.polyline(latlngs, { color: "#2f80ed", weight: 3, opacity: 0.6, dashArray: "6 6" })
+    state.polyline = L.polyline(latlngs, { color: "#b87e6c", weight: 3, opacity: 0.55, dashArray: "6 6" })
       .addTo(state.map);
 
     if (latlngs.length === 1) {
@@ -494,8 +499,8 @@
   function showScreen(name) {
     document.getElementById("route-screen").hidden = name !== "route";
     document.getElementById("earnings-screen").hidden = name !== "earnings";
-    document.getElementById("header-title").textContent = name === "earnings" ? "💰 Мой заработок" : "🚚 Маршрут";
-    document.getElementById("earnings-toggle-btn").textContent = name === "earnings" ? "🚚 Маршрут" : "💰 Заработок";
+    document.getElementById("header-title").textContent = name === "earnings" ? "Мой заработок" : "Маршрут";
+    document.getElementById("earnings-toggle-btn").textContent = name === "earnings" ? "Маршрут" : "Заработок";
     if (name === "earnings" && !state.earningsDateISO) {
       loadEarningsToday();
     }

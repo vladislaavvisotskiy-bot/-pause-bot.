@@ -6,6 +6,9 @@
 <title>Маршрут PAUSE</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/miniapp/static/styles.css">
 </head>
 <body>
@@ -13,8 +16,11 @@
 <div id="app">
 
   <header id="header">
-    <h1 id="header-title">🚚 Маршрут</h1>
-    <button id="earnings-toggle-btn" class="ghost-btn" hidden>💰 Заработок</button>
+    <div class="header-titles">
+      <div class="brand">PAUSE</div>
+      <h1 id="header-title">Маршрут</h1>
+    </div>
+    <button id="earnings-toggle-btn" class="ghost-btn" hidden>Заработок</button>
   </header>
 
   <div id="route-screen" class="screen">
