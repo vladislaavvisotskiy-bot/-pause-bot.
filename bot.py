@@ -11,6 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import config
 import sheets
 import texts
+import keyboards as kb
 from handlers import start, order, profile, club, admin
 
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +54,27 @@ async def send_warm_broadcast(bot: Bot):
             await bot.send_message(int(c["tg_id"]), f"{greeting}\n\n{line}")
         except Exception:
             logger.exception("Не удалось отправить тёплое утреннее сообщение клиенту ID %s", c.get("id"))
+
+
+async def send_payment_reminders(bot: Bot):
+    """Мягкое напоминание в PAYMENT_REMINDER_TIME — тем, кто выбрал оплату
+    картой "пришлю скрин позже" по сегодняшнему (активному) заказу и так и
+    не прислал его к этому моменту (статус "🕊 Ожидает скрин" в "Мои
+    заказы"). Кнопка ведёт к тому же механизму прикрепления скрина, что и
+    в "Мои заказы"."""
+    if sheets.is_broadcasts_disabled():
+        return
+    date_str = sheets.get_active_menu_date()
+    groups = sheets.get_unconfirmed_card_orders(date_str)
+    for g in groups:
+        rows_str = ",".join(str(r) for r in g["rows"])
+        try:
+            await bot.send_message(
+                int(g["tg_id"]), texts.PAYMENT_REMINDER_TEXT,
+                reply_markup=kb.reminder_screenshot_kb(rows_str),
+            )
+        except Exception:
+            logger.exception("Не удалось отправить напоминание об оплате клиенту ID %s", g.get("client_id"))
 
 
 async def setup_commands(bot: Bot):
@@ -104,6 +126,8 @@ async def main():
     scheduler.add_job(send_morning_reports, "cron", hour=h, minute=m, args=[bot])
     wh, wm = map(int, config.WARM_BROADCAST_TIME.split(":"))
     scheduler.add_job(send_warm_broadcast, "cron", hour=wh, minute=wm, args=[bot])
+    prh, prm = map(int, config.PAYMENT_REMINDER_TIME.split(":"))
+    scheduler.add_job(send_payment_reminders, "cron", hour=prh, minute=prm, args=[bot])
     scheduler.start()
 
     logger.info("PAUSE бот запущен.")

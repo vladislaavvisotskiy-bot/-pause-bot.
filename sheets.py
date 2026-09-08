@@ -453,10 +453,12 @@ def get_order_rows(row_nums: list) -> list:
 
 
 def get_unconfirmed_card_orders(date_str: str) -> list:
-    """Клиенты, оплатившие картой и выбравшие "пришлю скрин позже", но
-    так и не приславшие его — источник для дневного напоминания об
-    оплате. Группируем по клиенту (несколько строк одного заказа — одно
-    напоминание). Возвращает [{"client_id", "tg_id", "rows": [...]}]."""
+    """Клиенты с заказом на дату, выбравшие оплату картой "пришлю скрин
+    позже" и ещё не приславшие его — столбец K (Оплата) пуст, см. новую
+    модель статусов оплаты ("🕊 Ожидает скрин" в "Мои заказы"). Источник
+    для мягкого напоминания в PAYMENT_REMINDER_TIME. Группируем по
+    клиенту (несколько строк одного заказа — одно напоминание).
+    Возвращает [{"client_id", "tg_id", "rows": [...]}]."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
     clients = _clients_index()
@@ -472,12 +474,10 @@ def get_unconfirmed_card_orders(date_str: str) -> list:
         if row[config.O_DATE - 1].strip() != date_str:
             continue
         payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
-        if "карт" not in payment.lower():
+        if payment != "":
             continue
         comment = row[config.O_COMMENT - 1].strip()
         if is_canceled(comment):
-            continue
-        if "оплата не подтверждена" not in comment:
             continue
         client_id = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
         if not client_id:

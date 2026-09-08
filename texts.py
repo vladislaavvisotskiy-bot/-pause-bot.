@@ -130,10 +130,7 @@ CARD_SEND_SCREENSHOT = "Пришлите, пожалуйста, скрин оп�
 CARD_SCREENSHOT_EXPECTED = "Жду именно фото со скрином оплаты — или напишите /start, если передумали."
 CARD_SCREENSHOT_RECEIVED = "Скрин получили, спасибо — передаём на проверку."
 
-PAYMENT_REMINDER_TEXT = (
-    "☘️ Не забудьте прислать скрин оплаты за сегодняшний заказ — "
-    "так мы сможем быстрее его подтвердить 🪴"
-)
+PAYMENT_REMINDER_TEXT = "Если удобно — пришлите скрин оплаты за сегодняшний заказ 🌿"
 
 ORDER_SUMMARY_HEADER = "Проверьте заказ:"
 ORDER_PAYMENT_STATUS_CHECKING = "\nОплата: скрин на проверке"
@@ -194,10 +191,12 @@ ORDER_STATUS_PENDING_POINT = "🕊 На рассмотрении"
 ORDER_STATUS_COMPLETE = "✅ Завершён"
 
 PAYMENT_STATUS_WAITING = "💳 Ожидает оплаты"
+PAYMENT_STATUS_WAITING_SCREENSHOT = "🕊 Ожидает скрин"
 PAYMENT_STATUS_CHECKING = "🕊 Оплата на проверке"
 PAYMENT_STATUS_PAID = "✅ Оплачено"
 
 MY_ORDERS_STATUS_LINE = "Статус: {fulfillment} · Оплата: {payment}"
+ATTACH_SCREENSHOT_BTN = "📎 Прикрепить скрин оплаты"
 
 # --- Раздел «Профиль» ---
 PROFILE_NOT_SET = "не указано"

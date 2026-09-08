@@ -68,6 +68,9 @@ def _payment_status_label(payment: str) -> str:
         return texts.PAYMENT_STATUS_CHECKING
     if p in ("Наличными", "Картой"):
         return texts.PAYMENT_STATUS_PAID
+    if p == "":
+        # Картой, выбрано "пришлю скрин позже" — ещё не прислал.
+        return texts.PAYMENT_STATUS_WAITING_SCREENSHOT
     return texts.PAYMENT_STATUS_WAITING
 
 

@@ -139,13 +139,17 @@ def profile_kb() -> InlineKeyboardMarkup:
 
 def my_orders_kb(order_groups: list, show_cancel: bool) -> InlineKeyboardMarkup:
     """order_groups — список заказов клиента (сгруппированных по дате, самые
-    новые первые); под каждым — своя кнопка отзыва. Кнопка отмены — только
-    для самого свежего заказа и только если show_cancel=True."""
+    новые первые); под каждым — своя кнопка отзыва, и кнопка "Прикрепить
+    скрин" для тех, что ждут скрина оплаты картой (столбец K пуст). Кнопка
+    отмены — только для самого свежего заказа и только если show_cancel=True."""
     b = InlineKeyboardBuilder()
     if show_cancel:
         b.button(text=texts.CANCEL_ORDER_BTN, callback_data="cancel_order_start")
     for g in order_groups:
         first_row = g["rows"][0]
+        if not g["canceled"] and not (g.get("payment") or "").strip():
+            rows_str = ",".join(str(r) for r in g["rows"])
+            b.button(text=texts.ATTACH_SCREENSHOT_BTN, callback_data=f"sendscreen:{rows_str}")
         b.button(text=texts.FEEDBACK_BTN.format(date=g["date"]), callback_data=f"feedback:{first_row}")
     _home(b)
     b.adjust(1)
@@ -237,6 +241,6 @@ def admin_menu_date_kb(today_str: str, tomorrow_str: str) -> InlineKeyboardMarku
 
 def reminder_screenshot_kb(rows_str: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.button(text=texts.CARD_SEND_NOW_BTN, callback_data=f"sendscreen:{rows_str}")
+    b.button(text=texts.ATTACH_SCREENSHOT_BTN, callback_data=f"sendscreen:{rows_str}")
     b.adjust(1)
     return b.as_markup()
