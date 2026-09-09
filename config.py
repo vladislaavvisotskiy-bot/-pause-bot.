@@ -18,6 +18,11 @@ MORNING_REPORT_TIME = os.getenv("MORNING_REPORT_TIME", "10:05")
 WARM_BROADCAST_TIME = os.getenv("WARM_BROADCAST_TIME", "08:00")
 PAYMENT_REMINDER_TIME = os.getenv("PAYMENT_REMINDER_TIME", "13:30")
 
+# Пауза между отправками в массовых рассылках клиентам (тёплая рассылка,
+# оповещение о новом меню, напоминание об оплате) — чтобы не словить
+# flood-контроль Telegram на большом списке получателей.
+BROADCAST_DELAY_SECONDS = float(os.getenv("BROADCAST_DELAY_SECONDS", "0.1"))
+
 # --- Telegram Mini App (курьерский маршрут) ---
 # Публичный HTTPS-адрес, по которому Railway отдаёт веб-сервис (см. README) —
 # без него кнопки маршрута в меню бота не показываются.

@@ -55,6 +55,7 @@ async def send_warm_broadcast(bot: Bot):
             await bot.send_message(int(c["tg_id"]), f"{greeting}\n\n{line}")
         except Exception:
             logger.exception("Не удалось отправить тёплое утреннее сообщение клиенту ID %s", c.get("id"))
+        await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
 
 
 async def send_payment_reminders(bot: Bot):
@@ -76,6 +77,7 @@ async def send_payment_reminders(bot: Bot):
             )
         except Exception:
             logger.exception("Не удалось отправить напоминание об оплате клиенту ID %s", g.get("client_id"))
+        await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
 
 
 async def setup_commands(bot: Bot):
@@ -97,7 +99,6 @@ async def setup_commands(bot: Bot):
             BotCommand(command="broadcasts_off", description="Выключить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_on", description="Включить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_status", description="Статус автоматических рассылок"),
-            BotCommand(command="notify_requisites_change", description="Оповестить всех клиентов о смене реквизитов"),
         ]
         try:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))

@@ -332,6 +332,7 @@ async def chosen_payment(callback: CallbackQuery, state: FSMContext):
     await state.update_data(cur_payment=payment, card_screenshot=None, card_status="")
 
     if _is_card_payment(payment):
+        await callback.message.answer(texts.CARD_REQUISITES_CHANGED_NOTICE)
         await callback.message.answer(texts.CARD_REQUISITES_MSG.format(requisites=texts.REQUISITES_TEXT))
         await callback.message.answer(texts.CARD_PAYMENT_ASK, reply_markup=kb.card_payment_kb())
         await state.set_state(Order.card_decision)
