@@ -70,7 +70,7 @@ SUPPORT_BTN = "🤍 Поддержка"
 COURIER_ROUTE_BTN = "🚚 Мой маршрут"
 ADMIN_ROUTE_BTN = "🗺 Маршрут (админ)"
 
-REQUISITES_TEXT = "5614 6829 1627 0798\nVladislav Visotskiy"
+REQUISITES_TEXT = "5614 6829 1396 2496\nXalilov Ayder"
 
 WELCOME_NEW = (
     "☘️ Привет, здесь PAUSE.\n\n"
@@ -415,7 +415,8 @@ ADMIN_COMMANDS_LIST = (
     "/giveaway_close — закрыть приём участников (перед ручным подведением итогов)\n"
     "/broadcasts_off — выключить автоматические рассылки клиентам\n"
     "/broadcasts_on — включить обратно\n"
-    "/broadcasts_status — текущий статус рассылок"
+    "/broadcasts_status — текущий статус рассылок\n"
+    "/notify_requisites_change — разово оповестить всех клиентов о смене реквизитов"
 )
 
 CARE_LINES = [
@@ -425,9 +426,9 @@ CARE_LINES = [
 ]
 
 # --- Рассылки клиентам ---
-MORNING_GREETING = "Здравствуйте, {name} 🌿 Позвольте позаботиться о вашем желудке ☺️💫"
-NEW_MENU_GREETING = (
-    "Здравствуйте, {name} 🌿 Меню на сегодня уже готово — "
-    "придумали кое-что тёплое специально для вас ✨"
-)
+MORNING_GREETING = "Доброе утро, {name} ☘️"
+NEW_MENU_GREETING = "{name}, сегодняшнее меню уже здесь 🌿 Загляните, когда будет минутка — ждём вас"
 MENU_BROADCAST_BTN = "💌 Посмотреть меню"
+
+REQUISITES_CHANGE_HEADER = "⚠️ Внимание — реквизиты для оплаты изменились\n\nПожалуйста, при следующей оплате картой используйте новые данные:"
+ADMIN_REQUISITES_CHANGE_DONE = "Оповещено {sent} из {total}"

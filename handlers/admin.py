@@ -603,3 +603,34 @@ async def cmd_broadcasts_status(message: Message):
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_OFF)
     else:
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_ON)
+
+
+# ---------------------------------------------------------------------------
+# Разовое оповещение всем клиентам о смене реквизитов
+# ---------------------------------------------------------------------------
+
+_REQUISITES_BROADCAST_DELAY = 0.1  # секунд между клиентами — чтобы не словить
+# flood-контроль Telegram на большом списке получателей
+
+
+@router.message(Command("notify_requisites_change"))
+async def cmd_notify_requisites_change(message: Message, bot: Bot):
+    """Разовая ручная рассылка ВСЕМ зарегистрированным клиентам (не через
+    is_broadcasts_disabled() — это не ежедневная тёплая рассылка, а важное
+    разовое уведомление, которое должно дойти независимо от того, выключены
+    ли обычные авторассылки). Текст и реквизиты — двумя отдельными
+    сообщениями, как и в шаге оплаты картой при заказе."""
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    clients = sheets.get_broadcast_clients()
+    sent = 0
+    for c in clients:
+        try:
+            await bot.send_message(int(c["tg_id"]), texts.REQUISITES_CHANGE_HEADER)
+            await bot.send_message(int(c["tg_id"]), texts.REQUISITES_TEXT)
+            sent += 1
+        except Exception:
+            logger.exception("Не удалось отправить оповещение о смене реквизитов клиенту ID %s", c.get("id"))
+        await asyncio.sleep(_REQUISITES_BROADCAST_DELAY)
+    await message.answer(texts.ADMIN_REQUISITES_CHANGE_DONE.format(sent=sent, total=len(clients)))

@@ -97,6 +97,7 @@ async def setup_commands(bot: Bot):
             BotCommand(command="broadcasts_off", description="Выключить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_on", description="Включить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_status", description="Статус автоматических рассылок"),
+            BotCommand(command="notify_requisites_change", description="Оповестить всех клиентов о смене реквизитов"),
         ]
         try:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))
