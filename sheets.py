@@ -528,6 +528,7 @@ def get_payment_screenshots(date_str: str) -> list:
             "qty": row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else "",
             "sum": _row_amount(row, prices),
             "screenshot": screenshot,
+            "payment": row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else "",
         })
 
     return out

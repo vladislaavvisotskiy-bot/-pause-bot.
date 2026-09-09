@@ -389,6 +389,7 @@ ADMIN_NO_PAYMENTS_FOR_DATE = "Скринов оплаты за {date} нет."
 ADMIN_PAYMENTS_HEADER = "💳 Скрины оплаты за {date} — {count} шт.:"
 ADMIN_PAYMENT_ITEM_CAPTION = "{name} — {qty}× {set_name} — {sum} сум"
 ADMIN_PAYMENT_SEND_FAILED = "⚠️ Не удалось отправить скрин {name} (строка {row}): {error}"
+ADMIN_PAYMENT_ALREADY_CONFIRMED_SUFFIX = "\n\n✅ Уже подтверждено"
 
 ADMIN_BROADCASTS_OFF = (
     "🔕 Автоматические рассылки клиентам выключены.\n"

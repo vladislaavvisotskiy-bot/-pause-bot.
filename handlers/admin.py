@@ -424,10 +424,16 @@ async def _send_payments_for_date(bot: Bot, chat_id: int, date_str: str):
             set_name=texts.display_set_name(entry["set"]) if entry.get("set") else "",
             sum=f"{entry['sum']:,}".replace(",", " "),
         )
+        # Уже подтверждённые скрины (столбец K = "Картой") показываем без
+        # кнопки — иначе повторный /payments снова предлагал "Подтвердить"
+        # то, что уже подтверждено.
+        already_confirmed = entry.get("payment") == "Картой"
+        if already_confirmed:
+            caption += texts.ADMIN_PAYMENT_ALREADY_CONFIRMED_SUFFIX
         try:
             await bot.send_photo(
                 chat_id, entry["screenshot"], caption=caption,
-                reply_markup=kb.card_confirm_admin_kb(str(entry["row"])),
+                reply_markup=None if already_confirmed else kb.card_confirm_admin_kb(str(entry["row"])),
             )
         except Exception as e:
             logger.exception("Не удалось отправить скрин оплаты клиента %s (строка %s)", entry.get("client_id"), entry.get("row"))
