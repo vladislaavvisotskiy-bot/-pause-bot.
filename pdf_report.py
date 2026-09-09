@@ -14,21 +14,33 @@ import sheets
 
 
 def build_kitchen_report_pdf(date_str: str) -> bytes:
-    orders = sheets.get_orders_for_date(date_str)
+    items = sheets.get_kitchen_line_items(date_str)
 
     totals = {}
     total = 0
+    # По направлению, а внутри направления — по клиенту: несколько позиций
+    # одного клиента за день объединяются в одну строку под одним именем,
+    # той же группировкой (по имени, с готовым "piece" на позицию), что и в
+    # текстовом /kitchen (sheets.build_kitchen_report) — раньше здесь была
+    # отдельная, менее полная логика вообще без группировки по клиенту, и
+    # один человек с несколькими сетами показывался несколькими строками с
+    # повторяющимся именем.
     by_zone = {}
     zone_order = []
-    for o in orders:
+    for o in items:
         qty = int(o["qty"]) if o["qty"].isdigit() else 0
         total += qty
         totals[o["set"]] = totals.get(o["set"], 0) + qty
         zone = o["zone"] or "Без направления"
         if zone not in by_zone:
-            by_zone[zone] = []
+            by_zone[zone] = {}
             zone_order.append(zone)
-        by_zone[zone].append(o)
+        clients_in_zone = by_zone[zone]
+        if o["name"] not in clients_in_zone:
+            clients_in_zone[o["name"]] = {"pieces": [], "comments": []}
+        clients_in_zone[o["name"]]["pieces"].append(o["piece"])
+        if o["comment"]:
+            clients_in_zone[o["name"]]["comments"].append(o["comment"])
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -47,8 +59,8 @@ def build_kitchen_report_pdf(date_str: str) -> bytes:
         pdf.cell(0, 6, f"    {count} — {set_name}", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(6)
 
-    col_widths = (42, 50, 16, 42, 40)
-    headers = ("Имя", "Сет", "Кол-во", "Гарнир", "Комментарий")
+    col_widths = (45, 105, 40)
+    headers = ("Имя", "Позиции", "Комментарий")
     row_h = 7
 
     def table_header():
@@ -65,20 +77,18 @@ def build_kitchen_report_pdf(date_str: str) -> bytes:
         table_header()
 
         pdf.set_font("DejaVu", "", 9)
-        for o in by_zone[zone]:
+        for name, data in by_zone[zone].items():
             values = (
-                _clip(o["name"], 22),
-                _clip(o["set"], 26),
-                o["qty"],
-                _clip(o["garnish"] or "—", 22),
-                _clip(o["comment"] or "", 24),
+                _clip(name, 26),
+                _clip(" ".join(data["pieces"]), 60),
+                _clip("; ".join(data["comments"]), 24),
             )
             for w, v in zip(col_widths, values):
                 pdf.cell(w, row_h, v, border=1)
             pdf.ln(row_h)
         pdf.ln(5)
 
-    if not orders:
+    if not items:
         pdf.set_font("DejaVu", "", 12)
         pdf.cell(0, 8, "На эту дату заказов нет.", new_x="LMARGIN", new_y="NEXT")
 

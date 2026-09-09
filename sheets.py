@@ -961,8 +961,14 @@ def get_client_ticket_counts(date_str: str) -> dict:
 # просто пересчитанные тут, чтобы бот мог прислать их сам
 # ---------------------------------------------------------------------------
 
-def get_orders_for_date(date_str: str) -> list:
-    """Сырые строки заказов на дату (без отменённых) — источник для PDF-отчёта.
+def get_kitchen_line_items(date_str: str) -> list:
+    """Сырые строки заказов на дату (без отменённых), с уже посчитанным
+    "piece" ("Nшт Сет (Гарнир)") — общий источник и для текстового
+    /kitchen (build_kitchen_report), и для PDF-версии
+    (pdf_report.build_kitchen_report_pdf), чтобы группировка по клиенту
+    (несколько позиций одного клиента — в одну строку под одним именем)
+    считалась ровно один раз и одинаково в обоих отчётах.
+
     Имя резолвим сами по ID клиента — не полагаемся на формулу в таблице
     (она может быть не протянута на новые строки)."""
     ws = _ws(config.SHEET_ORDERS)
@@ -984,67 +990,54 @@ def get_orders_for_date(date_str: str) -> list:
         if is_canceled(comment):
             continue
         name = (clients.get(client_id) or {}).get("name") or row[config.O_NAME - 1].strip() or client_id
-        out.append({
-            "name": name,
-            "zone": row[config.O_ZONE - 1].strip(),
-            "point": row[config.O_POINT - 1].strip(),
-            "set": row[config.O_SET - 1].strip(),
-            "qty": row[config.O_QTY - 1].strip() or "0",
-            "garnish": row[config.O_GARNISH - 1].strip(),
-            "comment": comment,
-        })
-    return out
-
-
-def build_kitchen_report(date_str: str) -> str:
-    ws = _ws(config.SHEET_ORDERS)
-    rows = ws.get_all_values()
-    clients = _clients_index()
-    lines_by_name = {}
-    order_by_name = []
-    comments = []
-    total = blyudo = standart = 0
-
-    for i, row in enumerate(rows):
-        r = i + 1
-        if r < config.ORDERS_DATA_START_ROW:
-            continue
-        if len(row) < config.O_TELEGRAM:
-            row = row + [""] * (config.O_TELEGRAM - len(row))
-        if row[config.O_DATE - 1].strip() != date_str:
-            continue
-        client_id = row[config.O_CLIENT_ID - 1].strip()
-        if not client_id:
-            continue
-        comment = row[config.O_COMMENT - 1].strip()
-        if is_canceled(comment):
-            continue
-        name = (clients.get(client_id) or {}).get("name") or row[config.O_NAME - 1].strip() or client_id
         set_name = row[config.O_SET - 1].strip()
         qty = row[config.O_QTY - 1].strip() or "0"
         garnish = row[config.O_GARNISH - 1].strip()
-
-        try:
-            q = int(qty)
-        except ValueError:
-            q = 0
-        total += q
-        if set_name == "Блюдо дня":
-            blyudo += q
-        elif set_name == "Сет стандарт":
-            standart += q
 
         piece = f"{qty}шт {set_name}"
         if garnish and garnish != "без гарнира":
             piece += f" ({garnish})"
 
+        out.append({
+            "client_id": client_id,
+            "name": name,
+            "zone": row[config.O_ZONE - 1].strip(),
+            "point": row[config.O_POINT - 1].strip(),
+            "set": set_name,
+            "qty": qty,
+            "garnish": garnish,
+            "comment": comment,
+            "piece": piece,
+        })
+    return out
+
+
+def build_kitchen_report(date_str: str) -> str:
+    items = get_kitchen_line_items(date_str)
+    lines_by_name = {}
+    order_by_name = []
+    comments = []
+    total = blyudo = standart = 0
+
+    for item in items:
+        try:
+            q = int(item["qty"])
+        except ValueError:
+            q = 0
+        total += q
+        if item["set"] == "Блюдо дня":
+            blyudo += q
+        elif item["set"] == "Сет стандарт":
+            standart += q
+
+        name = item["name"]
         if name not in lines_by_name:
             lines_by_name[name] = []
             order_by_name.append(name)
-        lines_by_name[name].append(piece)
+        lines_by_name[name].append(item["piece"])
 
-        if comment:
-            comments.append(f"{name} - {comment}")
+        if item["comment"]:
+            comments.append(f"{name} - {item['comment']}")
 
     out = ["ИНФОРМАЦИЯ ДЛЯ КУХНИ", "", f"{total} сетов", f"{blyudo} - Блюдо дня", f"{standart} - Сет стандарт", ""]
     for name in order_by_name:
