@@ -126,6 +126,25 @@ async def _role_for(tg_id) -> str:
     return ""
 
 
+# Каждая из sheets.get_route_for_date/reorder_route/add_route_point/
+# remove_route_point/mark_route_delivered сама по себе атомарна (читает
+# текущие строки листа "Маршрут", решает, что делать, и пишет) — но НИЧЕГО
+# не мешало ДВУМ таким операциям выполняться одновременно (два запроса от
+# одного и того же браузера, если сработали быстро один за другим, или два
+# разных клиента). Пока каждая из них считает номера строк по СВОЕМУ
+# собственному снимку листа, а не по актуальному — например, один запрос
+# удаляет строку 14, из-за чего все нижесидящие строки сдвигаются на одну
+# вверх, а параллельный запрос, уже вычисливший "строка 15" по старому
+# снимку, записывает результат уже в другую, чужую точку. Именно так
+# перетаскивание и удаление, отправленные быстро друг за другом, могли
+# столкнуться и испортить порядок/строки листа — воспроизведено и
+# подтверждено на реальных данных. Единственный по-настоящему надёжный
+# способ исключить это — не давать таким операциям идти параллельно вообще:
+# все точки входа, которые читают или пишут "Маршрут" на конкретную дату,
+# берут этот лок и работают строго по очереди, а не одновременно.
+_route_lock = asyncio.Lock()
+
+
 @web.middleware
 async def error_middleware(request: web.Request, handler):
     """Последняя линия обороны: если что-то ниже по цепочке (включая саму
@@ -173,7 +192,8 @@ async def api_me(request: web.Request):
 async def api_route_get(request: web.Request):
     date_str = request.query.get("date") or _today()
     role = request["role"]
-    route = await _retry_sheets(sheets.get_route_for_date, date_str)
+    async with _route_lock:
+        route = await _retry_sheets(sheets.get_route_for_date, date_str)
     if role == "courier":
         tg_id = str(request["tg_id"])
         route = [p for p in route if p["courier_tg_id"] == tg_id]
@@ -195,7 +215,8 @@ async def api_route_reorder(request: web.Request):
     # Это осознанное действие админа (перетащил карточку) — потерять его
     # обиднее, чем лишний повторный показ маршрута, поэтому здесь два повтора
     # вместо одного.
-    await _retry_sheets(sheets.reorder_route, date_str, order_map, retries=2)
+    async with _route_lock:
+        await _retry_sheets(sheets.reorder_route, date_str, order_map, retries=2)
     return web.json_response({"ok": True})
 
 
@@ -207,7 +228,8 @@ async def api_route_add(request: web.Request):
     point = (body.get("point") or "").strip()
     if not point:
         return web.json_response({"error": "point required"}, status=400)
-    await _retry_sheets(sheets.add_route_point, date_str, point)
+    async with _route_lock:
+        await _retry_sheets(sheets.add_route_point, date_str, point)
     return web.json_response({"ok": True})
 
 
@@ -217,7 +239,8 @@ async def api_route_remove(request: web.Request):
     body = await request.json()
     date_str = body.get("date") or _today()
     point = (body.get("point") or "").strip()
-    await _retry_sheets(sheets.remove_route_point, date_str, point)
+    async with _route_lock:
+        await _retry_sheets(sheets.remove_route_point, date_str, point)
     return web.json_response({"ok": True})
 
 
@@ -227,13 +250,14 @@ async def api_route_complete(request: web.Request):
     point = (body.get("point") or "").strip()
     if not point:
         return web.json_response({"error": "point required"}, status=400)
-    if request["role"] == "courier":
-        # курьер может отмечать сданными только свои собственные точки
-        route = await _retry_sheets(sheets.get_route_for_date, date_str)
-        mine = {p["point"] for p in route if p["courier_tg_id"] == str(request["tg_id"])}
-        if point not in mine:
-            return web.json_response({"error": "forbidden"}, status=403)
-    await _retry_sheets(sheets.mark_route_delivered, date_str, point, retries=2)
+    async with _route_lock:
+        if request["role"] == "courier":
+            # курьер может отмечать сданными только свои собственные точки
+            route = await _retry_sheets(sheets.get_route_for_date, date_str)
+            mine = {p["point"] for p in route if p["courier_tg_id"] == str(request["tg_id"])}
+            if point not in mine:
+                return web.json_response({"error": "forbidden"}, status=403)
+        await _retry_sheets(sheets.mark_route_delivered, date_str, point, retries=2)
     return web.json_response({"ok": True})
 
 
@@ -241,7 +265,8 @@ async def api_earnings(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
     date_str = request.query.get("date") or _today()
-    total = await _retry_sheets(sheets.get_courier_earnings, request["tg_id"], date_str)
+    async with _route_lock:
+        total = await _retry_sheets(sheets.get_courier_earnings, request["tg_id"], date_str)
     return web.json_response({"date": date_str, "total": total})
 
 
@@ -254,7 +279,8 @@ async def api_earnings_month(request: web.Request):
     except (TypeError, ValueError):
         now = sheets._now()
         year, month = now.year, now.month
-    total = await _retry_sheets(sheets.get_courier_earnings_month, request["tg_id"], year, month)
+    async with _route_lock:
+        total = await _retry_sheets(sheets.get_courier_earnings_month, request["tg_id"], year, month)
     return web.json_response({"year": year, "month": month, "total": total})
 
 

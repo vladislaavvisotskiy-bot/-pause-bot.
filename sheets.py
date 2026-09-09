@@ -1333,7 +1333,18 @@ def sync_daily_route(date_str: str):
     """Гарантирует, что для каждой точки с реальным заказом на дату есть
     строка в "Маршрут" — не трогает уже существующие строки (порядок,
     статус, курьера), только добавляет недостающие. Идемпотентно, безопасно
-    вызывать при каждом открытии экрана — актуальность не кэшируется."""
+    вызывать при каждом открытии экрана — актуальность не кэшируется.
+
+    Новые (или заново появившиеся — например, точку удалили из маршрута
+    через Mini App, но у неё всё ещё есть настоящий заказ на сегодня, так
+    что она "воскресает" здесь) точки ставятся В КОНЕЦ текущего маршрута, а
+    не по "Приоритету" из каталога "Точки доставки": у большинства точек
+    там приоритет не заполнен (= 0), и раньше это означало, что такая точка
+    подставлялась с "Порядок" = 0 и пересортировкой улетала в САМОЕ НАЧАЛО
+    списка — из-за чего, например, удаление точки с активным заказом
+    выглядело как "не удалилась, а перепрыгнула наверх". Приоритет
+    по-прежнему используется, но только чтобы упорядочить МЕЖДУ СОБОЙ
+    точки, добавляемые в этот раз, а не как абсолютный номер позиции."""
     points_with_orders = set(get_route_people(date_str).keys())
     if not points_with_orders:
         return
@@ -1341,6 +1352,7 @@ def sync_daily_route(date_str: str):
     ws = _ws(config.SHEET_ROUTE)
     rows = ws.get_all_values()
     existing = set()
+    max_order = 0
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.ROUTE_DATA_START_ROW:
@@ -1349,6 +1361,10 @@ def sync_daily_route(date_str: str):
             continue
         if row[config.ROUTE_DATE - 1].strip() == date_str:
             existing.add(row[config.ROUTE_POINT - 1].strip())
+            try:
+                max_order = max(max_order, float(row[config.ROUTE_ORDER - 1] or 0))
+            except (ValueError, IndexError):
+                pass
 
     missing = points_with_orders - existing
     if not missing:
@@ -1358,12 +1374,12 @@ def sync_daily_route(date_str: str):
     couriers = _active_couriers()
     default_courier = couriers[0]["tg_id"] if couriers else ""
 
+    missing_sorted = sorted(missing, key=lambda point: dp_index.get(point, {}).get("priority", 0))
     new_rows = [
-        [date_str, point, default_courier, dp_index.get(point, {}).get("priority", 0),
+        [date_str, point, default_courier, max_order + i,
          config.ROUTE_STATUS_WAITING, ""]
-        for point in missing
+        for i, point in enumerate(missing_sorted, start=1)
     ]
-    new_rows.sort(key=lambda row: row[3] if isinstance(row[3], (int, float)) else 0)
     ws.append_rows(new_rows, value_input_option="RAW")
 
 
