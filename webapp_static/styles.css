@@ -70,6 +70,31 @@ header h1 {
 
 .screen { padding: 4px 18px 32px; }
 
+.date-pills {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+}
+.date-pill {
+  flex: 0 0 auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.date-pill.active {
+  background: var(--rose-deep);
+  border-color: var(--rose-deep);
+  color: var(--on-accent);
+}
+
 #map {
   width: 100%;
   height: 230px;
@@ -343,5 +368,52 @@ header h1 {
   color: var(--ink);
 }
 .modal-list-empty { color: var(--ink-soft); text-align: center; padding: 24px; }
+
+.modal-text {
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+.modal-actions { display: flex; flex-direction: column; gap: 8px; }
+.modal-actions .primary-btn { margin-top: 0; }
+
+.person-line a { color: var(--rose-deep); text-decoration: none; }
+.person-line a:active { opacity: .7; }
+
+.route-comment-block {
+  background: rgba(184, 126, 108, 0.1);
+  border: 1px solid rgba(184, 126, 108, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 12px;
+}
+
+.route-comment-edit { margin-bottom: 14px; }
+.route-comment-label {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.route-comment-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-0);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  padding: 10px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.route-comment-save {
+  padding: 6px 4px;
+}
 
 [hidden] { display: none !important; }

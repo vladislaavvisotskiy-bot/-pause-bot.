@@ -11,7 +11,9 @@
     role: "",
     tgId: null,
     points: [],
-    date: null,       // DD.MM.YYYY — дата маршрута (всегда "сегодня" по активному меню)
+    date: null,        // DD.MM.YYYY — сейчас выбранная в переключателе дата
+    activeDate: null,   // DD.MM.YYYY — "сегодня" по активному меню, для подписи в переключателе
+    dates: [],          // доступные для выбора даты (см. loadRouteDates)
     expanded: {},      // point -> bool
     map: null,
     markers: [],
@@ -78,6 +80,18 @@
     return items.map(function (i) {
       return i.qty + "× " + i.set;
     }).join(", ");
+  }
+
+  function telHref(contact) {
+    // Номера в таблице — свободный текст вида "90 978 52 45" (без кода
+    // страны). tel: ссылке нужен реальный телефонный номер — считаем, что
+    // 9-значный номер без кода это узбекский местный формат и дописываем
+    // 998 спереди; более длинный номер (уже с кодом страны) оставляем как
+    // есть. "Неизвестно"/пусто — не ссылка.
+    var digits = (contact || "").replace(/\D/g, "");
+    if (!digits) return null;
+    if (digits.length === 9) digits = "998" + digits;
+    return "tel:+" + digits;
   }
 
   // -------------------------------------------------------------------
@@ -209,12 +223,19 @@
 
     var main = document.createElement("div");
     main.className = "card-main";
+    // Название точки — всегда первой и чётко видной строкой (раньше сюда
+    // подставлялся адрес, а если его не было — то же название точки уходило
+    // во вторую строку, и было непонятно, что именно за точка перед
+    // глазами). Адрес — под ним, если он есть в каталоге "Точки доставки".
     var addr = document.createElement("div");
     addr.className = "card-address";
-    addr.textContent = point.address || point.point;
+    addr.textContent = point.point;
     var sub = document.createElement("div");
     sub.className = "card-sub";
-    sub.textContent = totalPeople + (totalPeople === 1 ? " человек" : " человек(а)") + " · " + point.point;
+    var subParts = [];
+    if (point.address) subParts.push(point.address);
+    subParts.push(totalPeople + (totalPeople === 1 ? " человек" : " человек(а)"));
+    sub.textContent = subParts.join(" · ");
     main.appendChild(addr);
     main.appendChild(sub);
     head.appendChild(main);
@@ -237,7 +258,11 @@
       removeBtn.textContent = "×";
       removeBtn.addEventListener("click", function (e) {
         e.stopPropagation();
-        removePoint(point.point);
+        showConfirm(
+          "Убрать «" + point.point + "» из маршрута на " + state.date + "?",
+          "Да, убрать",
+          function () { removePoint(point.point); }
+        );
       });
       head.appendChild(removeBtn);
     }
@@ -251,6 +276,40 @@
 
     var body = document.createElement("div");
     body.className = "card-body";
+
+    // "Комментарий для курьера" — на этот день у этой точки, не связан с
+    // конкретным человеком (пример: "заберёт Тимур, звоните ему"). Админ
+    // может вписать/изменить в любой момент; курьер видит его отдельным
+    // заметным блоком.
+    if (state.role === "admin") {
+      var commentWrap = document.createElement("div");
+      commentWrap.className = "route-comment-edit";
+      var commentLabel = document.createElement("div");
+      commentLabel.className = "route-comment-label";
+      commentLabel.textContent = "💬 Комментарий для курьера";
+      var commentInput = document.createElement("textarea");
+      commentInput.className = "route-comment-input";
+      commentInput.rows = 2;
+      commentInput.value = point.courier_comment || "";
+      commentInput.addEventListener("click", function (e) { e.stopPropagation(); });
+      var commentSave = document.createElement("button");
+      commentSave.className = "ghost-btn route-comment-save";
+      commentSave.textContent = "Сохранить";
+      commentSave.addEventListener("click", function (e) {
+        e.stopPropagation();
+        saveCourierComment(point.point, commentInput.value);
+      });
+      commentWrap.appendChild(commentLabel);
+      commentWrap.appendChild(commentInput);
+      commentWrap.appendChild(commentSave);
+      body.appendChild(commentWrap);
+    } else if (point.courier_comment) {
+      var commentBlock = document.createElement("div");
+      commentBlock.className = "route-comment-block";
+      commentBlock.textContent = "💬 " + point.courier_comment;
+      body.appendChild(commentBlock);
+    }
+
     point.people.forEach(function (p) {
       var pDiv = document.createElement("div");
       pDiv.className = "person";
@@ -259,7 +318,16 @@
       name.textContent = p.name;
       var line1 = document.createElement("div");
       line1.className = "person-line";
-      line1.textContent = p.contact + " · " + itemsText(p.items);
+      var tel = telHref(p.contact);
+      if (tel) {
+        var contactLink = document.createElement("a");
+        contactLink.href = tel;
+        contactLink.textContent = p.contact;
+        line1.appendChild(contactLink);
+        line1.appendChild(document.createTextNode(" · " + itemsText(p.items)));
+      } else {
+        line1.textContent = p.contact + " · " + itemsText(p.items);
+      }
       pDiv.appendChild(name);
       pDiv.appendChild(line1);
       if (p.comment) {
@@ -315,7 +383,13 @@
   function render() {
     // Раз мы тут — запрос успешно отработал, так что любая ошибка/кнопка
     // "Повторить" от прошлой неудачной попытки больше не актуальна.
-    document.getElementById("empty-state-text").textContent = "На сегодня точек с заказами пока нет 🌿";
+    // "На сегодня" только если реально смотрим на активную дату — на любой
+    // другой выбранной дате пустой список означает просто "на эту дату
+    // заказов пока нет", а не что-то сломалось.
+    document.getElementById("empty-state-text").textContent =
+      state.date === state.activeDate
+        ? "На сегодня точек с заказами пока нет 🌿"
+        : "На эту дату заказов пока нет 🌿";
     document.getElementById("retry-btn").hidden = true;
 
     document.getElementById("empty-state").hidden = state.points.length > 0;
@@ -323,14 +397,16 @@
     document.getElementById("add-point-btn").hidden = state.role !== "admin";
     renderMap(state.points);
     renderCards();
+    renderDatePicker();
   }
 
   // -------------------------------------------------------------------
   // Действия
   // -------------------------------------------------------------------
 
-  function loadRoute() {
-    return api("/api/route").then(function (data) {
+  function loadRoute(dateOverride) {
+    var url = "/api/route" + (dateOverride ? "?date=" + encodeURIComponent(dateOverride) : "");
+    return api(url).then(function (data) {
       state.date = data.date;
       state.points = data.points;
       render();
@@ -343,6 +419,50 @@
       if (!state.points.length) {
         showLoadError("Не получилось загрузить маршрут — временная проблема с сервером.");
       }
+    });
+  }
+
+  function loadRouteDates() {
+    return api("/api/route/dates").then(function (data) {
+      state.dates = data.dates;
+      state.activeDate = data.active;
+      renderDatePicker();
+    }).catch(function () {
+      // Не критично — просто не покажем переключатель дат, сам маршрут
+      // при этом всё равно загружается отдельным запросом.
+    });
+  }
+
+  function dateLabel(d) {
+    if (d === state.activeDate) return "Сегодня";
+    var toDate = function (ru) {
+      var p = ru.split(".");
+      return new Date(parseInt(p[2], 10), parseInt(p[1], 10) - 1, parseInt(p[0], 10));
+    };
+    var diffDays = Math.round((toDate(d) - toDate(state.activeDate)) / 86400000);
+    if (diffDays === -1) return "Вчера";
+    if (diffDays === -2) return "Позавчера";
+    if (diffDays === 1) return "Завтра";
+    return d.slice(0, 5); // "ДД.ММ"
+  }
+
+  function renderDatePicker() {
+    var container = document.getElementById("route-date-picker");
+    if (!state.dates.length) {
+      container.hidden = true;
+      return;
+    }
+    container.hidden = false;
+    container.innerHTML = "";
+    state.dates.forEach(function (d) {
+      var btn = document.createElement("button");
+      btn.className = "date-pill" + (d === state.date ? " active" : "");
+      btn.textContent = dateLabel(d);
+      btn.addEventListener("click", function () {
+        if (d === state.date) return;
+        loadRoute(d);
+      });
+      container.appendChild(btn);
     });
   }
 
@@ -374,7 +494,7 @@
         // "откат к исходному состоянию" — он теперь ожидаемый и подписанный,
         // а не выглядит как необъяснимый сбой.
         toast("Не удалось сохранить порядок, показываю сохранённый: " + err.message);
-        return loadRoute();
+        return loadRoute(state.date);
       })
       .then(function () {
         reorderInFlight = false;
@@ -408,18 +528,31 @@
   }
 
   function removePoint(point) {
-    api("/api/route/remove", { method: "POST", body: { date: state.date, point: point } })
-      .then(function () { return loadRoute(); })
+    var date = state.date;
+    api("/api/route/remove", { method: "POST", body: { date: date, point: point } })
+      .then(function () { return loadRoute(date); })
       .catch(function (err) { toast("Не удалось убрать точку: " + err.message); });
   }
 
   function completePoint(point) {
-    api("/api/route/complete", { method: "POST", body: { date: state.date, point: point } })
+    var date = state.date;
+    api("/api/route/complete", { method: "POST", body: { date: date, point: point } })
       .then(function () {
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-        return loadRoute();
+        return loadRoute(date);
       })
       .catch(function (err) { toast("Не удалось отметить: " + err.message); });
+  }
+
+  function saveCourierComment(point, comment) {
+    var date = state.date;
+    api("/api/route/comment", { method: "POST", body: { date: date, point: point, comment: comment } })
+      .then(function () {
+        toast("Комментарий сохранён");
+        var p = state.points.filter(function (x) { return x.point === point; })[0];
+        if (p) p.courier_comment = comment;
+      })
+      .catch(function (err) { toast("Не удалось сохранить комментарий: " + err.message); });
   }
 
   function openAddPointModal() {
@@ -442,8 +575,9 @@
         item.textContent = p.name + (p.address ? " — " + p.address : "");
         item.addEventListener("click", function () {
           modal.hidden = true;
-          api("/api/route/add", { method: "POST", body: { date: state.date, point: p.name } })
-            .then(function () { return loadRoute(); })
+          var date = state.date;
+          api("/api/route/add", { method: "POST", body: { date: date, point: p.name } })
+            .then(function () { return loadRoute(date); })
             .catch(function (err) { toast("Не удалось добавить: " + err.message); });
         });
         list.appendChild(item);
@@ -506,6 +640,24 @@
     }
   }
 
+  // -------------------------------------------------------------------
+  // Подтверждение действия (диалог "Да / Отмена")
+  // -------------------------------------------------------------------
+
+  var confirmCallback = null;
+
+  function showConfirm(text, yesLabel, onYes) {
+    document.getElementById("confirm-modal-text").textContent = text;
+    document.getElementById("confirm-modal-yes").textContent = yesLabel;
+    confirmCallback = onYes;
+    document.getElementById("confirm-modal").hidden = false;
+  }
+
+  function hideConfirm() {
+    document.getElementById("confirm-modal").hidden = true;
+    confirmCallback = null;
+  }
+
   function init() {
     document.getElementById("add-point-btn").addEventListener("click", openAddPointModal);
     document.getElementById("add-point-cancel").addEventListener("click", function () {
@@ -513,6 +665,16 @@
     });
     document.getElementById("add-point-modal").addEventListener("click", function (e) {
       if (e.target.id === "add-point-modal") e.target.hidden = true;
+    });
+
+    document.getElementById("confirm-modal-yes").addEventListener("click", function () {
+      var cb = confirmCallback;
+      hideConfirm();
+      if (cb) cb();
+    });
+    document.getElementById("confirm-modal-no").addEventListener("click", hideConfirm);
+    document.getElementById("confirm-modal").addEventListener("click", function (e) {
+      if (e.target.id === "confirm-modal") hideConfirm();
     });
 
     var onEarnings = false;
@@ -541,6 +703,7 @@
       state.role = me.role;
       state.tgId = me.tg_id;
       document.getElementById("earnings-toggle-btn").hidden = me.role !== "courier";
+      loadRouteDates();
       return loadRoute();
     }).catch(function (err) {
       // 401/403 — реально не тот человек (не курьер и не админ), кнопка

@@ -24,6 +24,8 @@
   </header>
 
   <div id="route-screen" class="screen">
+    <div id="route-date-picker" class="date-pills"></div>
+
     <div id="map"></div>
 
     <div id="empty-state" class="empty-state" hidden>
@@ -65,6 +67,17 @@
       <div class="modal-title">Добавить точку</div>
       <div id="add-point-list" class="modal-list"></div>
       <button id="add-point-cancel" class="ghost-btn">Отмена</button>
+    </div>
+  </div>
+
+  <div id="confirm-modal" class="modal" hidden>
+    <div class="modal-sheet">
+      <div class="modal-title" id="confirm-modal-title">Подтвердите действие</div>
+      <p id="confirm-modal-text" class="modal-text"></p>
+      <div class="modal-actions">
+        <button id="confirm-modal-yes" class="primary-btn"></button>
+        <button id="confirm-modal-no" class="ghost-btn">Отмена</button>
+      </div>
     </div>
   </div>
 

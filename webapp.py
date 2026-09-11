@@ -200,6 +200,13 @@ async def api_route_get(request: web.Request):
     return web.json_response({"date": date_str, "role": role, "points": route})
 
 
+async def api_route_dates(request: web.Request):
+    # Не трогает лист "Маршрут" (только "Справочники" через
+    # get_active_menu_date) — блокировка _route_lock тут не нужна.
+    dates = await _retry_sheets(sheets.get_route_available_dates)
+    return web.json_response({"dates": dates, "active": _today()})
+
+
 async def api_delivery_points(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
@@ -241,6 +248,20 @@ async def api_route_remove(request: web.Request):
     point = (body.get("point") or "").strip()
     async with _route_lock:
         await _retry_sheets(sheets.remove_route_point, date_str, point)
+    return web.json_response({"ok": True})
+
+
+async def api_route_comment(request: web.Request):
+    if request["role"] != "admin":
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or _today()
+    point = (body.get("point") or "").strip()
+    comment = (body.get("comment") or "").strip()
+    if not point:
+        return web.json_response({"error": "point required"}, status=400)
+    async with _route_lock:
+        await _retry_sheets(sheets.set_route_courier_comment, date_str, point, comment)
     return web.json_response({"ok": True})
 
 
@@ -295,10 +316,12 @@ def create_app() -> web.Application:
     app.router.add_static("/miniapp/static/", STATIC_DIR, show_index=False)
     app.router.add_get("/api/me", api_me)
     app.router.add_get("/api/route", api_route_get)
+    app.router.add_get("/api/route/dates", api_route_dates)
     app.router.add_get("/api/delivery_points", api_delivery_points)
     app.router.add_post("/api/route/reorder", api_route_reorder)
     app.router.add_post("/api/route/add", api_route_add)
     app.router.add_post("/api/route/remove", api_route_remove)
+    app.router.add_post("/api/route/comment", api_route_comment)
     app.router.add_post("/api/route/complete", api_route_complete)
     app.router.add_get("/api/earnings", api_earnings)
     app.router.add_get("/api/earnings/month", api_earnings_month)

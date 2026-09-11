@@ -1326,19 +1326,23 @@ def get_route_people(date_str: str) -> dict:
 def sync_daily_route(date_str: str):
     """Гарантирует, что для каждой точки с реальным заказом на дату есть
     строка в "Маршрут" — не трогает уже существующие строки (порядок,
-    статус, курьера), только добавляет недостающие. Идемпотентно, безопасно
-    вызывать при каждом открытии экрана — актуальность не кэшируется.
+    статус, курьера, комментарий), только добавляет недостающие.
+    Идемпотентно, безопасно вызывать при каждом открытии экрана —
+    актуальность не кэшируется.
 
-    Новые (или заново появившиеся — например, точку удалили из маршрута
-    через Mini App, но у неё всё ещё есть настоящий заказ на сегодня, так
-    что она "воскресает" здесь) точки ставятся В КОНЕЦ текущего маршрута, а
-    не по "Приоритету" из каталога "Точки доставки": у большинства точек
-    там приоритет не заполнен (= 0), и раньше это означало, что такая точка
-    подставлялась с "Порядок" = 0 и пересортировкой улетала в САМОЕ НАЧАЛО
-    списка — из-за чего, например, удаление точки с активным заказом
-    выглядело как "не удалилась, а перепрыгнула наверх". Приоритет
-    по-прежнему используется, но только чтобы упорядочить МЕЖДУ СОБОЙ
-    точки, добавляемые в этот раз, а не как абсолютный номер позиции."""
+    Новая точка ставится в маршрут с "Порядок" = её "Приоритет" из каталога
+    "Точки доставки" (прямое значение, не подстроенное под текущий конец
+    списка) — админ поддерживает приоритеты с шагом (10, 20, 30…) именно
+    для того, чтобы порядок в маршруте отражал его расстановку, а не момент,
+    когда по точке пришёл первый заказ за день.
+
+    Точка, которую убрали из маршрута через Mini App (см.
+    remove_route_point — помечается статусом ROUTE_STATUS_REMOVED, а не
+    удаляется), не попадает в "недостающие": её строка на эту дату уже
+    существует, поэтому она не создаётся заново, даже если по ней всё ещё
+    есть настоящий заказ. Без этого — старое поведение — любая точка с
+    активным заказом "воскресала" на следующей же загрузке, и удаление
+    выглядело так, будто оно не работает."""
     points_with_orders = set(get_route_people(date_str).keys())
     if not points_with_orders:
         return
@@ -1346,7 +1350,6 @@ def sync_daily_route(date_str: str):
     ws = _ws(config.SHEET_ROUTE)
     rows = ws.get_all_values()
     existing = set()
-    max_order = 0
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.ROUTE_DATA_START_ROW:
@@ -1355,10 +1358,6 @@ def sync_daily_route(date_str: str):
             continue
         if row[config.ROUTE_DATE - 1].strip() == date_str:
             existing.add(row[config.ROUTE_POINT - 1].strip())
-            try:
-                max_order = max(max_order, float(row[config.ROUTE_ORDER - 1] or 0))
-            except (ValueError, IndexError):
-                pass
 
     missing = points_with_orders - existing
     if not missing:
@@ -1368,19 +1367,23 @@ def sync_daily_route(date_str: str):
     couriers = _active_couriers()
     default_courier = couriers[0]["tg_id"] if couriers else ""
 
-    missing_sorted = sorted(missing, key=lambda point: dp_index.get(point, {}).get("priority", 0))
     new_rows = [
-        [date_str, point, default_courier, max_order + i,
+        [date_str, point, default_courier, dp_index.get(point, {}).get("priority", 0),
          config.ROUTE_STATUS_WAITING, ""]
-        for i, point in enumerate(missing_sorted, start=1)
+        for point in missing
     ]
     ws.append_rows(new_rows, value_input_option="RAW")
 
 
 def get_route_for_date(date_str: str) -> list:
     """Полный маршрут на дату — точки с людьми, координатами, ставкой,
-    статусом, отсортирован по "Порядок". Сначала синхронизирует новые точки
-    (см. sync_daily_route) — данные всегда актуальны на момент вызова."""
+    статусом, отсортирован по "Порядок" (= "Приоритет" из каталога для
+    только что подставленных точек, если админ не перетаскивал вручную).
+    Сначала синхронизирует новые точки (см. sync_daily_route) — данные
+    всегда актуальны на момент вызова. Точки со статусом ROUTE_STATUS_REMOVED
+    (см. remove_route_point) в выдачу не попадают — они "убраны" из
+    маршрута на этот день, но строка остаётся в таблице, чтобы
+    sync_daily_route не восстановил их заново."""
     sync_daily_route(date_str)
 
     ws = _ws(config.SHEET_ROUTE)
@@ -1402,6 +1405,10 @@ def get_route_for_date(date_str: str) -> list:
             idx = col - 1
             return row[idx] if idx < len(row) else ""
 
+        status = cell(config.ROUTE_STATUS).strip() or config.ROUTE_STATUS_WAITING
+        if status == config.ROUTE_STATUS_REMOVED:
+            continue
+
         point_name = cell(config.ROUTE_POINT).strip()
         dp = dp_index.get(point_name, {})
         try:
@@ -1418,13 +1425,27 @@ def get_route_for_date(date_str: str) -> list:
             "rate": dp.get("rate", 0),
             "courier_tg_id": cell(config.ROUTE_COURIER_TG_ID).strip(),
             "order": order_num,
-            "status": cell(config.ROUTE_STATUS).strip() or config.ROUTE_STATUS_WAITING,
+            "status": status,
             "delivered_at": cell(config.ROUTE_DELIVERED_AT).strip(),
+            "courier_comment": cell(config.ROUTE_COURIER_COMMENT).strip(),
             "people": people.get(point_name, []),
         })
 
     out.sort(key=lambda p: p["order"])
     return out
+
+
+def get_route_available_dates() -> list:
+    """Даты, доступные для выбора на экране "Маршрут" в Mini App —
+    сегодня и 2 предыдущих календарных дня (хронологически, старые
+    первыми), плюс завтра, если на завтра уже опубликовано меню (см.
+    get_active_menu_date) — даже если заказов на него пока 0."""
+    today = _now().date()
+    dates = [(today - dt.timedelta(days=n)).strftime("%d.%m.%Y") for n in (2, 1, 0)]
+    tomorrow_str = (today + dt.timedelta(days=1)).strftime("%d.%m.%Y")
+    if get_active_menu_date() == tomorrow_str:
+        dates.append(tomorrow_str)
+    return dates
 
 
 def reorder_route(date_str: str, order_map: dict):
@@ -1449,23 +1470,45 @@ def reorder_route(date_str: str, order_map: dict):
 
 
 def add_route_point(date_str: str, point_name: str):
-    """Добавляет точку в маршрут вручную (админ), даже если реальных
-    заказов на неё сегодня нет — ставится в конец маршрута."""
-    existing = get_route_for_date(date_str)  # заодно синхронизирует
-    if any(p["point"] == point_name for p in existing):
+    """Добавляет точку в маршрут вручную (админ) — для точек без реального
+    заказа на эту дату (точки с заказом и так появляются сами через
+    sync_daily_route). Если точку раньше убрали через Mini App (строка
+    существует со статусом ROUTE_STATUS_REMOVED) — просто возвращает её
+    обратно, а не создаёт вторую строку на ту же дату."""
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() != date_str or row[config.ROUTE_POINT - 1].strip() != point_name:
+            continue
+        status = row[config.ROUTE_STATUS - 1].strip() if len(row) >= config.ROUTE_STATUS else ""
+        if status == config.ROUTE_STATUS_REMOVED:
+            ws.update_cell(r, config.ROUTE_STATUS, config.ROUTE_STATUS_WAITING)
         return
 
-    ws = _ws(config.SHEET_ROUTE)
+    existing = get_route_for_date(date_str)  # заодно синхронизирует
     couriers = _active_couriers()
     default_courier = couriers[0]["tg_id"] if couriers else ""
     max_order = max([p["order"] for p in existing], default=0)
+    priority = _delivery_points_index().get(point_name, {}).get("priority", 0)
+    order_value = priority if priority else max_order + 1
     ws.append_row(
-        [date_str, point_name, default_courier, max_order + 1, config.ROUTE_STATUS_WAITING, ""],
+        [date_str, point_name, default_courier, order_value, config.ROUTE_STATUS_WAITING, ""],
         value_input_option="RAW",
     )
 
 
 def remove_route_point(date_str: str, point_name: str):
+    """Убирает точку из маршрута на этот день. Не удаляет строку физически
+    — помечает статусом ROUTE_STATUS_REMOVED (см. get_route_for_date,
+    которая такие строки не показывает) — потому что физическое удаление
+    строки, пока по точке ещё есть настоящий заказ, приводило к тому, что
+    sync_daily_route создавала её заново на следующей же загрузке, и
+    удаление выглядело так, будто оно не работает."""
     ws = _ws(config.SHEET_ROUTE)
     rows = ws.get_all_values()
     for i, row in enumerate(rows):
@@ -1475,7 +1518,24 @@ def remove_route_point(date_str: str, point_name: str):
         if len(row) < config.ROUTE_POINT:
             continue
         if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
-            ws.delete_rows(r)
+            ws.update_cell(r, config.ROUTE_STATUS, config.ROUTE_STATUS_REMOVED)
+            return
+
+
+def set_route_courier_comment(date_str: str, point_name: str, comment: str):
+    """Сохраняет "Комментарий для курьера" для точки на конкретный день
+    (столбец G "Маршрут") — привязан к паре (дата, точка), поэтому не
+    переносится сам собой на следующий день."""
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
+            ws.update_cell(r, config.ROUTE_COURIER_COMMENT, comment)
             return
 
 
