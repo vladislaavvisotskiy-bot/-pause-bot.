@@ -8,6 +8,7 @@
 шрифты кириллицу не показывают.
 """
 from fpdf import FPDF
+from fpdf.fonts import FontFace
 
 import config
 import sheets
@@ -61,31 +62,31 @@ def build_kitchen_report_pdf(date_str: str) -> bytes:
 
     col_widths = (45, 105, 40)
     headers = ("Имя", "Позиции", "Комментарий")
-    row_h = 7
 
-    def table_header():
-        pdf.set_font("DejaVu", "B", 10)
-        pdf.set_fill_color(230, 236, 224)
-        for w, h in zip(col_widths, headers):
-            pdf.cell(w, row_h, h, border=1, fill=True)
-        pdf.ln(row_h)
-
+    # fpdf2's table() wraps long text to fit each column's width and grows
+    # the row to fit however many lines that takes (word-wrap, not
+    # truncation) — everything after a tall row is pushed down automatically,
+    # and the table itself breaks across pages cleanly when it runs out of
+    # room. The old code used fixed-height pdf.cell() + a hand-rolled clip()
+    # that just cut long comments off with "…" instead of wrapping them.
     for zone in zone_order:
         pdf.set_font("DejaVu", "B", 13)
         pdf.set_fill_color(210, 221, 199)
         pdf.cell(0, 9, zone, new_x="LMARGIN", new_y="NEXT", fill=True)
-        table_header()
 
         pdf.set_font("DejaVu", "", 9)
-        for name, data in by_zone[zone].items():
-            values = (
-                _clip(name, 26),
-                _clip(" ".join(data["pieces"]), 60),
-                _clip("; ".join(data["comments"]), 24),
-            )
-            for w, v in zip(col_widths, values):
-                pdf.cell(w, row_h, v, border=1)
-            pdf.ln(row_h)
+        with pdf.table(
+            col_widths=col_widths,
+            text_align="LEFT",
+            headings_style=FontFace(emphasis="B", fill_color=(230, 236, 224)),
+            line_height=5,
+        ) as table:
+            table.row(headers)
+            for name, data in by_zone[zone].items():
+                row = table.row()
+                row.cell(name)
+                row.cell(" ".join(data["pieces"]))
+                row.cell("; ".join(data["comments"]))
         pdf.ln(5)
 
     if not items:
@@ -93,10 +94,3 @@ def build_kitchen_report_pdf(date_str: str) -> bytes:
         pdf.cell(0, 8, "На эту дату заказов нет.", new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
-
-
-def _clip(text: str, max_len: int) -> str:
-    text = text or ""
-    if len(text) <= max_len:
-        return text
-    return text[: max_len - 1] + "…"
