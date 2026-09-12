@@ -139,6 +139,21 @@ def menu_broadcast_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def admin_survey_confirm_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_SURVEY_CONFIRM_YES_BTN, callback_data="survey_broadcast_yes")
+    b.button(text=texts.ADMIN_SURVEY_CONFIRM_NO_BTN, callback_data="survey_broadcast_no")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def menu_survey_start_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.MENU_SURVEY_START_BTN, callback_data="survey_start")
+    b.adjust(1)
+    return b.as_markup()
+
+
 # ---------------------------------------------------------------------------
 # Раздел «Профиль»
 # ---------------------------------------------------------------------------

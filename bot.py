@@ -13,7 +13,7 @@ import sheets
 import texts
 import keyboards as kb
 import webapp
-from handlers import start, order, profile, club, admin
+from handlers import start, order, profile, club, admin, survey
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pause_bot")
@@ -99,6 +99,8 @@ async def setup_commands(bot: Bot):
             BotCommand(command="broadcasts_off", description="Выключить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_on", description="Включить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_status", description="Статус автоматических рассылок"),
+            BotCommand(command="menu_survey", description="Разослать разовый опрос о меню"),
+            BotCommand(command="menu_survey_results", description="Результаты опроса о меню"),
         ]
         try:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))
@@ -121,6 +123,7 @@ async def main():
     dp.include_router(profile.router)
     dp.include_router(club.router)
     dp.include_router(admin.router)
+    dp.include_router(survey.router)
 
     await setup_commands(bot)
 

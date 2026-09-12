@@ -604,3 +604,97 @@ async def cmd_broadcasts_status(message: Message):
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_OFF)
     else:
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_ON)
+
+
+# ---------------------------------------------------------------------------
+# Разовый опрос про меню — /menu_survey рассылает всем клиентам кнопку
+# "Пройти опрос →", ответы (см. handlers/survey.py) уходят в лист
+# "Опрос меню"; /menu_survey_results показывает, что клиенты ответили.
+# ---------------------------------------------------------------------------
+
+async def _broadcast_menu_survey(bot: Bot) -> tuple:
+    """Та же защита от флуда (BROADCAST_DELAY_SECONDS) и пропуск ошибок
+    отправки, что и в остальных рассылках (см. bot.py: send_warm_broadcast,
+    _broadcast_new_menu) — один недоступный клиент не должен обрывать
+    рассылку остальным."""
+    clients = sheets.get_broadcast_clients()
+    sent = 0
+    for c in clients:
+        try:
+            await bot.send_message(
+                int(c["tg_id"]), texts.MENU_SURVEY_INTRO, reply_markup=kb.menu_survey_start_kb(),
+            )
+            sent += 1
+        except Exception:
+            logger.exception("Не удалось отправить опрос о меню клиенту ID %s", c.get("id"))
+        await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
+    return sent, len(clients)
+
+
+@router.message(Command("menu_survey"))
+async def cmd_menu_survey(message: Message):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    # Разослать разом всем клиентам — необратимо (не отозвать уже
+    # прочитанные уведомления), поэтому обязательное подтверждение прежде
+    # чем что-то реально уйдёт.
+    await message.answer(texts.ADMIN_SURVEY_CONFIRM_PROMPT, reply_markup=kb.admin_survey_confirm_kb())
+
+
+@router.callback_query(F.data == "survey_broadcast_no")
+async def survey_broadcast_cancel(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(texts.ADMIN_SURVEY_CANCELED)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "survey_broadcast_yes")
+async def survey_broadcast_confirmed(callback: CallbackQuery, bot: Bot):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.answer()
+    await callback.message.answer(texts.ADMIN_SURVEY_SENDING)
+    sent, total = await _broadcast_menu_survey(bot)
+    await callback.message.answer(texts.ADMIN_SURVEY_SENT.format(sent=sent, total=total))
+
+
+@router.message(Command("menu_survey_results"))
+async def cmd_menu_survey_results(message: Message):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    results = sheets.get_menu_survey_results()
+    if not results:
+        await message.answer(texts.ADMIN_SURVEY_RESULTS_EMPTY)
+        return
+
+    await message.answer(texts.ADMIN_SURVEY_RESULTS_HEADER.format(count=len(results)))
+
+    # Разбиваем на несколько сообщений (лимит Telegram — 4096 символов на
+    # сообщение) — при большом числе ответов один текст всё бы не влез и
+    # оборвался бы посередине.
+    chunk, chunk_len = [], 0
+    for r in results:
+        item = texts.ADMIN_SURVEY_RESULT_ITEM.format(
+            name=r["name"] or "—", tg_id=r["tg_id"], date=r["date"] or "—",
+            a1=r["a1"] or "—", a2=r["a2"] or "—", a3=r["a3"] or "—",
+        )
+        if chunk and chunk_len + len(item) + 2 > 3500:
+            await message.answer("\n\n".join(chunk))
+            chunk, chunk_len = [], 0
+        chunk.append(item)
+        chunk_len += len(item) + 2
+    if chunk:
+        await message.answer("\n\n".join(chunk))

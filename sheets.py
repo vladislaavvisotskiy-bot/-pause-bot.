@@ -1590,3 +1590,44 @@ def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
         point = row[config.ROUTE_POINT - 1].strip()
         total += dp_index.get(point, {}).get("rate", 0)
     return total
+
+
+# ---------------------------------------------------------------------------
+# Разовый опрос про меню (/menu_survey) — свободный текст, три вопроса
+# ---------------------------------------------------------------------------
+
+def save_menu_survey_answer(tg_id, name: str, answer1: str, answer2: str, answer3: str):
+    """Каждое прохождение опроса — отдельная строка. Если один и тот же
+    клиент проходит опрос ещё раз в будущем (после нового /menu_survey) —
+    это просто ещё одна строка с более поздней датой, старая не трогается."""
+    ws = _ws(config.SHEET_MENU_SURVEY)
+    ws.append_row(
+        [str(tg_id), name, answer1, answer2, answer3, today_date_str()],
+        value_input_option="RAW",
+    )
+
+
+def get_menu_survey_results() -> list:
+    """Все прохождения опроса — [{"tg_id", "name", "a1", "a2", "a3", "date"}],
+    в порядке записи в таблице (старые сначала)."""
+    ws = _ws(config.SHEET_MENU_SURVEY)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.SURVEY_DATA_START_ROW:
+            continue
+        if len(row) < config.SURVEY_TG_ID or not row[config.SURVEY_TG_ID - 1].strip():
+            continue
+        def cell(col):
+            idx = col - 1
+            return row[idx].strip() if idx < len(row) else ""
+        out.append({
+            "tg_id": cell(config.SURVEY_TG_ID),
+            "name": cell(config.SURVEY_NAME),
+            "a1": cell(config.SURVEY_ANSWER1),
+            "a2": cell(config.SURVEY_ANSWER2),
+            "a3": cell(config.SURVEY_ANSWER3),
+            "date": cell(config.SURVEY_DATE),
+        })
+    return out
