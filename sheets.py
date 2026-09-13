@@ -37,6 +37,7 @@ _cache = {
     "couriers": None, "couriers_ts": 0,
     "delivery_points": None, "delivery_points_ts": 0,
     "active_menu_date": None, "active_menu_date_ts": 0,
+    "order_dates": None, "order_dates_ts": 0,
 }
 _CACHE_TTL = 60  # секунд — не дёргаем таблицу на каждый чих
 
@@ -1517,16 +1518,67 @@ def get_route_for_date(date_str: str) -> list:
     return out
 
 
+def _order_dates_with_data() -> set:
+    """Множество дат (текстом, как в столбце A), на которые в "Заказы" есть
+    хотя бы одна строка — независимо от статуса/отмены. Кэшируется на
+    _ROUTE_CACHE_TTL секунд по той же причине, что и _route_cache выше: это
+    ещё одно полное чтение листа "Заказы" на каждое открытие экрана
+    "Маршрут" (сверх того, что уже читает get_route_for_date для самой
+    даты) — без короткого кэша "Маршрут" и "Заказы" читались бы по два
+    раза каждый на один показ экрана, и мы вернулись бы к той же самой
+    нестабильности, которую только что убрали."""
+    now = time.time()
+    if _cache["order_dates"] is not None and now - _cache["order_dates_ts"] < _ROUTE_CACHE_TTL:
+        return _cache["order_dates"]
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    dates = set()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_DATE:
+            continue
+        d = row[config.O_DATE - 1].strip()
+        if d:
+            dates.add(d)
+    _cache["order_dates"] = dates
+    _cache["order_dates_ts"] = now
+    return dates
+
+
+# Насколько далеко вперёд от сегодня искать даты с реальными заказами для
+# переключателя дат — небольшое разумное окно, а не бесконечный поиск.
+ROUTE_DATES_LOOKAHEAD_DAYS = 14
+
+
 def get_route_available_dates() -> list:
     """Даты, доступные для выбора на экране "Маршрут" в Mini App —
     сегодня и 2 предыдущих календарных дня (хронологически, старые
-    первыми), плюс завтра, если на завтра уже опубликовано меню (см.
-    get_active_menu_date) — даже если заказов на него пока 0."""
+    первыми) показываются всегда, даже без единого заказа — это рабочее
+    окно "последних дней", которое курьер/админ должен видеть в любом
+    случае.
+
+    Дальше — любая БУДУЩАЯ дата, на которую в "Заказы" реально есть хотя
+    бы одна строка (в пределах ROUTE_DATES_LOOKAHEAD_DAYS вперёд) —
+    НЕЗАВИСИМО от того, опубликовано ли на неё меню через /admin
+    (get_active_menu_date). Раньше "завтра" появлялось в переключателе
+    только если оно совпадало с активной опубликованной датой меню — это
+    правильно для самого заказа клиентом (там дата решает, на какой день
+    идёт приём), но для Mini App курьера это лишняя, ошибочная
+    зависимость: если запись в "Заказы" на будущую дату уже есть (неважно,
+    через бота или вручную) — точка по ней должна быть видна в маршруте
+    сразу, а не только после того, как админ формально опубликует меню на
+    эту дату."""
     today = _now().date()
     dates = [(today - dt.timedelta(days=n)).strftime("%d.%m.%Y") for n in (2, 1, 0)]
-    tomorrow_str = (today + dt.timedelta(days=1)).strftime("%d.%m.%Y")
-    if get_active_menu_date() == tomorrow_str:
-        dates.append(tomorrow_str)
+
+    order_dates = _order_dates_with_data()
+    for n in range(1, ROUTE_DATES_LOOKAHEAD_DAYS + 1):
+        future_str = (today + dt.timedelta(days=n)).strftime("%d.%m.%Y")
+        if future_str in order_dates:
+            dates.append(future_str)
+
     return dates
 
 
