@@ -139,7 +139,7 @@ async def _retry_sheets(fn, *args, retries: int = 2, delay: float = 1.2, **kwarg
 async def _role_for(tg_id) -> str:
     if config.ADMIN_CHAT_ID and tg_id == config.ADMIN_CHAT_ID:
         return "admin"
-    if await _retry_sheets(sheets.is_active_courier, tg_id):
+    if await _retry_sheets(sheets.is_courier, tg_id):
         return "courier"
     return ""
 

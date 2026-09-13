@@ -37,14 +37,14 @@ async def cmd_webapp_debug(message: Message):
     вручную."""
     tg_id = message.from_user.id
     is_admin = bool(config.ADMIN_CHAT_ID) and tg_id == config.ADMIN_CHAT_ID
-    is_courier = sheets.is_active_courier(tg_id)
+    is_courier = sheets.is_courier(tg_id)
 
     lines = [
         f"Ваш Telegram ID: {tg_id}",
         "WEBAPP_URL на сервере: " + (config.WEBAPP_URL if config.WEBAPP_URL else "⚠️ НЕ ЗАДАН (пусто)"),
         "ADMIN_CHAT_ID задан: " + ("да" if config.ADMIN_CHAT_ID else "⚠️ НЕТ (0 или пусто)"),
         "Ваш ID совпадает с ADMIN_CHAT_ID: " + ("да" if is_admin else "нет"),
-        "Вы активный курьер (лист «Курьеры»): " + ("да" if is_courier else "нет"),
+        "Вы в листе «Курьеры»: " + ("да" if is_courier else "нет"),
     ]
     should_show = bool(config.WEBAPP_URL) and (is_admin or is_courier)
     lines.append("")

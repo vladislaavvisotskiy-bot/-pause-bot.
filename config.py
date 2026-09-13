@@ -170,9 +170,12 @@ COURIER_HEADER_ROW = 1
 COURIER_DATA_START_ROW = 2
 COURIER_TG_ID = 1  # A
 COURIER_NAME = 2   # B
+# Доступ курьера к Mini App определяется ТОЛЬКО наличием строки с его
+# Telegram ID в этом листе (см. sheets.is_courier) — не текстом в этом
+# столбце. "Статус" — свободная заметка для админа (например "На
+# больничном", "В отпуске"), ни на что технически не влияет. Чтобы
+# временно убрать курьера из системы — удалите его строку целиком.
 COURIER_STATUS = 3  # C
-COURIER_STATUS_ACTIVE = "Активен"
-COURIER_STATUS_INACTIVE = "Неактивен"
 
 SHEET_ROUTE = "Маршрут"
 ROUTE_HEADER_ROW = 1

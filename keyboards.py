@@ -34,7 +34,7 @@ def main_menu_kb(tg_id: int = None) -> InlineKeyboardMarkup:
         url = f"{config.WEBAPP_URL}/miniapp"
         if config.ADMIN_CHAT_ID and tg_id == config.ADMIN_CHAT_ID:
             b.button(text=texts.ADMIN_ROUTE_BTN, web_app=WebAppInfo(url=url))
-        elif sheets.is_active_courier(tg_id):
+        elif sheets.is_courier(tg_id):
             b.button(text=texts.COURIER_ROUTE_BTN, web_app=WebAppInfo(url=url))
 
     b.adjust(1)

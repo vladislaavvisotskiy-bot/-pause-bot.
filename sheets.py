@@ -1301,9 +1301,12 @@ def _delivery_points_index() -> dict:
 
 
 def get_couriers() -> list:
-    """Все записи из "Курьеры" — [{"tg_id","name","status"}]. Кэшируется на
-    _CACHE_TTL секунд — is_active_courier() дёргается на каждом показе
-    главного меню бота, каждый раз ходить в Sheets незачем."""
+    """Все записи из "Курьеры" — [{"tg_id","name","status"}]. "status" —
+    свободная текстовая заметка админа (см. config.COURIER_STATUS), ни на
+    что технически не влияет — доступ определяется самим наличием строки
+    (см. is_courier). Кэшируется на _CACHE_TTL секунд — is_courier()
+    дёргается на каждом показе главного меню бота, каждый раз ходить в
+    Sheets незачем."""
     now = time.time()
     if _cache["couriers"] is not None and now - _cache["couriers_ts"] < _CACHE_TTL:
         return _cache["couriers"]
@@ -1327,13 +1330,15 @@ def get_couriers() -> list:
     return out
 
 
-def is_active_courier(tg_id) -> bool:
+def is_courier(tg_id) -> bool:
+    """Доступ к Mini App/меню курьера — просто по факту наличия строки с
+    этим Telegram ID в "Курьеры", без проверки текста в "Статус" (раньше
+    сверялись с точным текстом "Активен" — ненадёжно: опечатка или другой
+    регистр в ячейке молча оставляли курьера без доступа без понятной
+    причины). Убрать курьера — значит удалить его строку целиком, а не
+    поменять текст статуса."""
     target = str(tg_id)
-    return any(c["tg_id"] == target and c["status"] == config.COURIER_STATUS_ACTIVE for c in get_couriers())
-
-
-def _active_couriers() -> list:
-    return [c for c in get_couriers() if c["status"] == config.COURIER_STATUS_ACTIVE]
+    return any(c["tg_id"] == target for c in get_couriers())
 
 
 def get_route_people(date_str: str) -> dict:
@@ -1432,7 +1437,7 @@ def sync_daily_route(date_str: str, people: dict = None) -> list:
         return rows
 
     dp_index = _delivery_points_index()
-    couriers = _active_couriers()
+    couriers = get_couriers()
     default_courier = couriers[0]["tg_id"] if couriers else ""
 
     new_rows = [
@@ -1627,7 +1632,7 @@ def add_route_point(date_str: str, point_name: str):
         return
 
     existing = get_route_for_date(date_str)  # заодно синхронизирует
-    couriers = _active_couriers()
+    couriers = get_couriers()
     default_courier = couriers[0]["tg_id"] if couriers else ""
     max_order = max([p["order"] for p in existing], default=0)
     priority = _delivery_points_index().get(point_name, {}).get("priority", 0)
