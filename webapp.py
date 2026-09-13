@@ -32,6 +32,8 @@ from aiohttp import web
 
 import config
 import sheets
+import texts
+import keyboards as kb
 
 logger = logging.getLogger("pause_bot")
 
@@ -210,13 +212,73 @@ async def api_me(request: web.Request):
 async def api_route_get(request: web.Request):
     date_str = request.query.get("date") or _today()
     role = request["role"]
+    depot = {"name": config.DEPOT_NAME, "address": config.DEPOT_ADDRESS, "lat": config.DEPOT_LAT, "lon": config.DEPOT_LNG}
+    visible = await _retry_sheets(sheets.is_route_visible_to_courier, date_str)
+
+    # Админ видит маршрут всегда, независимо от этого флага — сам флаг
+    # существует именно для того, чтобы админ мог спокойно собрать/поправить
+    # маршрут, пока курьер его не видит. Гейт — только для курьера.
+    if role == "courier" and not visible:
+        return web.json_response({"date": date_str, "role": role, "points": [], "depot": depot, "visible": False})
+
     async with _route_lock:
         route = await _retry_sheets(sheets.get_route_for_date, date_str)
     if role == "courier":
         tg_id = str(request["tg_id"])
         route = [p for p in route if p["courier_tg_id"] == tg_id]
-    depot = {"name": config.DEPOT_NAME, "address": config.DEPOT_ADDRESS, "lat": config.DEPOT_LAT, "lon": config.DEPOT_LNG}
-    return web.json_response({"date": date_str, "role": role, "points": route, "depot": depot})
+    return web.json_response({"date": date_str, "role": role, "points": route, "depot": depot, "visible": visible})
+
+
+async def api_route_visibility_get(request: web.Request):
+    if request["role"] != "admin":
+        return web.json_response({"error": "forbidden"}, status=403)
+    dates = await _retry_sheets(sheets.get_route_visibility_status)
+    return web.json_response({"dates": dates})
+
+
+async def api_route_visibility_set(request: web.Request):
+    if request["role"] != "admin":
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or _today()
+    visible = bool(body.get("visible"))
+
+    was_visible = await _retry_sheets(sheets.is_route_visible_to_courier, date_str)
+    await _retry_sheets(sheets.set_route_visibility, date_str, visible)
+
+    notified = 0
+    # Пуш шлём только на переходе "было выключено -> включили сейчас" — не
+    # на каждое сохранение (иначе повторное открытие того же переключателя
+    # или случайный повторный запрос заспамили бы курьера одним и тем же).
+    if visible and not was_visible:
+        bot = request.app.get("bot")
+        if bot is not None:
+            notified = await _notify_couriers_route_ready(bot, date_str)
+        else:
+            logger.warning("Bot недоступен в webapp.app — пуш о готовности маршрута не отправлен")
+    return web.json_response({"ok": True, "notified": notified})
+
+
+async def _notify_couriers_route_ready(bot, date_str: str) -> int:
+    """Уведомляет каждого курьера, у которого на эту дату есть хотя бы одна
+    назначенная точка, что маршрут готов — с кнопкой сразу в Mini App на
+    эту дату (см. index_page/app.js — читает ?date= из адреса при
+    открытии)."""
+    route = await _retry_sheets(sheets.get_route_for_date, date_str)
+    courier_ids = {p["courier_tg_id"] for p in route if p["courier_tg_id"]}
+    if not courier_ids or not config.WEBAPP_URL:
+        return 0
+
+    url = f"{config.WEBAPP_URL}/miniapp?date={date_str}"
+    text = texts.ROUTE_READY_PUSH.format(date=date_str)
+    sent = 0
+    for tg_id in courier_ids:
+        try:
+            await bot.send_message(int(tg_id), text, reply_markup=kb.route_ready_kb(url))
+            sent += 1
+        except Exception:
+            logger.exception("Не удалось отправить пуш о готовности маршрута курьеру ID %s", tg_id)
+    return sent
 
 
 async def api_route_dates(request: web.Request):
@@ -328,14 +390,21 @@ async def index_page(request: web.Request):
     return web.FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 
-def create_app() -> web.Application:
+def create_app(bot=None) -> web.Application:
     app = web.Application(middlewares=[error_middleware, auth_middleware])
+    # Нужен, чтобы слать пуш курьеру при включении видимости маршрута (см.
+    # _notify_couriers_route_ready) — тот же самый Bot, на котором работает
+    # polling (см. docstring выше про общий event loop), просто доступный
+    # ещё и обработчикам aiohttp через request.app.
+    app["bot"] = bot
     app.router.add_get("/miniapp", index_page)
     app.router.add_get("/miniapp/", index_page)
     app.router.add_static("/miniapp/static/", STATIC_DIR, show_index=False)
     app.router.add_get("/api/me", api_me)
     app.router.add_get("/api/route", api_route_get)
     app.router.add_get("/api/route/dates", api_route_dates)
+    app.router.add_get("/api/route/visibility", api_route_visibility_get)
+    app.router.add_post("/api/route/visibility", api_route_visibility_set)
     app.router.add_get("/api/delivery_points", api_delivery_points)
     app.router.add_post("/api/route/reorder", api_route_reorder)
     app.router.add_post("/api/route/add", api_route_add)
@@ -347,10 +416,11 @@ def create_app() -> web.Application:
     return app
 
 
-async def run_webapp():
+async def run_webapp(bot=None):
     """Запускает веб-сервер на config.WEBAPP_PORT — вызывать вместе с
-    dp.start_polling(bot) через asyncio.gather, не вместо него."""
-    app = create_app()
+    dp.start_polling(bot) через asyncio.gather, не вместо него. bot нужен
+    для отправки пуш-уведомлений курьеру (см. create_app)."""
+    app = create_app(bot)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", config.WEBAPP_PORT)

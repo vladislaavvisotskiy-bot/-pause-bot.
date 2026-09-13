@@ -10,11 +10,13 @@
   var state = {
     role: "",
     tgId: null,
+    screen: "orders",   // "orders" | "profile" — какой раздел сейчас показан (см. showScreen)
     points: [],
     date: null,        // DD.MM.YYYY — сейчас выбранная в переключателе дата
     activeDate: null,   // DD.MM.YYYY — "сегодня" по активному меню, для подписи в переключателе
     dates: [],          // доступные для выбора даты (см. loadRouteDates)
     depot: null,        // {name, address, lat, lon} — точка отправления (кухня), только для карты
+    visible: true,      // видит ли КУРЬЕР маршрут на state.date (см. api_route_get, "visible")
     expanded: {},      // point -> bool
     map: null,
     markers: [],
@@ -424,6 +426,26 @@
   function render() {
     // Раз мы тут — запрос успешно отработал, так что любая ошибка/кнопка
     // "Повторить" от прошлой неудачной попытки больше не актуальна.
+    document.getElementById("retry-btn").hidden = true;
+
+    // Пока админ не включил видимость этой даты (см. "Профиль" -> список
+    // дат) — курьер вместо карты/карточек видит только это сообщение.
+    // Админ этим не ограничен — он должен видеть маршрут всегда, чтобы
+    // как раз его и подготовить перед тем, как включить видимость.
+    var hiddenFromCourier = state.role === "courier" && !state.visible;
+
+    document.getElementById("map").hidden = hiddenFromCourier;
+    document.getElementById("add-point-btn").hidden = state.role !== "admin" || hiddenFromCourier;
+
+    if (hiddenFromCourier) {
+      document.getElementById("cards").hidden = true;
+      document.getElementById("empty-state").hidden = false;
+      document.getElementById("empty-state-text").textContent =
+        "Маршрут на этот день ещё готовится — сообщим, как будет готов 🌿";
+      renderDatePicker();
+      return;
+    }
+
     // "На сегодня" только если реально смотрим на активную дату — на любой
     // другой выбранной дате пустой список означает просто "на эту дату
     // заказов пока нет", а не что-то сломалось.
@@ -431,11 +453,9 @@
       state.date === state.activeDate
         ? "На сегодня точек с заказами пока нет 🌿"
         : "На эту дату заказов пока нет 🌿";
-    document.getElementById("retry-btn").hidden = true;
 
     document.getElementById("empty-state").hidden = state.points.length > 0;
     document.getElementById("cards").hidden = state.points.length === 0;
-    document.getElementById("add-point-btn").hidden = state.role !== "admin";
     renderMap(state.points);
     renderCards();
     renderDatePicker();
@@ -451,6 +471,7 @@
       state.date = data.date;
       state.points = data.points;
       state.depot = data.depot || null;
+      state.visible = data.visible !== false;
       render();
     }).catch(function (err) {
       toast("Не удалось загрузить маршрут: " + err.message);
@@ -663,17 +684,112 @@
   }
 
   // -------------------------------------------------------------------
+  // Видимость маршрута для курьера, по датам (только админ, экран "Профиль")
+  // -------------------------------------------------------------------
+
+  function renderVisibilityList(dates) {
+    var container = document.getElementById("visibility-list");
+    container.innerHTML = "";
+    if (!dates.length) {
+      container.innerHTML = "<div class=\"modal-list-empty\">Пока нет доступных дат</div>";
+      return;
+    }
+    dates.forEach(function (d) {
+      var row = document.createElement("div");
+      row.className = "visibility-row";
+
+      var label = document.createElement("div");
+      label.className = "visibility-row-label";
+      label.textContent = dateLabel(d.date) + (d.date === state.activeDate ? " · сегодня" : "");
+
+      var switchLabel = document.createElement("label");
+      switchLabel.className = "switch";
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = d.visible;
+      var slider = document.createElement("span");
+      slider.className = "switch-slider";
+      switchLabel.appendChild(input);
+      switchLabel.appendChild(slider);
+
+      input.addEventListener("change", function () {
+        setRouteVisibility(d.date, input.checked, input);
+      });
+
+      row.appendChild(label);
+      row.appendChild(switchLabel);
+      container.appendChild(row);
+    });
+  }
+
+  function loadVisibilityList() {
+    return api("/api/route/visibility").then(function (data) {
+      renderVisibilityList(data.dates);
+    }).catch(function (err) {
+      toast("Не удалось загрузить список дат: " + err.message);
+    });
+  }
+
+  function setRouteVisibility(date, visible, inputEl) {
+    inputEl.disabled = true;
+    api("/api/route/visibility", { method: "POST", body: { date: date, visible: visible } })
+      .then(function (data) {
+        if (visible && data.notified) {
+          toast("Курьер уведомлён — маршрут на " + date + " для него открыт");
+        } else if (visible) {
+          toast("Видимость включена");
+        } else {
+          toast("Видимость выключена");
+        }
+      })
+      .catch(function (err) {
+        inputEl.checked = !visible; // не удалось сохранить — откатываем переключатель обратно
+        toast("Не удалось изменить видимость: " + err.message);
+      })
+      .then(function () {
+        inputEl.disabled = false;
+      });
+  }
+
+  // -------------------------------------------------------------------
   // Инициализация / навигация
   // -------------------------------------------------------------------
 
+  // Разделы: "orders" ("Заказы") — маршрут, общий для обеих ролей.
+  // "profile" ("Профиль") — для курьера это "Мой заработок", для админа —
+  // список дат с переключателями видимости маршрута (см. renderVisibilityList).
   function showScreen(name) {
-    document.getElementById("route-screen").hidden = name !== "route";
-    document.getElementById("earnings-screen").hidden = name !== "earnings";
-    document.getElementById("header-title").textContent = name === "earnings" ? "Мой заработок" : "Маршрут";
-    document.getElementById("earnings-toggle-btn").textContent = name === "earnings" ? "Маршрут" : "Заработок";
-    if (name === "earnings" && !state.earningsDateISO) {
+    state.screen = name;
+    var isProfile = name === "profile";
+    var isAdmin = state.role === "admin";
+
+    document.getElementById("route-screen").hidden = isProfile;
+    document.getElementById("earnings-screen").hidden = !isProfile || isAdmin;
+    document.getElementById("admin-profile-screen").hidden = !isProfile || !isAdmin;
+
+    var title = "Маршрут";
+    if (isProfile) title = isAdmin ? "Профиль" : "Мой заработок";
+    document.getElementById("header-title").textContent = title;
+
+    Array.prototype.forEach.call(document.querySelectorAll(".nav-drawer-item"), function (el) {
+      el.classList.toggle("active", el.dataset.screen === name);
+    });
+
+    if (isProfile && isAdmin) {
+      loadVisibilityList();
+    } else if (isProfile && !isAdmin && !state.earningsDateISO) {
       loadEarningsToday();
     }
+  }
+
+  function openDrawer() {
+    document.getElementById("nav-drawer").classList.add("open");
+    document.getElementById("nav-drawer-backdrop").classList.add("open");
+  }
+
+  function closeDrawer() {
+    document.getElementById("nav-drawer").classList.remove("open");
+    document.getElementById("nav-drawer-backdrop").classList.remove("open");
   }
 
   // -------------------------------------------------------------------
@@ -713,11 +829,15 @@
       if (e.target.id === "confirm-modal") hideConfirm();
     });
 
-    var onEarnings = false;
-    document.getElementById("earnings-toggle-btn").addEventListener("click", function () {
-      onEarnings = !onEarnings;
-      showScreen(onEarnings ? "earnings" : "route");
+    document.getElementById("avatar-btn").addEventListener("click", openDrawer);
+    document.getElementById("nav-drawer-backdrop").addEventListener("click", closeDrawer);
+    Array.prototype.forEach.call(document.querySelectorAll(".nav-drawer-item"), function (el) {
+      el.addEventListener("click", function () {
+        showScreen(el.dataset.screen);
+        closeDrawer();
+      });
     });
+
     document.getElementById("earnings-date").addEventListener("change", function (e) {
       state.earningsDateISO = e.target.value;
       loadEarningsForDate(e.target.value);
@@ -735,12 +855,16 @@
 
   function startApp() {
     document.getElementById("empty-state").hidden = true;
+    // Пуш о готовности маршрута (см. webapp._notify_couriers_route_ready)
+    // ведёт по ссылке вида /miniapp?date=ДД.ММ.ГГГГ — открываем сразу этот
+    // раздел "Заказы" на нужной дате, а не на дате по умолчанию.
+    var deepLinkDate = new URLSearchParams(window.location.search).get("date");
     api("/api/me").then(function (me) {
       state.role = me.role;
       state.tgId = me.tg_id;
-      document.getElementById("earnings-toggle-btn").hidden = me.role !== "courier";
+      showScreen("orders");
       loadRouteDates();
-      return loadRoute();
+      return loadRoute(deepLinkDate || undefined);
     }).catch(function (err) {
       // 401/403 — реально не тот человек (не курьер и не админ), кнопка
       // "Повторить" тут не поможет. Всё остальное (503 и т.п.) — временная

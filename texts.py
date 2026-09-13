@@ -431,6 +431,10 @@ MORNING_GREETING = "Доброе утро, {name} ☘️"
 NEW_MENU_GREETING = "{name}, сегодняшнее меню уже здесь 🌿 Загляните, когда будет минутка — ждём вас"
 MENU_BROADCAST_BTN = "💌 Посмотреть меню"
 
+# --- Маршрут курьера: пуш о готовности (Mini App) ---
+ROUTE_READY_PUSH = "🚚 Маршрут на {date} готов — можно выезжать"
+ROUTE_READY_BTN = "Открыть маршрут"
+
 # --- Разовый опрос про меню (/menu_survey) ---
 ADMIN_SURVEY_CONFIRM_PROMPT = "Разослать опрос о меню всем клиентам?"
 ADMIN_SURVEY_CONFIRM_YES_BTN = "Да, разослать"

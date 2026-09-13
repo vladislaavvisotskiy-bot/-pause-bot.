@@ -136,7 +136,7 @@ async def main():
     scheduler.add_job(send_payment_reminders, "cron", hour=prh, minute=prm, args=[bot])
     scheduler.start()
 
-    await webapp.run_webapp()
+    await webapp.run_webapp(bot)
 
     logger.info("PAUSE бот запущен.")
     await dp.start_polling(bot)

@@ -139,6 +139,13 @@ def menu_broadcast_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def route_ready_kb(url: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ROUTE_READY_BTN, web_app=WebAppInfo(url=url))
+    b.adjust(1)
+    return b.as_markup()
+
+
 def admin_survey_confirm_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_SURVEY_CONFIRM_YES_BTN, callback_data="survey_broadcast_yes")

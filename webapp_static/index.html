@@ -20,8 +20,14 @@
       <div class="brand">PAUSE</div>
       <h1 id="header-title">Маршрут</h1>
     </div>
-    <button id="earnings-toggle-btn" class="ghost-btn" hidden>Заработок</button>
+    <button id="avatar-btn" class="avatar-btn" aria-label="Меню">👤</button>
   </header>
+
+  <div id="nav-drawer-backdrop" class="drawer-backdrop"></div>
+  <div id="nav-drawer" class="nav-drawer">
+    <button class="nav-drawer-item" data-screen="profile">👤 Профиль</button>
+    <button class="nav-drawer-item" data-screen="orders">📦 Заказы</button>
+  </div>
 
   <div id="route-screen" class="screen">
     <div id="route-date-picker" class="date-pills"></div>
@@ -36,6 +42,12 @@
     <div id="cards"></div>
 
     <button id="add-point-btn" class="primary-btn" hidden>+ Добавить точку</button>
+  </div>
+
+  <div id="admin-profile-screen" class="screen" hidden>
+    <div class="section-title">Видимость маршрута для курьера</div>
+    <p class="section-hint">Пока выключено для даты — курьер видит «маршрут готовится» вместо карты и точек. Включите, когда список готов — курьеру придёт уведомление.</p>
+    <div id="visibility-list"></div>
   </div>
 
   <div id="earnings-screen" class="screen" hidden>

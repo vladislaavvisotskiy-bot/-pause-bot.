@@ -38,6 +38,7 @@ _cache = {
     "delivery_points": None, "delivery_points_ts": 0,
     "active_menu_date": None, "active_menu_date_ts": 0,
     "order_dates": None, "order_dates_ts": 0,
+    "route_visibility": None, "route_visibility_ts": 0,
 }
 _CACHE_TTL = 60  # секунд — не дёргаем таблицу на каждый чих
 
@@ -1598,6 +1599,68 @@ def get_route_available_dates() -> list:
             dates.append(future_str)
 
     return dates
+
+
+def _route_visibility_map() -> dict:
+    """{дата: видимо ли курьеру} по листу "Видимость маршрута". Дата без
+    строки в этом листе считается НЕ видимой (по умолчанию курьер не видит
+    маршрут, пока админ явно не включит — см. config.SHEET_ROUTE_VISIBILITY).
+    Кэшируется на _ROUTE_CACHE_TTL секунд по той же причине, что и
+    остальные лёгкие кэши в этом файле — читается на каждое открытие
+    экрана "Заказы"."""
+    now = time.time()
+    if _cache["route_visibility"] is not None and now - _cache["route_visibility_ts"] < _ROUTE_CACHE_TTL:
+        return _cache["route_visibility"]
+    ws = _ws(config.SHEET_ROUTE_VISIBILITY)
+    rows = ws.get_all_values()
+    mapping = {}
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.RV_DATA_START_ROW:
+            continue
+        if len(row) < config.RV_DATE:
+            continue
+        d = row[config.RV_DATE - 1].strip()
+        if not d:
+            continue
+        visible_cell = row[config.RV_VISIBLE - 1].strip() if len(row) >= config.RV_VISIBLE else ""
+        mapping[d] = visible_cell.lower() == "да"
+    _cache["route_visibility"] = mapping
+    _cache["route_visibility_ts"] = now
+    return mapping
+
+
+def is_route_visible_to_courier(date_str: str) -> bool:
+    return _route_visibility_map().get(date_str, False)
+
+
+def set_route_visibility(date_str: str, visible: bool):
+    """Включает/выключает видимость маршрута на дату для курьера. Строка
+    на эту дату заводится при первом переключении, дальше просто
+    обновляется — по одной строке на дату."""
+    ws = _ws(config.SHEET_ROUTE_VISIBILITY)
+    rows = ws.get_all_values()
+    value = "Да" if visible else ""
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.RV_DATA_START_ROW:
+            continue
+        if len(row) < config.RV_DATE:
+            continue
+        if row[config.RV_DATE - 1].strip() == date_str:
+            ws.update_cell(r, config.RV_VISIBLE, value)
+            _cache["route_visibility"] = None
+            return
+    ws.append_row([date_str, value], value_input_option="RAW")
+    _cache["route_visibility"] = None
+
+
+def get_route_visibility_status() -> list:
+    """[{"date","visible"}] по всем датам, доступным в переключателе (см.
+    get_route_available_dates) — для экрана "Профиль" админа, где он
+    включает/выключает видимость по каждой дате отдельно."""
+    visibility = _route_visibility_map()
+    return [{"date": d, "visible": visibility.get(d, False)} for d in get_route_available_dates()]
 
 
 def reorder_route(date_str: str, order_map: dict):
