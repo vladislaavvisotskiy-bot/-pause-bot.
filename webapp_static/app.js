@@ -14,6 +14,7 @@
     date: null,        // DD.MM.YYYY — сейчас выбранная в переключателе дата
     activeDate: null,   // DD.MM.YYYY — "сегодня" по активному меню, для подписи в переключателе
     dates: [],          // доступные для выбора даты (см. loadRouteDates)
+    depot: null,        // {name, address, lat, lon} — точка отправления (кухня), только для карты
     expanded: {},      // point -> bool
     map: null,
     markers: [],
@@ -107,6 +108,15 @@
     });
   }
 
+  function depotIcon() {
+    return L.divIcon({
+      className: "",
+      html: '<div class="marker-badge depot">🏠</div>',
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+    });
+  }
+
   function renderMap(points) {
     if (typeof L === "undefined") {
       // Leaflet не подгрузился (например, нет связи с CDN) — карту просто
@@ -136,12 +146,29 @@
     state.markers = [];
     if (state.polyline) { state.map.removeLayer(state.polyline); state.polyline = null; }
 
+    var latlngs = [];
+
+    // Точка отправления (кухня) — всегда первая на карте, отдельной
+    // иконкой, не пронумерованная. Только визуальная: в карточки, "Сдано"
+    // и заработок не входит — это не точка доставки, а начало маршрута.
+    var depot = state.depot;
+    if (depot && depot.lat && depot.lon) {
+      var depotLatLng = [parseFloat(depot.lat), parseFloat(depot.lon)];
+      var depotMarker = L.marker(depotLatLng, { icon: depotIcon() }).addTo(state.map);
+      depotMarker.bindPopup(depot.name + (depot.address ? " — " + depot.address : ""));
+      state.markers.push(depotMarker);
+      latlngs.push(depotLatLng);
+    }
+
     if (!withCoords.length) {
-      state.map.setView([41.311081, 69.240562], 12); // Ташкент, центр — по умолчанию
+      if (latlngs.length) {
+        state.map.setView(latlngs[0], 14);
+      } else {
+        state.map.setView([41.311081, 69.240562], 12); // Ташкент, центр — по умолчанию
+      }
       return;
     }
 
-    var latlngs = [];
     withCoords.forEach(function (p, idx) {
       var lat = parseFloat(p.lat), lon = parseFloat(p.lon);
       var marker = L.marker([lat, lon], {
@@ -152,6 +179,8 @@
       latlngs.push([lat, lon]);
     });
 
+    // Линия маршрута идёт от точки отправления (если она есть в latlngs)
+    // через все точки доставки по порядку — не от первой точки доставки.
     state.polyline = L.polyline(latlngs, { color: "#b87e6c", weight: 3, opacity: 0.55, dashArray: "6 6" })
       .addTo(state.map);
 
@@ -421,6 +450,7 @@
     return api(url).then(function (data) {
       state.date = data.date;
       state.points = data.points;
+      state.depot = data.depot || null;
       render();
     }).catch(function (err) {
       toast("Не удалось загрузить маршрут: " + err.message);

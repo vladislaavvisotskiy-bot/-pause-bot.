@@ -215,7 +215,8 @@ async def api_route_get(request: web.Request):
     if role == "courier":
         tg_id = str(request["tg_id"])
         route = [p for p in route if p["courier_tg_id"] == tg_id]
-    return web.json_response({"date": date_str, "role": role, "points": route})
+    depot = {"name": config.DEPOT_NAME, "address": config.DEPOT_ADDRESS, "lat": config.DEPOT_LAT, "lon": config.DEPOT_LNG}
+    return web.json_response({"date": date_str, "role": role, "points": route, "depot": depot})
 
 
 async def api_route_dates(request: web.Request):
