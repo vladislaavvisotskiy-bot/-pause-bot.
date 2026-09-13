@@ -179,6 +179,7 @@ header h1 {
 
 .card-main { flex: 1 1 auto; min-width: 0; }
 .card-address { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-no-coords-warn { cursor: help; }
 .card-sub { color: var(--ink-soft); font-size: 13px; margin-top: 3px; }
 
 .card-status-tag {

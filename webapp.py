@@ -27,6 +27,7 @@ import time
 from urllib.parse import parse_qsl
 
 import gspread
+import requests
 from aiohttp import web
 
 import config
@@ -87,12 +88,24 @@ def _extract_tg_id(request: web.Request):
         return None
 
 
-async def _retry_sheets(fn, *args, retries: int = 1, delay: float = 1.5, **kwargs):
+_RETRYABLE_API_CODES = {429, 500, 502, 503, 504}
+
+
+async def _retry_sheets(fn, *args, retries: int = 2, delay: float = 1.2, **kwargs):
     """Google Sheets API иногда на секунду-другую отвечает 429 (Quota
     exceeded for quota metric 'Read requests'/'Write requests') под нагрузкой
     — это ровно то, что несколько раз ловилось вживую при разработке этого
-    проекта. Один быстрый повтор чаще всего решает дело сам, вместо того
-    чтобы курьер/админ видел ошибку из-за случайного всплеска.
+    проекта, и то же самое воспроизвелось при повторных открытиях экрана
+    "Маршрут" подряд: get_route_for_date раньше читал "Заказы"/"Маршрут"
+    по два раза за один показ экрана (см. docstring sheets.sync_daily_route)
+    — несколько открытий подряд легко упирались в лимит запросов в минуту.
+    Кроме 429 таким же временным сбоем бывает 500/502/503/504 от самого
+    Google (кратковременная перегрузка на их стороне) и обрыв соединения на
+    уровне транспорта (requests.exceptions.RequestException) — сеть Railway
+    не идеальна, обрыв на секунду не должен выглядеть для курьера/админа как
+    "приложение сломано". Retries подняты до 2 (было 1) именно для самого
+    частого и самого чувствительного к повторным открытиям пути — чтения
+    маршрута.
 
     gspread делает обычный синхронный HTTP-запрос. Раньше он вызывался прямо
     в корутине — это блокирует ВЕСЬ event loop процесса (тот же самый, на
@@ -112,7 +125,12 @@ async def _retry_sheets(fn, *args, retries: int = 1, delay: float = 1.5, **kwarg
             return await asyncio.to_thread(fn, *args, **kwargs)
         except gspread.exceptions.APIError as e:
             last_exc = e
-            if e.code != 429 or attempt == retries:
+            if e.code not in _RETRYABLE_API_CODES or attempt == retries:
+                raise
+            await asyncio.sleep(delay)
+        except requests.exceptions.RequestException as e:
+            last_exc = e
+            if attempt == retries:
                 raise
             await asyncio.sleep(delay)
     raise last_exc

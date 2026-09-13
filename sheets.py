@@ -32,8 +32,36 @@ def _now() -> dt.datetime:
 
 _client = None
 _sheet = None
-_cache = {"clients": None, "clients_ts": 0, "couriers": None, "couriers_ts": 0}
+_cache = {
+    "clients": None, "clients_ts": 0,
+    "couriers": None, "couriers_ts": 0,
+    "delivery_points": None, "delivery_points_ts": 0,
+    "active_menu_date": None, "active_menu_date_ts": 0,
+}
 _CACHE_TTL = 60  # секунд — не дёргаем таблицу на каждый чих
+
+# Отдельный, короткий кэш посчитанного маршрута на дату — целиком то, что
+# возвращает get_route_for_date(). Обычные ссылки/чтения (_CACHE_TTL=60с
+# выше) сюда не подходят: правки в "Маршрут" (перетаскивание, отметка
+# "Сдано", удаление точки) должны быть видны СРАЗУ тому, кто их сделал, а
+# не через минуту. Но именно ПОВТОРНЫЕ открытия экрана без единой правки
+# между ними (ровно то, что происходит, когда человек несколько раз подряд
+# открывает Mini App) не должны каждый раз заново вычитывать три листа
+# ("Заказы", "Маршрут", "Точки доставки") — воспроизведено вживую: 15
+# открытий подряд упирались в лимит Google Sheets API "429 Quota exceeded"
+# уже на 7-м, несмотря на то что каждый отдельный запрос стал легче (см.
+# sync_daily_route/get_route_for_date выше). Короткий TTL (несколько секунд)
+# полностью снимает эту нагрузку от повторных открытий, но не мешает
+# реальной работе: любое мутирующее действие (см. _invalidate_route_cache)
+# сбрасывает кэш немедленно, так что тот, кто только что нажал
+# "Сдано"/перетащил/удалил, при следующей же загрузке видит свежие данные,
+# а не устаревшие до истечения TTL.
+_route_cache: dict = {}
+_ROUTE_CACHE_TTL = 5  # секунд
+
+
+def _invalidate_route_cache(date_str: str):
+    _route_cache.pop(date_str, None)
 
 
 def _connect():
@@ -707,6 +735,7 @@ def set_active_menu_date(date_str: str):
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_TODAY_MENU_DATE_CELL, date_str)
     ws.update_acell(config.REF_GIVEAWAY_CLOSED_CELL, "")
+    _cache["active_menu_date"] = None
 
 
 def is_giveaway_window_closed() -> bool:
@@ -796,10 +825,23 @@ def get_active_menu_date() -> str:
     отсечкой, — получили бы разные даты), а именно эту: дату, которую
     админ явно выбрал при публикации текущего меню (см.
     set_active_menu_date) — публикация новой даты сама заменяет
-    предыдущую, тем самым "закрывая" её."""
+    предыдущую, тем самым "закрывая" её.
+
+    Кэшируется на несколько секунд — эта функция дёргается на КАЖДОЕ
+    открытие экрана "Маршрут" в Mini App (и не только), значение при этом
+    почти никогда не меняется чаще, чем раз в день (публикация меню) —
+    короткий кэш заметно снижает число обращений к Sheets API при
+    повторных открытиях подряд, не внося ощутимой задержки в редкий момент
+    самой публикации (см. set_active_menu_date — сбрасывает кэш сразу)."""
+    now = time.time()
+    if _cache["active_menu_date"] is not None and now - _cache["active_menu_date_ts"] < 5:
+        return _cache["active_menu_date"]
     ws = _ws(config.SHEET_REFERENCE)
     date_str = (ws.acell(config.REF_TODAY_MENU_DATE_CELL).value or "").strip()
-    return date_str or today_date_str()
+    result = date_str or today_date_str()
+    _cache["active_menu_date"] = result
+    _cache["active_menu_date_ts"] = now
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1207,7 +1249,17 @@ def get_client_pending_orders(client_id) -> list:
 # ---------------------------------------------------------------------------
 
 def get_delivery_points() -> list:
-    """Справочник точек доставки — [{"name","address","lat","lon","priority","rate"}]."""
+    """Справочник точек доставки — [{"name","address","lat","lon","priority","rate"}].
+    Кэшируется на _CACHE_TTL секунд — на каждый показ экрана "Маршрут" этот
+    справочник читается несколько раз (сам список точек + расчёт нового
+    маршрута), а меняется он редко (админ правит руками raз в какое-то
+    время) — незачем ходить в Sheets за одним и тем же на каждый чих. Если
+    только что вписали координаты новой точке — появятся в течение минуты,
+    не мгновенно."""
+    now = time.time()
+    if _cache["delivery_points"] is not None and now - _cache["delivery_points_ts"] < _CACHE_TTL:
+        return _cache["delivery_points"]
+
     ws = _ws(config.SHEET_DELIVERY_POINTS)
     rows = ws.get_all_values()
     out = []
@@ -1238,6 +1290,8 @@ def get_delivery_points() -> list:
             "priority": priority,
             "rate": rate,
         })
+    _cache["delivery_points"] = out
+    _cache["delivery_points_ts"] = now
     return out
 
 
@@ -1323,12 +1377,22 @@ def get_route_people(date_str: str) -> dict:
     return {point: list(people.values()) for point, people in by_point.items()}
 
 
-def sync_daily_route(date_str: str):
+def sync_daily_route(date_str: str, people: dict = None) -> list:
     """Гарантирует, что для каждой точки с реальным заказом на дату есть
     строка в "Маршрут" — не трогает уже существующие строки (порядок,
     статус, курьера, комментарий), только добавляет недостающие.
     Идемпотентно, безопасно вызывать при каждом открытии экрана —
-    актуальность не кэшируется.
+    актуальность не кэшируется. Возвращает актуальные сырые строки листа
+    "Маршрут" (с учётом только что дозаписанных, если были) — раньше
+    get_route_for_date читал тот же лист ЕЩЁ РАЗ сразу после этого вызова,
+    и вдобавок пересчитывал get_route_people(date_str) заново, из-за чего
+    один показ экрана "Маршрут" утраивал число обращений к Google Sheets
+    API (читали "Заказы"/"Маршрут" по два раза за запрос) — при нескольких
+    открытиях подряд (или просто у нескольких людей одновременно) это
+    реально упиралось в лимит 429 "Quota exceeded" и выглядело как
+    нестабильность экрана (открывается через раз). Поэтому и "Заказы"
+    (через параметр people), и "Маршрут" читаются теперь ровно один раз на
+    вызов get_route_for_date.
 
     Новая точка ставится в маршрут с "Порядок" = её "Приоритет" из каталога
     "Точки доставки" (прямое значение, не подстроенное под текущий конец
@@ -1343,12 +1407,15 @@ def sync_daily_route(date_str: str):
     есть настоящий заказ. Без этого — старое поведение — любая точка с
     активным заказом "воскресала" на следующей же загрузке, и удаление
     выглядело так, будто оно не работает."""
-    points_with_orders = set(get_route_people(date_str).keys())
-    if not points_with_orders:
-        return
+    if people is None:
+        people = get_route_people(date_str)
+    points_with_orders = set(people.keys())
 
     ws = _ws(config.SHEET_ROUTE)
     rows = ws.get_all_values()
+    if not points_with_orders:
+        return rows
+
     existing = set()
     for i, row in enumerate(rows):
         r = i + 1
@@ -1361,7 +1428,7 @@ def sync_daily_route(date_str: str):
 
     missing = points_with_orders - existing
     if not missing:
-        return
+        return rows
 
     dp_index = _delivery_points_index()
     couriers = _active_couriers()
@@ -1373,6 +1440,13 @@ def sync_daily_route(date_str: str):
         for point in missing
     ]
     ws.append_rows(new_rows, value_input_option="RAW")
+    # Строки для дальнейшей обработки в ЭТОМ же вызове нужны в виде текста
+    # (как их вернул бы повторный ws.get_all_values()) — иначе код ниже,
+    # который делает cell(...).strip() по каждой ячейке, упадёт на числовом
+    # "Приоритет". Сама запись в таблицу (new_rows выше) при этом уходит с
+    # настоящими типами как и раньше — на хранимые данные это не влияет.
+    rows = rows + [[str(v) for v in new_row] for new_row in new_rows]
+    return rows
 
 
 def get_route_for_date(date_str: str) -> list:
@@ -1383,13 +1457,20 @@ def get_route_for_date(date_str: str) -> list:
     всегда актуальны на момент вызова. Точки со статусом ROUTE_STATUS_REMOVED
     (см. remove_route_point) в выдачу не попадают — они "убраны" из
     маршрута на этот день, но строка остаётся в таблице, чтобы
-    sync_daily_route не восстановил их заново."""
-    sync_daily_route(date_str)
+    sync_daily_route не восстановил их заново.
 
-    ws = _ws(config.SHEET_ROUTE)
-    rows = ws.get_all_values()
-    dp_index = _delivery_points_index()
+    Результат кэшируется на _ROUTE_CACHE_TTL секунд (см. комментарий у
+    _route_cache выше) — несколько повторных открытий экрана подряд без
+    единой правки между ними отдаются из кэша, а не тремя новыми чтениями
+    Sheets каждое. Любое мутирующее действие (add/remove/reorder/comment/
+    mark_delivered) сбрасывает кэш на эту дату немедленно."""
+    cached = _route_cache.get(date_str)
+    if cached is not None and time.time() - cached[1] < _ROUTE_CACHE_TTL:
+        return cached[0]
+
     people = get_route_people(date_str)
+    rows = sync_daily_route(date_str, people=people)
+    dp_index = _delivery_points_index()
 
     out = []
     for i, row in enumerate(rows):
@@ -1432,6 +1513,7 @@ def get_route_for_date(date_str: str) -> list:
         })
 
     out.sort(key=lambda p: p["order"])
+    _route_cache[date_str] = (out, time.time())
     return out
 
 
@@ -1467,6 +1549,7 @@ def reorder_route(date_str: str, order_map: dict):
             cells.append(gspread.Cell(r, config.ROUTE_ORDER, order_map[point]))
     if cells:
         ws.update_cells(cells)
+    _invalidate_route_cache(date_str)
 
 
 def add_route_point(date_str: str, point_name: str):
@@ -1488,6 +1571,7 @@ def add_route_point(date_str: str, point_name: str):
         status = row[config.ROUTE_STATUS - 1].strip() if len(row) >= config.ROUTE_STATUS else ""
         if status == config.ROUTE_STATUS_REMOVED:
             ws.update_cell(r, config.ROUTE_STATUS, config.ROUTE_STATUS_WAITING)
+            _invalidate_route_cache(date_str)
         return
 
     existing = get_route_for_date(date_str)  # заодно синхронизирует
@@ -1500,6 +1584,7 @@ def add_route_point(date_str: str, point_name: str):
         [date_str, point_name, default_courier, order_value, config.ROUTE_STATUS_WAITING, ""],
         value_input_option="RAW",
     )
+    _invalidate_route_cache(date_str)
 
 
 def remove_route_point(date_str: str, point_name: str):
@@ -1519,6 +1604,7 @@ def remove_route_point(date_str: str, point_name: str):
             continue
         if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
             ws.update_cell(r, config.ROUTE_STATUS, config.ROUTE_STATUS_REMOVED)
+            _invalidate_route_cache(date_str)
             return
 
 
@@ -1536,6 +1622,7 @@ def set_route_courier_comment(date_str: str, point_name: str, comment: str):
             continue
         if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
             ws.update_cell(r, config.ROUTE_COURIER_COMMENT, comment)
+            _invalidate_route_cache(date_str)
             return
 
 
@@ -1551,6 +1638,7 @@ def mark_route_delivered(date_str: str, point_name: str):
         if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
             ws.update_cell(r, config.ROUTE_STATUS, config.ROUTE_STATUS_DELIVERED)
             ws.update_cell(r, config.ROUTE_DELIVERED_AT, _now().strftime("%H:%M"))
+            _invalidate_route_cache(date_str)
             return
 
 

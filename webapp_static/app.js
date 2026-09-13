@@ -230,6 +230,18 @@
     var addr = document.createElement("div");
     addr.className = "card-address";
     addr.textContent = point.point;
+    // Только админ должен видеть, что у точки нет координат в каталоге
+    // "Точки доставки" — курьеру это не нужно (у него и так есть рабочий
+    // резерв: кнопка "Поехали" открывает Яндекс.Карты по текстовому адресу,
+    // см. yandexMapsUrl), а вот админу нужно узнать об этом ДО того, как
+    // курьер поедет, чтобы успеть вписать координаты в справочник.
+    if (state.role === "admin" && (!point.lat || !point.lon)) {
+      var warnIcon = document.createElement("span");
+      warnIcon.className = "card-no-coords-warn";
+      warnIcon.textContent = " ⚠️";
+      warnIcon.title = "Нет координат в «Точки доставки» — впишите широту/долготу";
+      addr.appendChild(warnIcon);
+    }
     var sub = document.createElement("div");
     sub.className = "card-sub";
     var subParts = [];
@@ -434,16 +446,10 @@
   }
 
   function dateLabel(d) {
-    if (d === state.activeDate) return "Сегодня";
-    var toDate = function (ru) {
-      var p = ru.split(".");
-      return new Date(parseInt(p[2], 10), parseInt(p[1], 10) - 1, parseInt(p[0], 10));
-    };
-    var diffDays = Math.round((toDate(d) - toDate(state.activeDate)) / 86400000);
-    if (diffDays === -1) return "Вчера";
-    if (diffDays === -2) return "Позавчера";
-    if (diffDays === 1) return "Завтра";
-    return d.slice(0, 5); // "ДД.ММ"
+    // Единообразно "ДД.ММ" для всех пилюль без исключений — раньше
+    // "Сегодня"/"Завтра"/"Вчера" словами для одних дат и числами для
+    // других визуально путало (смешанный формат в одном ряду).
+    return d.slice(0, 5);
   }
 
   function renderDatePicker() {
