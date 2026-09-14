@@ -443,6 +443,13 @@ header h1 {
   margin-bottom: 12px;
 }
 
+.route-courier-btn {
+  display: block;
+  margin: 0 0 12px;
+  padding: 6px 4px;
+  font-weight: 600;
+}
+
 .route-comment-edit { margin-bottom: 14px; }
 .route-comment-label {
   color: var(--ink-soft);

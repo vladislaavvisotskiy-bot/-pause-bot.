@@ -294,6 +294,26 @@ async def api_delivery_points(request: web.Request):
     return web.json_response({"points": await _retry_sheets(sheets.get_delivery_points)})
 
 
+async def api_couriers(request: web.Request):
+    if request["role"] != "admin":
+        return web.json_response({"error": "forbidden"}, status=403)
+    return web.json_response({"couriers": await _retry_sheets(sheets.get_couriers)})
+
+
+async def api_route_assign(request: web.Request):
+    if request["role"] != "admin":
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or _today()
+    point = (body.get("point") or "").strip()
+    courier_tg_id = (body.get("courier_tg_id") or "").strip()
+    if not point:
+        return web.json_response({"error": "point required"}, status=400)
+    async with _route_lock:
+        await _retry_sheets(sheets.set_route_courier, date_str, point, courier_tg_id)
+    return web.json_response({"ok": True})
+
+
 async def api_route_reorder(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
@@ -406,10 +426,12 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/route/visibility", api_route_visibility_get)
     app.router.add_post("/api/route/visibility", api_route_visibility_set)
     app.router.add_get("/api/delivery_points", api_delivery_points)
+    app.router.add_get("/api/couriers", api_couriers)
     app.router.add_post("/api/route/reorder", api_route_reorder)
     app.router.add_post("/api/route/add", api_route_add)
     app.router.add_post("/api/route/remove", api_route_remove)
     app.router.add_post("/api/route/comment", api_route_comment)
+    app.router.add_post("/api/route/assign", api_route_assign)
     app.router.add_post("/api/route/complete", api_route_complete)
     app.router.add_get("/api/earnings", api_earnings)
     app.router.add_get("/api/earnings/month", api_earnings_month)

@@ -22,6 +22,7 @@
     markers: [],
     polyline: null,
     earningsDateISO: null,
+    couriers: [],       // [{tg_id, name, status}] — только для админа, см. loadCouriers
   };
 
   // -------------------------------------------------------------------
@@ -416,6 +417,21 @@
     var body = document.createElement("div");
     body.className = "card-body";
 
+    // Кнопка-переключатель курьера — видна только админу, нужна когда
+    // активных курьеров больше одного (по умолчанию новая точка достаётся
+    // первому курьеру по списку в "Курьеры", см. sync_daily_route — без
+    // этой кнопки перенести точку другому курьеру было нечем).
+    if (state.role === "admin") {
+      var courierBtn = document.createElement("button");
+      courierBtn.className = "ghost-btn route-courier-btn";
+      courierBtn.textContent = "🚴 " + (courierNameFor(point.courier_tg_id) || "Курьер не назначен");
+      courierBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openCourierPicker(point);
+      });
+      body.appendChild(courierBtn);
+    }
+
     // "Комментарий для курьера" — на этот день у этой точки, не связан с
     // конкретным человеком (пример: "заберёт Тимур, звоните ему"). После
     // сохранения поле блокируется от случайной правки (показывает
@@ -731,6 +747,49 @@
       .catch(function (err) { toast("Не удалось сохранить комментарий: " + err.message); });
   }
 
+  // -------------------------------------------------------------------
+  // Назначение курьера на точку (только админ)
+  // -------------------------------------------------------------------
+
+  function loadCouriers() {
+    return api("/api/couriers").then(function (data) {
+      state.couriers = data.couriers || [];
+    }).catch(function () {
+      // Не критично — просто кнопка назначения курьера покажет ID вместо
+      // имени, пока список не подгрузится (или останется пустым при ошибке).
+    });
+  }
+
+  function courierNameFor(tgId) {
+    if (!tgId) return "";
+    var c = state.couriers.filter(function (x) { return x.tg_id === tgId; })[0];
+    return c ? c.name || c.tg_id : tgId;
+  }
+
+  function openCourierPicker(point) {
+    var modal = document.getElementById("courier-picker-modal");
+    var list = document.getElementById("courier-picker-list");
+    list.innerHTML = "";
+    if (!state.couriers.length) {
+      list.innerHTML = "<div class=\"modal-list-empty\">Нет ни одного курьера в справочнике «Курьеры»</div>";
+    } else {
+      state.couriers.forEach(function (c) {
+        var item = document.createElement("div");
+        item.className = "modal-list-item";
+        item.textContent = (c.name || c.tg_id) + (c.tg_id === point.courier_tg_id ? " ✓" : "");
+        item.addEventListener("click", function () {
+          modal.hidden = true;
+          var date = state.date;
+          api("/api/route/assign", { method: "POST", body: { date: date, point: point.point, courier_tg_id: c.tg_id } })
+            .then(function () { return loadRoute(date); })
+            .catch(function (err) { toast("Не удалось назначить курьера: " + err.message); });
+        });
+        list.appendChild(item);
+      });
+    }
+    modal.hidden = false;
+  }
+
   function openAddPointModal() {
     var modal = document.getElementById("add-point-modal");
     var list = document.getElementById("add-point-list");
@@ -938,6 +997,13 @@
       if (e.target.id === "add-point-modal") e.target.hidden = true;
     });
 
+    document.getElementById("courier-picker-cancel").addEventListener("click", function () {
+      document.getElementById("courier-picker-modal").hidden = true;
+    });
+    document.getElementById("courier-picker-modal").addEventListener("click", function (e) {
+      if (e.target.id === "courier-picker-modal") e.target.hidden = true;
+    });
+
     document.getElementById("confirm-modal-yes").addEventListener("click", function () {
       var cb = confirmCallback;
       hideConfirm();
@@ -983,6 +1049,7 @@
       state.tgId = me.tg_id;
       showScreen("orders");
       loadRouteDates();
+      if (state.role === "admin") loadCouriers();
       return loadRoute(deepLinkDate || undefined);
     }).catch(function (err) {
       // 401/403 — реально не тот человек (не курьер и не админ), кнопка

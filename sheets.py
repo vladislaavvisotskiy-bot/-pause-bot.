@@ -1801,6 +1801,27 @@ def remove_route_point(date_str: str, point_name: str):
             return
 
 
+def set_route_courier(date_str: str, point_name: str, courier_tg_id: str):
+    """Переназначает точку конкретному курьеру на конкретный день (столбец
+    C "Маршрут", тот же ROUTE_COURIER_TG_ID, что читает get_route_for_date).
+    Нужно, когда активных курьеров больше одного — по умолчанию новая
+    точка достаётся первому курьеру по списку в "Курьеры" (см.
+    sync_daily_route), а не распределяется сама; админ переносит вручную
+    через Mini App."""
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
+            ws.update_cell(r, config.ROUTE_COURIER_TG_ID, courier_tg_id)
+            _invalidate_route_cache(date_str)
+            return
+
+
 def set_route_courier_comment(date_str: str, point_name: str, comment: str):
     """Сохраняет "Комментарий для курьера" для точки на конкретный день
     (столбец G "Маршрут") — привязан к паре (дата, точка), поэтому не
