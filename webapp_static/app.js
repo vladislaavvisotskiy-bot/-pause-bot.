@@ -153,11 +153,26 @@
 
   // Раздвигает визуально слипшиеся метки (одно здание, соседние входы) —
   // только положение самих значков на экране, порядок и данные маршрута
-  // не меняются. Вызывать ПОСЛЕ того, как у карты выставлен окончательный
-  // масштаб (fitBounds/setView), иначе пиксельные расстояния будут не те.
+  // не меняются.
+  //
+  // ВАЖНО: расстояние между точками меряем в пикселях НЕ текущего вида
+  // карты (map.latLngToLayerPoint), а фиксированного "уличного" масштаба
+  // REF_ZOOM через map.project/unproject. Раньше это был баг: при
+  // fitBounds на разбросанный по городу маршрут карта часто открывается
+  // на низком зуме (весь день на одном экране) — на нём 26px могли
+  // означать сотни метров и даже больше километра, из-за чего разные,
+  // ничем не связанные точки (соседние кварталы, а не "один дом")
+  // принимались за слипшиеся и разъезжались на реальные сотни метров от
+  // своего истинного адреса — ровно то место, куда ведёт кнопка
+  // "Поехали", переставало совпадать с меткой на карте. project/unproject
+  // считают то же самое пиксельное расстояние на фиксированном REF_ZOOM
+  // независимо от того, на каком зуме сейчас открыта карта, поэтому и
+  // вызывать эту функцию можно в любой момент, до или после fitBounds/
+  // setView — на результат это больше не влияет.
   function declutterLatLngs(map, latlngs) {
-    var THRESHOLD = 26; // px — чуть больше диаметра бейджа (24px)
-    var pts = latlngs.map(function (ll) { return map.latLngToLayerPoint(ll); });
+    var THRESHOLD = 26; // px на REF_ZOOM — чуть больше диаметра бейджа (24px)
+    var REF_ZOOM = 17; // масштаб "одного дома/квартала", как и задумано
+    var pts = latlngs.map(function (ll) { return map.project(ll, REF_ZOOM); });
     var used = new Array(pts.length).fill(false);
     var groups = [];
     for (var i = 0; i < pts.length; i++) {
@@ -185,7 +200,7 @@
         pts[idx] = L.point(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
       });
     });
-    return pts.map(function (pt) { return map.layerPointToLatLng(pt); });
+    return pts.map(function (pt) { return map.unproject(pt, REF_ZOOM); });
   }
 
   function renderMap(points) {
