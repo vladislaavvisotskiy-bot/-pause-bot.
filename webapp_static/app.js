@@ -79,9 +79,23 @@
     return (n || 0).toLocaleString("ru-RU") + " сум";
   }
 
+  // Клиентские названия сетов — только для отображения в Mini App (то же
+  // самое, что texts.SET_DISPLAY_NAMES/display_set_name на стороне бота,
+  // просто продублировано здесь, т.к. у фронтенда нет доступа к Python).
+  // В таблицу и в API-запросы техническое название не подменяется —
+  // используется только здесь, при сборке текста для показа.
+  var SET_DISPLAY_NAMES = {
+    "Блюдо дня": "Пауза дня.",
+    "Сет стандарт": "Для тебя.",
+  };
+
+  function displaySetName(name) {
+    return SET_DISPLAY_NAMES[name] || name;
+  }
+
   function itemsText(items) {
     return items.map(function (i) {
-      return i.qty + "× " + i.set;
+      return i.qty + "× " + displaySetName(i.set);
     }).join(", ");
   }
 
@@ -403,9 +417,12 @@
     body.className = "card-body";
 
     // "Комментарий для курьера" — на этот день у этой точки, не связан с
-    // конкретным человеком (пример: "заберёт Тимур, звоните ему"). Админ
-    // может вписать/изменить в любой момент; курьер видит его отдельным
-    // заметным блоком.
+    // конкретным человеком (пример: "заберёт Тимур, звоните ему"). После
+    // сохранения поле блокируется от случайной правки (показывает
+    // сохранённый текст, не редактируется) — кнопка "Сохранить" меняется
+    // на "✏️ Изменить", по которой поле снова становится редактируемым;
+    // цикл Сохранить→Изменить→Сохранить повторяется одинаково каждый раз.
+    // Курьер видит текст отдельным заметным блоком, без редактирования.
     if (state.role === "admin") {
       var commentWrap = document.createElement("div");
       commentWrap.className = "route-comment-edit";
@@ -417,16 +434,32 @@
       commentInput.rows = 2;
       commentInput.value = point.courier_comment || "";
       commentInput.addEventListener("click", function (e) { e.stopPropagation(); });
-      var commentSave = document.createElement("button");
-      commentSave.className = "ghost-btn route-comment-save";
-      commentSave.textContent = "Сохранить";
-      commentSave.addEventListener("click", function (e) {
+      var commentBtn = document.createElement("button");
+      commentBtn.className = "ghost-btn route-comment-save";
+
+      var commentLocked = !!(point.courier_comment && point.courier_comment.trim());
+      var setCommentLocked = function (locked) {
+        commentLocked = locked;
+        commentInput.disabled = locked;
+        commentInput.classList.toggle("locked", locked);
+        commentBtn.textContent = locked ? "✏️ Изменить" : "Сохранить";
+      };
+      setCommentLocked(commentLocked);
+
+      commentBtn.addEventListener("click", function (e) {
         e.stopPropagation();
-        saveCourierComment(point.point, commentInput.value);
+        if (commentLocked) {
+          setCommentLocked(false);
+          commentInput.focus();
+          return;
+        }
+        saveCourierComment(point.point, commentInput.value, function () {
+          setCommentLocked(true);
+        });
       });
       commentWrap.appendChild(commentLabel);
       commentWrap.appendChild(commentInput);
-      commentWrap.appendChild(commentSave);
+      commentWrap.appendChild(commentBtn);
       body.appendChild(commentWrap);
     } else if (point.courier_comment) {
       var commentBlock = document.createElement("div");
@@ -683,13 +716,17 @@
       .catch(function (err) { toast("Не удалось отметить: " + err.message); });
   }
 
-  function saveCourierComment(point, comment) {
+  function saveCourierComment(point, comment, onSuccess) {
     var date = state.date;
     api("/api/route/comment", { method: "POST", body: { date: date, point: point, comment: comment } })
       .then(function () {
         toast("Комментарий сохранён");
         var p = state.points.filter(function (x) { return x.point === point; })[0];
         if (p) p.courier_comment = comment;
+        // Поле блокируется от правки только ПОСЛЕ подтверждённого сохранения
+        // (не сразу по клику) — если запрос не удался, поле остаётся
+        // редактируемым с кнопкой "Сохранить", чтобы можно было повторить.
+        if (onSuccess) onSuccess();
       })
       .catch(function (err) { toast("Не удалось сохранить комментарий: " + err.message); });
   }

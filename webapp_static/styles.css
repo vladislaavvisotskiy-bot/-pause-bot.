@@ -463,6 +463,15 @@ header h1 {
   resize: vertical;
   box-sizing: border-box;
 }
+/* Поле заблокировано сразу после "Сохранить" — просто показывает текст,
+   не приглашает редактировать (курсор недоступен, ручка изменения
+   размера скрыта); нажатие "✏️ Изменить" возвращает обычный вид. */
+.route-comment-input.locked {
+  background: var(--card);
+  color: var(--ink-soft);
+  resize: none;
+  opacity: 0.9;
+}
 .route-comment-save {
   padding: 6px 4px;
 }
