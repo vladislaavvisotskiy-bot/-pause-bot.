@@ -52,13 +52,50 @@ async def cmd_webapp_debug(message: Message):
     await message.answer("\n".join(lines))
 
 
+async def _show_admin_panel(send):
+    """send — bound answer-метод (message.answer или callback.message.answer),
+    общий вход в панель и для текстовой команды /admin, и для кнопки
+    "⚙️ Администратор" в главном меню, и для возврата кнопкой "Назад"."""
+    await send(texts.ADMIN_ACTIVE_MENU_DATE.format(date=sheets.get_active_menu_date()))
+    await send("Панель администратора:", reply_markup=kb.admin_panel_kb())
+
+
 @router.message(Command("admin"))
 async def admin_panel(message: Message):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
         return
-    await message.answer(texts.ADMIN_ACTIVE_MENU_DATE.format(date=sheets.get_active_menu_date()))
-    await message.answer("Панель администратора:", reply_markup=kb.admin_panel_kb())
+    await _show_admin_panel(message.answer)
+
+
+@router.callback_query(F.data == "admin_panel_open")
+async def admin_panel_open(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await _show_admin_panel(callback.message.answer)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_back:"))
+async def admin_back(callback: CallbackQuery):
+    """Кнопка "‹ Назад" внутри отдельных разделов панели — возвращает на
+    экран выше, а не сразу в главное меню (см. report_dates_kb,
+    admin_kitchen_format_kb, admin_broadcast_toggle_kb, admin_club_panel_kb,
+    admin_back_kb)."""
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    target = callback.data.split(":", 1)[1]
+    if target == "kitchen_dates":
+        await _ask_report_date(callback.message, "kitchen_pick")
+    elif target == "courier_dates":
+        await _ask_report_date(callback.message, "courier")
+    elif target == "payments_dates":
+        await _ask_report_date(callback.message, "payments")
+    else:
+        await _show_admin_panel(callback.message.answer)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "admin_instructions")
@@ -66,11 +103,14 @@ async def admin_instructions(callback: CallbackQuery):
     if not _is_admin(callback.from_user.id):
         await callback.answer(texts.ADMIN_ONLY, show_alert=True)
         return
-    for chunk in (
+    chunks = (
         texts.ADMIN_INSTRUCTIONS_1, texts.ADMIN_INSTRUCTIONS_2, texts.ADMIN_INSTRUCTIONS_3,
         texts.ADMIN_INSTRUCTIONS_4, texts.ADMIN_INSTRUCTIONS_5, texts.ADMIN_INSTRUCTIONS_6,
-    ):
+        texts.ADMIN_INSTRUCTIONS_7, texts.ADMIN_INSTRUCTIONS_8,
+    )
+    for chunk in chunks[:-1]:
         await callback.message.answer(chunk)
+    await callback.message.answer(chunks[-1], reply_markup=kb.admin_back_kb())
     await callback.answer()
 
 
@@ -328,7 +368,7 @@ async def admin_debtors(callback: CallbackQuery):
         return
     debtors = sheets.get_all_debtors()
     if not debtors:
-        await callback.message.answer(texts.ADMIN_DEBTORS_EMPTY)
+        await callback.message.answer(texts.ADMIN_DEBTORS_EMPTY, reply_markup=kb.admin_back_kb())
         await callback.answer()
         return
 
@@ -339,7 +379,7 @@ async def admin_debtors(callback: CallbackQuery):
         total += d["sum"]
     lines.append("")
     lines.append(f"Итого: {total:,} сум".replace(",", " "))
-    await callback.message.answer("\n".join(lines))
+    await callback.message.answer("\n".join(lines), reply_markup=kb.admin_back_kb())
     await callback.answer()
 
 
@@ -367,10 +407,16 @@ async def _ask_report_date(message: Message, report_type: str):
 async def _send_report_by_type(bot: Bot, chat_id: int, report_type: str, date_str: str):
     if report_type == "kitchen":
         report = sheets.build_kitchen_report(date_str)
-        await bot.send_message(chat_id, report or texts.ADMIN_NO_ORDERS_FOR_DATE.format(date=date_str))
+        await bot.send_message(
+            chat_id, report or texts.ADMIN_NO_ORDERS_FOR_DATE.format(date=date_str),
+            reply_markup=kb.admin_back_kb(),
+        )
     elif report_type == "courier":
         report = sheets.build_courier_report(date_str)
-        await bot.send_message(chat_id, report or texts.ADMIN_NO_ORDERS_FOR_DATE.format(date=date_str))
+        await bot.send_message(
+            chat_id, report or texts.ADMIN_NO_ORDERS_FOR_DATE.format(date=date_str),
+            reply_markup=kb.admin_back_kb(),
+        )
     elif report_type == "kitchen_pdf":
         await send_kitchen_pdf(bot, chat_id, date_str)
     elif report_type == "payments":
@@ -518,6 +564,7 @@ async def send_kitchen_pdf(bot: Bot, chat_id: int, date_str: str):
         chat_id,
         BufferedInputFile(data, filename=filename),
         caption=texts.ADMIN_KITCHEN_PDF_CAPTION.format(date=date_str),
+        reply_markup=kb.admin_back_kb(),
     )
 
 
@@ -557,10 +604,15 @@ async def _send_payments_for_date(bot: Bot, chat_id: int, date_str: str):
     Уже подтверждённые оплаты сюда не попадают — это список дел, а не архив."""
     entries = sheets.get_pending_payments_for_date(date_str)
     if not entries:
-        await bot.send_message(chat_id, texts.ADMIN_NO_PAYMENTS_FOR_DATE.format(date=date_str))
+        await bot.send_message(
+            chat_id, texts.ADMIN_NO_PAYMENTS_FOR_DATE.format(date=date_str), reply_markup=kb.admin_back_kb(),
+        )
         return
 
-    await bot.send_message(chat_id, texts.ADMIN_PAYMENTS_HEADER.format(date=date_str, count=len(entries)))
+    await bot.send_message(
+        chat_id, texts.ADMIN_PAYMENTS_HEADER.format(date=date_str, count=len(entries)),
+        reply_markup=kb.admin_back_kb(),
+    )
     for entry in entries:
         caption = texts.ADMIN_PAYMENT_ITEM_CAPTION.format(
             name=entry["name"],
@@ -621,31 +673,6 @@ async def admin_club_info_save(message: Message, state: FSMContext):
     sheets.set_club_info_text(text)
     await state.clear()
     await message.answer(texts.ADMIN_CLUB_INFO_SAVED)
-
-
-@router.callback_query(F.data == "admin_giveaway")
-async def admin_giveaway_start(callback: CallbackQuery, state: FSMContext):
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
-        return
-    await callback.message.answer(texts.ADMIN_GIVEAWAY_PROMPT)
-    await state.set_state(AdminClub.waiting_giveaway)
-    await callback.answer()
-
-
-@router.message(AdminClub.waiting_giveaway)
-async def admin_giveaway_save(message: Message, state: FSMContext):
-    text = (message.text or "").strip()
-    if not text:
-        await message.answer(texts.ADMIN_GIVEAWAY_PROMPT)
-        return
-    await state.clear()
-    if text.lower() in texts.ADMIN_GIVEAWAY_OFF_WORDS:
-        sheets.set_giveaway("", False)
-        await message.answer(texts.ADMIN_GIVEAWAY_OFF)
-    else:
-        sheets.set_giveaway(text, True)
-        await message.answer(texts.ADMIN_GIVEAWAY_SAVED)
 
 
 # ---------------------------------------------------------------------------

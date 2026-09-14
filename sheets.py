@@ -894,20 +894,6 @@ def get_club_level(order_count: int) -> dict:
     return result
 
 
-def get_giveaway() -> tuple:
-    """(активен ли розыгрыш, текст розыгрыша)."""
-    ws = _ws(config.SHEET_CLUB)
-    active = (ws.acell(config.CLUB_ACTIVE_CELL).value or "").strip().lower() == "да"
-    text = ws.acell(config.CLUB_GIVEAWAY_TEXT_CELL).value or ""
-    return active, text
-
-
-def set_giveaway(text: str, active: bool):
-    ws = _ws(config.SHEET_CLUB)
-    ws.update_acell(config.CLUB_ACTIVE_CELL, "Да" if active else "Нет")
-    ws.update_acell(config.CLUB_GIVEAWAY_TEXT_CELL, text or "")
-
-
 def get_club_info_text() -> str:
     ws = _ws(config.SHEET_CLUB)
     return ws.acell(config.CLUB_INFO_TEXT_CELL).value or ""

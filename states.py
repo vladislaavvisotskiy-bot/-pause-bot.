@@ -42,7 +42,6 @@ class PaymentReminder(StatesGroup):
 
 class AdminClub(StatesGroup):
     waiting_info = State()
-    waiting_giveaway = State()
 
 
 class AdminMenu(StatesGroup):

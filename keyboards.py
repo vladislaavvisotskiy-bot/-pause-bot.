@@ -24,18 +24,19 @@ def main_menu_kb(tg_id: int = None) -> InlineKeyboardMarkup:
     b.button(text=texts.CLUB_BTN, callback_data="club_section")
     b.button(text=texts.SUPPORT_BTN, callback_data="support")
 
-    # Кнопка маршрута — тот же Mini App и для курьера, и для админа, но
-    # режим (можно ли редактировать) определяется на сервере по роли из
-    # initData, а не по URL, так что сама ссылка всегда одна и та же.
-    # Пока WEBAPP_URL не задан (например, публичный домен на Railway ещё
-    # не сгенерирован) — кнопку вообще не показываем, чтобы не давать
+    # Кнопка "Администратор" видна только самому админу — открывает ту же
+    # панель /admin, что и текстовая команда (кнопка маршрута для него
+    # переехала внутрь этой панели, см. admin_panel_kb).
+    if config.ADMIN_CHAT_ID and tg_id == config.ADMIN_CHAT_ID:
+        b.button(text=texts.ADMIN_PANEL_BTN, callback_data="admin_panel_open")
+
+    # Кнопка маршрута для курьера — тот же Mini App, режим (можно ли
+    # редактировать) определяется на сервере по роли из initData. Пока
+    # WEBAPP_URL не задан (например, публичный домен на Railway ещё не
+    # сгенерирован) — кнопку вообще не показываем, чтобы не давать
     # клиентам нерабочую ссылку.
-    if config.WEBAPP_URL and tg_id is not None:
-        url = f"{config.WEBAPP_URL}/miniapp"
-        if config.ADMIN_CHAT_ID and tg_id == config.ADMIN_CHAT_ID:
-            b.button(text=texts.ADMIN_ROUTE_BTN, web_app=WebAppInfo(url=url))
-        elif sheets.is_courier(tg_id):
-            b.button(text=texts.COURIER_ROUTE_BTN, web_app=WebAppInfo(url=url))
+    if config.WEBAPP_URL and tg_id is not None and sheets.is_courier(tg_id):
+        b.button(text=texts.COURIER_ROUTE_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/miniapp"))
 
     b.adjust(1)
     return b.as_markup()
@@ -223,10 +224,8 @@ def edit_profile_kb() -> InlineKeyboardMarkup:
 # Раздел «Pause Club»
 # ---------------------------------------------------------------------------
 
-def club_kb(giveaway_active: bool) -> InlineKeyboardMarkup:
+def club_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    if giveaway_active:
-        b.button(text=texts.GIVEAWAY_PARTICIPATE_BTN, callback_data="giveaway_join")
     _home(b)
     b.adjust(1)
     return b.as_markup()
@@ -248,6 +247,15 @@ def daily_giveaway_kb(has_order_today: bool, is_participating: bool) -> InlineKe
 # Админ
 # ---------------------------------------------------------------------------
 
+def admin_back_kb(target: str = "panel") -> InlineKeyboardMarkup:
+    """Одна кнопка «‹ Назад» — используется внутри отдельных разделов
+    панели /admin, чтобы вернуться на экран выше (см. admin_back в
+    handlers/admin.py)."""
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.BACK_BTN, callback_data=f"admin_back:{target}")
+    return b.as_markup()
+
+
 def admin_panel_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_KITCHEN_REPORT_BTN, callback_data="admin_kitchen_report")
@@ -256,8 +264,12 @@ def admin_panel_kb() -> InlineKeyboardMarkup:
     b.button(text=texts.ADMIN_BROADCAST_BTN, callback_data="admin_broadcast_panel")
     b.button(text="💰 Должники", callback_data="admin_debtors")
     b.button(text=texts.ADMIN_CLUB_PANEL_BTN, callback_data="admin_club_panel")
-    # "Инструкция" всегда последней — независимо от того, сколько кнопок
-    # выше появится в будущем.
+    if config.WEBAPP_URL:
+        b.button(text=texts.ADMIN_ROUTE_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/miniapp"))
+    # "Главное меню" — предпоследней, "Инструкция" — всегда самой
+    # последней, независимо от того, сколько кнопок выше появится в
+    # будущем.
+    b.button(text=texts.HOME_BTN, callback_data="back_to_menu")
     b.button(text=texts.ADMIN_INSTRUCTIONS_BTN, callback_data="admin_instructions")
     b.adjust(1)
     return b.as_markup()
@@ -267,6 +279,7 @@ def admin_kitchen_format_kb(date_str: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_KITCHEN_FORMAT_PDF_BTN, callback_data=f"kitchenfmt:pdf:{date_str}")
     b.button(text=texts.ADMIN_KITCHEN_FORMAT_TEXT_BTN, callback_data=f"kitchenfmt:text:{date_str}")
+    b.button(text=texts.BACK_BTN, callback_data="admin_back:kitchen_dates")
     b.adjust(1)
     return b.as_markup()
 
@@ -277,6 +290,7 @@ def admin_broadcast_toggle_kb(disabled: bool) -> InlineKeyboardMarkup:
         b.button(text=texts.ADMIN_BROADCAST_TOGGLE_ON_BTN, callback_data="broadcast_toggle_on")
     else:
         b.button(text=texts.ADMIN_BROADCAST_TOGGLE_OFF_BTN, callback_data="broadcast_toggle_off")
+    b.button(text=texts.BACK_BTN, callback_data="admin_back:panel")
     b.adjust(1)
     return b.as_markup()
 
@@ -284,7 +298,7 @@ def admin_broadcast_toggle_kb(disabled: bool) -> InlineKeyboardMarkup:
 def admin_club_panel_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_CLUB_INFO_BTN, callback_data="admin_club_info")
-    b.button(text=texts.ADMIN_GIVEAWAY_BTN, callback_data="admin_giveaway")
+    b.button(text=texts.BACK_BTN, callback_data="admin_back:panel")
     b.adjust(1)
     return b.as_markup()
 
@@ -296,6 +310,7 @@ def report_dates_kb(report_type: str, dates: list) -> InlineKeyboardMarkup:
     for d in dates:
         b.button(text=d[:5], callback_data=f"adminrep:{report_type}:{d}")
     b.adjust(4)
+    b.row(InlineKeyboardButton(text=texts.BACK_BTN, callback_data="admin_back:panel"))
     return b.as_markup()
 
 

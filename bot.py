@@ -86,17 +86,13 @@ async def setup_commands(bot: Bot):
         scope=BotCommandScopeDefault(),
     )
     if config.ADMIN_CHAT_ID:
+        # Всё, кроме /start и /admin, теперь доступно кнопками внутри самой
+        # панели /admin — остальные команды (kitchen, courier, payments,
+        # broadcasts_*, giveaway_today, menu_survey) по-прежнему работают,
+        # если набрать их текстом, просто больше не загромождают меню "/".
         admin_commands = [
+            BotCommand(command="start", description="Начать / открыть главное меню"),
             BotCommand(command="admin", description="Панель администратора"),
-            BotCommand(command="kitchen", description="Текстовый отчёт для кухни"),
-            BotCommand(command="kitchen_pdf", description="PDF-отчёт для кухни"),
-            BotCommand(command="courier", description="Отчёт для курьера"),
-            BotCommand(command="payments", description="Оплаты, ожидающие подтверждения, за дату"),
-            BotCommand(command="giveaway_today", description="Участники «Паузы в подарок» сегодня"),
-            BotCommand(command="broadcasts_off", description="Выключить автоматические рассылки клиентам"),
-            BotCommand(command="broadcasts_on", description="Включить автоматические рассылки клиентам"),
-            BotCommand(command="broadcasts_status", description="Статус автоматических рассылок"),
-            BotCommand(command="menu_survey", description="Разослать разовый опрос о меню"),
         ]
         try:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))

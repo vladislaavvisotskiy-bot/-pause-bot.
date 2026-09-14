@@ -107,9 +107,7 @@ CARE_MESSAGE_TOTAL = 1518
 
 # --- Pause Club: лист "Клуб" ---
 SHEET_CLUB = "Клуб"
-CLUB_ACTIVE_CELL = "B1"          # "Да" / "Нет" — есть ли сейчас активный розыгрыш
-CLUB_GIVEAWAY_TEXT_CELL = "B2"   # текст розыгрыша
-CLUB_INFO_TEXT_CELL = "B3"       # общий текст о клубе (когда розыгрыша нет)
+CLUB_INFO_TEXT_CELL = "B3"       # общий текст о клубе
 
 # Пороги уровней Pause Club — по количеству заказов (столбец O в CRM)
 CLUB_LEVELS = [

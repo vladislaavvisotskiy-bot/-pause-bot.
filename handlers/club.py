@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-from aiogram import Router, F, Bot
+from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 import sheets
 import texts
 import keyboards as kb
-import config
 
 router = Router()
 
@@ -31,11 +30,10 @@ async def club_section(callback: CallbackQuery, state: FSMContext):
     else:
         text += texts.CLUB_MAX_LEVEL_LINE
 
-    active, giveaway_text = sheets.get_giveaway()
     text += texts.CLUB_NEWS_HEADER
-    text += giveaway_text if active and giveaway_text else sheets.get_club_info_text()
+    text += sheets.get_club_info_text()
 
-    await callback.message.answer(text, reply_markup=kb.club_kb(giveaway_active=active))
+    await callback.message.answer(text, reply_markup=kb.club_kb())
 
     # Ежедневный розыгрыш "Пауза в подарок" — отдельный блок. Победителя
     # бот больше не выбирает сам (выбор — вручную, вне бота); блок остаётся
@@ -57,28 +55,6 @@ async def club_section(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         dg_text, reply_markup=kb.daily_giveaway_kb(has_order_today, is_participating)
     )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "giveaway_join")
-async def giveaway_join(callback: CallbackQuery, bot: Bot):
-    client = sheets.find_client_by_tg_id(callback.from_user.id)
-    if not client:
-        await callback.answer()
-        return
-
-    await callback.message.answer(texts.GIVEAWAY_JOINED)
-
-    if config.ADMIN_CHAT_ID:
-        try:
-            await bot.send_message(
-                config.ADMIN_CHAT_ID,
-                texts.ADMIN_GIVEAWAY_JOIN_ALERT.format(
-                    name=client.get("name", ""), client_id=client.get("id", "")
-                ),
-            )
-        except Exception:
-            pass
     await callback.answer()
 
 
