@@ -81,10 +81,13 @@ async def send_payment_reminders(bot: Bot):
 
 
 async def setup_commands(bot: Bot):
-    await bot.set_my_commands(
-        [BotCommand(command="start", description="Начать / открыть главное меню")],
-        scope=BotCommandScopeDefault(),
-    )
+    # Для обычных клиентов выпадающее меню команд (кнопка "/" у поля ввода)
+    # убрано полностью — интерфейс только на кнопках внутри переписки.
+    # /start при этом продолжает работать как обычно, если набрать его
+    # текстом вручную — delete_my_commands убирает только пункт из этого
+    # меню, а не саму команду (её ловит отдельный CommandStart() фильтр
+    # в handlers/start.py, никак не связанный со списком команд).
+    await bot.delete_my_commands(scope=BotCommandScopeDefault())
     if config.ADMIN_CHAT_ID:
         # Всё, кроме /start и /admin, теперь доступно кнопками внутри самой
         # панели /admin — остальные команды (kitchen, courier, payments,
