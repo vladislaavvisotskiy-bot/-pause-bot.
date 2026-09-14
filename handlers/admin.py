@@ -599,10 +599,12 @@ async def cmd_payments(message: Message, bot: Bot, command: CommandObject):
 
 
 async def _send_payments_for_date(bot: Bot, chat_id: int, date_str: str):
-    """Единый список оплат, ожидающих подтверждения на дату — и скрины
-    картой, и заказы наличными, вперемешку (см. sheets.get_pending_payments_for_date).
-    Уже подтверждённые оплаты сюда не попадают — это список дел, а не архив."""
-    entries = sheets.get_pending_payments_for_date(date_str)
+    """Единый список оплат за дату — и скрины картой, и заказы наличными,
+    вперемешку, все статусы (см. sheets.get_payments_for_date): уже
+    подтверждённые тоже показываются, с пометкой вместо кнопки — как
+    раньше делал /payments для скринов, теперь так же и для наличных.
+    Несколько строк одного клиента за день объединены в одну запись."""
+    entries = sheets.get_payments_for_date(date_str)
     if not entries:
         await bot.send_message(
             chat_id, texts.ADMIN_NO_PAYMENTS_FOR_DATE.format(date=date_str), reply_markup=kb.admin_back_kb(),
@@ -614,30 +616,36 @@ async def _send_payments_for_date(bot: Bot, chat_id: int, date_str: str):
         reply_markup=kb.admin_back_kb(),
     )
     for entry in entries:
+        items_text = ", ".join(
+            f"{s['qty']}× {texts.display_set_name(s['set'])}" if s.get("qty") else texts.display_set_name(s["set"])
+            for s in entry["sets"]
+        )
         caption = texts.ADMIN_PAYMENT_ITEM_CAPTION.format(
             name=entry["name"],
-            qty=entry["qty"],
-            set_name=texts.display_set_name(entry["set"]) if entry.get("set") else "",
+            items=items_text,
             sum=f"{entry['sum']:,}".replace(",", " "),
         )
+        rows_str = ",".join(str(r) for r in entry["rows"])
+        if entry["confirmed"]:
+            caption += texts.ADMIN_PAYMENT_ALREADY_CONFIRMED_SUFFIX
         if entry["method"] == "card":
             try:
                 await bot.send_photo(
                     chat_id, entry["screenshot"], caption=caption,
-                    reply_markup=kb.card_confirm_admin_kb(str(entry["row"])),
+                    reply_markup=None if entry["confirmed"] else kb.card_confirm_admin_kb(rows_str),
                 )
             except Exception as e:
-                logger.exception("Не удалось отправить скрин оплаты клиента %s (строка %s)", entry.get("client_id"), entry.get("row"))
+                logger.exception("Не удалось отправить скрин оплаты клиента %s (строки %s)", entry.get("client_id"), rows_str)
                 await bot.send_message(
                     chat_id,
                     texts.ADMIN_PAYMENT_SEND_FAILED.format(
-                        name=entry["name"], row=entry.get("row"), error=e,
+                        name=entry["name"], row=rows_str, error=e,
                     ),
                 )
         else:
             await bot.send_message(
                 chat_id, texts.ADMIN_PAYMENT_CASH_PREFIX + caption,
-                reply_markup=kb.cash_confirm_admin_kb(str(entry["row"])),
+                reply_markup=None if entry["confirmed"] else kb.cash_confirm_admin_kb(rows_str),
             )
 
 

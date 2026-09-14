@@ -367,10 +367,11 @@ ADMIN_ASK_REPORT_DATE = "За какую дату показать отчёт?"
 ADMIN_NO_RECENT_ORDERS = "Заказов пока нет."
 ADMIN_BAD_DATE_FORMAT = "Не понял дату — пришлите в формате ДД.ММ.ГГГГ, например 25.08.2026."
 
-ADMIN_NO_PAYMENTS_FOR_DATE = "Оплат, ожидающих подтверждения, за {date} нет."
-ADMIN_PAYMENTS_HEADER = "💳 Ожидают подтверждения оплаты за {date} — {count} шт.:"
-ADMIN_PAYMENT_ITEM_CAPTION = "{name} — {qty}× {set_name} — {sum} сум"
+ADMIN_NO_PAYMENTS_FOR_DATE = "Оплат (картой или наличными) за {date} нет."
+ADMIN_PAYMENTS_HEADER = "💳 Оплаты картой и наличными за {date} — {count} шт.:"
+ADMIN_PAYMENT_ITEM_CAPTION = "{name} — {items} — {sum} сум"
 ADMIN_PAYMENT_CASH_PREFIX = "💵 Наличными — "
+ADMIN_PAYMENT_ALREADY_CONFIRMED_SUFFIX = "\n\n✅ Уже подтверждено"
 ADMIN_PAYMENT_SEND_FAILED = "⚠️ Не удалось отправить скрин {name} (строка {row}): {error}"
 
 ADMIN_BROADCASTS_OFF = (

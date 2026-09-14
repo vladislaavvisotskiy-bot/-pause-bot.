@@ -535,24 +535,39 @@ def get_unconfirmed_card_orders(date_str: str) -> list:
     return [by_client[cid] for cid in order]
 
 
-def get_pending_payments_for_date(date_str: str) -> list:
-    """Все заказы за дату, ожидающие подтверждения оплаты админом —
+def get_payments_for_date(date_str: str) -> list:
+    """Все заказы за дату с оплатой картой (есть скрин) или наличными —
     источник единого флоу "Подтверждение оплаты" (см. handlers/admin.py:
-    _send_payments_for_date), объединяет то, что раньше показывал /payments
-    (только скрины картой), с оплатой наличными — она теперь так же не
-    считается оплаченной автоматически (см. confirm_cash_payment).
+    _send_payments_for_date). Объединяет то, что раньше показывал
+    /payments (скрины картой, ЛЮБОГО статуса), с оплатой наличными — она
+    тоже не считается оплаченной автоматически (см. confirm_cash_payment)
+    и тоже показывается независимо от статуса. Заказы без скрина и без
+    отметки об оплате (K пусто — "пришлю скрин позже", ещё не прислал)
+    сюда не попадают — подтверждать пока нечего; "В долг" тоже не сюда.
 
-    И карта, и наличные на этапе ожидания подтверждения пишутся в столбец
-    K одинаково — "На проверке" (формула столбца L показывает
-    "НЕ ОПЛАЧЕНО") — различаем их по столбцу O_SCREENSHOT: если скрин
-    прикреплён — это оплата картой (метод "card"), если нет — наличными
-    (метод "cash"). Уже подтверждённые оплаты (K = "Картой"/"Наличными")
-    сюда не попадают — им нечего подтверждать."""
+    Группировка — по клиенту, той же идеей, что и build_kitchen_report/
+    get_kitchen_line_items: несколько строк одного клиента за день
+    (например, заказал "Пауза дня" и "Для тебя" отдельно) объединяются в
+    одну запись с общей суммой и одной кнопкой "Подтвердить" на все
+    строки разом. Карточные строки дополнительно группируются по самому
+    значению скрина — один скрин, прикреплённый разом ко всей корзине
+    при оформлении заказа, даёт одну запись; если у клиента за день
+    оказалось два РАЗНЫХ скрина (две отдельные оплаты картой) — это две
+    отдельные записи, их физически нельзя показать одним сообщением с
+    одним фото. Наличные группируются просто по клиенту — фото нет,
+    конфликтовать нечему.
+
+    Каждая запись — {"client_id", "name", "method" ("card"/"cash"),
+    "screenshot", "rows" (все номера строк, обновляются при подтверждении
+    разом), "sets" ([{"set", "qty"}, ...] — сырые названия, отображение
+    display_set_name — на стороне handlers/admin.py), "sum", "confirmed"}."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
     prices = get_set_prices()
     clients = _clients_index()
-    out = []
+
+    groups = {}
+    order = []
 
     for i, row in enumerate(rows):
         r = i + 1
@@ -561,26 +576,62 @@ def get_pending_payments_for_date(date_str: str) -> list:
         if len(row) < config.O_DATE or row[config.O_DATE - 1].strip() != date_str:
             continue
         payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
-        if payment != "На проверке":
-            continue
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
         if is_canceled(comment):
             continue
         screenshot = row[config.O_SCREENSHOT - 1].strip() if len(row) >= config.O_SCREENSHOT else ""
         client_id = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
-        client = clients.get(client_id) or {}
-        name = client.get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or client_id or "—"
-        out.append({
-            "row": r,
-            "client_id": client_id,
-            "name": name,
-            "set": row[config.O_SET - 1].strip() if len(row) >= config.O_SET else "",
-            "qty": row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else "",
-            "sum": _row_amount(row, prices),
-            "screenshot": screenshot,
-            "method": "card" if screenshot else "cash",
-        })
 
+        if screenshot:
+            if payment not in ("На проверке", "Картой"):
+                continue
+            method = "card"
+            confirmed = payment == "Картой"
+            key = (client_id, "card", screenshot)
+        else:
+            if payment not in ("На проверке", "Наличными"):
+                continue
+            method = "cash"
+            confirmed = payment == "Наличными"
+            key = (client_id, "cash")
+
+        if key not in groups:
+            client = clients.get(client_id) or {}
+            name = client.get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or client_id or "—"
+            groups[key] = {
+                "client_id": client_id,
+                "name": name,
+                "method": method,
+                "screenshot": screenshot,
+                "rows": [],
+                "sum": 0,
+                "sets": [],
+                "confirmed_flags": [],
+            }
+            order.append(key)
+
+        g = groups[key]
+        g["rows"].append(r)
+        g["sum"] += _row_amount(row, prices)
+        g["confirmed_flags"].append(confirmed)
+        set_name = row[config.O_SET - 1].strip() if len(row) >= config.O_SET else ""
+        qty = row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else ""
+        if set_name:
+            g["sets"].append({"set": set_name, "qty": qty})
+
+    out = []
+    for key in order:
+        g = groups[key]
+        out.append({
+            "client_id": g["client_id"],
+            "name": g["name"],
+            "method": g["method"],
+            "screenshot": g["screenshot"],
+            "rows": g["rows"],
+            "sets": g["sets"],
+            "sum": g["sum"],
+            "confirmed": all(g["confirmed_flags"]),
+        })
     return out
 
 
