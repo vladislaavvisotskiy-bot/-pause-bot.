@@ -120,15 +120,24 @@ header h1 {
   margin-bottom: 20px;
   border: 1px solid var(--line);
   box-shadow: 0 6px 18px rgba(58, 46, 34, 0.1);
+  /* Leaflet создаёт свои внутренние слои (тайлы, маркеры, контролы) с
+     z-index до 1000 (см. leaflet.css) — без собственного стекингового
+     контекста на #map эти значения "пробивались" наружу и оказывались
+     выше выдвижной шторки меню (z-index 70/71), хотя шторка в разметке
+     идёт позже. position+z-index здесь замыкают всю внутреннюю Leaflet-
+     иерархию внутри #map, наружу карта всегда остаётся одним слоем на
+     z-index: 0 — ниже шторки, тоста и модалок. */
+  position: relative;
+  z-index: 0;
 }
 
-/* Лёгкий тёплый фильтр поверх тайлов CartoDB Voyager, чтобы карта не
-   выбивалась из общей айвори-палитры — Voyager сам по себе заметно теплее
-   и детальнее Positron (подписи улиц, значки ориентиров, цветные парки/
-   вода), поэтому фильтр здесь гораздо слабее, чем был для Positron —
-   иначе подписи и мелкие ориентиры просто замыливаются. */
+/* Лёгкий тёплый фильтр поверх тёмных тайлов Esri (World Dark Gray Canvas),
+   чтобы серая основа не выглядела холодной/нейтральной, а вписывалась в
+   тёплую тёмную эстетику PAUSE — sepia() сам по себе почти не снижает
+   контраст и яркость, поэтому подписи улиц (слой Reference) остаются
+   чёткими. */
 #map .leaflet-tile-pane {
-  filter: sepia(0.06) saturate(0.92) brightness(1.01);
+  filter: sepia(0.12);
 }
 #map .leaflet-control-attribution {
   background: rgba(242, 234, 217, 0.75);
@@ -166,8 +175,11 @@ header h1 {
   height: 0;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  border-bottom: 7px solid var(--ink-soft);
-  opacity: 0.5;
+  /* Тот же тёплый бежевый, что у линии маршрута (см. app.js renderMap) —
+     на тёмной карте нужен светлый акцент, var(--ink-soft) здесь был бы
+     почти не виден. */
+  border-bottom: 7px solid #d8c9ab;
+  opacity: 0.6;
 }
 
 .empty-state {

@@ -188,15 +188,25 @@
 
     if (!state.map) {
       state.map = L.map("map", { zoomControl: false, attributionControl: true });
-      // CartoDB Voyager — детальнее Positron (подписи улиц, значки
-      // ориентиров), но остаётся бесплатным и без API-ключа; лёгкий тёплый
-      // фильтр поверх (см. styles.css #map .leaflet-tile-pane) подстраивает
-      // его под палитру PAUSE, не размывая подписи.
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        maxZoom: 19,
-        subdomains: "abcd",
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
-      }).addTo(state.map);
+      // CartoDB (basemaps.cartocdn.com) к 2026 году требует API-ключ —
+      // без него отдаёт водяной знак "API KEY REQUIRED" вместо тайлов
+      // (именно это и было видно на карте). Esri "World Dark Gray Canvas"
+      // — бесплатные тайлы без какого-либо ключа, тёмная база: два слоя,
+      // базовый (заливка/геометрия улиц и кварталов) и Reference поверх
+      // (подписи улиц и ориентиров светлым по тёмному). Лёгкий тёплый
+      // фильтр (см. styles.css #map .leaflet-tile-pane) подстраивает
+      // серую основу под тёплую палитру PAUSE, не трогая контраст подписей.
+      L.tileLayer(
+        "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 16,
+          attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS community",
+        }
+      ).addTo(state.map);
+      L.tileLayer(
+        "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 16 }
+      ).addTo(state.map);
     }
 
     state.markers.forEach(function (m) { state.map.removeLayer(m); });
@@ -250,10 +260,12 @@
     if (placedLatLngs.length > 1) {
       // Тонкая приглушённая пунктирная линия — просто ощущение
       // направления пути, а не акцент карты (акцент — сами точки).
-      // Цвет — то же значение, что --ink-soft в styles.css (Leaflet не
-      // умеет читать CSS-переменные напрямую из JS).
+      // Тёплый светлый бежевый — тот же тон, что --bg-1 в styles.css
+      // (Leaflet не умеет читать CSS-переменные напрямую из JS) — на
+      // тёмной подложке карты тёмно-коричневый (как было раньше, под
+      // светлую карту) был бы почти не виден.
       state.polyline = L.polyline(placedLatLngs, {
-        color: "#6b5c48", weight: 2, opacity: 0.55, dashArray: "1 8", lineCap: "round",
+        color: "#d8c9ab", weight: 2, opacity: 0.65, dashArray: "1 8", lineCap: "round",
       }).addTo(state.map);
 
       for (var i = 0; i < placedLatLngs.length - 1; i++) {
