@@ -225,7 +225,7 @@ async def api_route_get(request: web.Request):
         route = await _retry_sheets(sheets.get_route_for_date, date_str)
     if role == "courier":
         tg_id = str(request["tg_id"])
-        route = [p for p in route if p["courier_tg_id"] == tg_id]
+        route = [p for p in route if tg_id in p["courier_tg_ids"]]
     return web.json_response({"date": date_str, "role": role, "points": route, "depot": depot, "visible": visible})
 
 
@@ -265,7 +265,7 @@ async def _notify_couriers_route_ready(bot, date_str: str) -> int:
     эту дату (см. index_page/app.js — читает ?date= из адреса при
     открытии)."""
     route = await _retry_sheets(sheets.get_route_for_date, date_str)
-    courier_ids = {p["courier_tg_id"] for p in route if p["courier_tg_id"]}
+    courier_ids = {cid for p in route for cid in p["courier_tg_ids"]}
     if not courier_ids or not config.WEBAPP_URL:
         return 0
 
@@ -306,11 +306,13 @@ async def api_route_assign(request: web.Request):
     body = await request.json()
     date_str = body.get("date") or _today()
     point = (body.get("point") or "").strip()
-    courier_tg_id = (body.get("courier_tg_id") or "").strip()
+    # Полный итоговый набор ID (не добавление/удаление одного) — точку
+    # можно закрепить сразу за несколькими курьерами (см. set_route_courier).
+    courier_tg_ids = [str(x).strip() for x in (body.get("courier_tg_ids") or []) if str(x).strip()]
     if not point:
         return web.json_response({"error": "point required"}, status=400)
     async with _route_lock:
-        await _retry_sheets(sheets.set_route_courier, date_str, point, courier_tg_id)
+        await _retry_sheets(sheets.set_route_courier, date_str, point, courier_tg_ids)
     return web.json_response({"ok": True})
 
 
@@ -376,7 +378,8 @@ async def api_route_complete(request: web.Request):
         if request["role"] == "courier":
             # курьер может отмечать сданными только свои собственные точки
             route = await _retry_sheets(sheets.get_route_for_date, date_str)
-            mine = {p["point"] for p in route if p["courier_tg_id"] == str(request["tg_id"])}
+            tg_id = str(request["tg_id"])
+            mine = {p["point"] for p in route if tg_id in p["courier_tg_ids"]}
             if point not in mine:
                 return web.json_response({"error": "forbidden"}, status=403)
         await _retry_sheets(sheets.mark_route_delivered, date_str, point, retries=2)

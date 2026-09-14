@@ -439,7 +439,7 @@
     if (state.role === "admin") {
       var courierBtn = document.createElement("button");
       courierBtn.className = "ghost-btn route-courier-btn";
-      courierBtn.textContent = "🚴 " + (courierNameFor(point.courier_tg_id) || "Курьер не назначен");
+      courierBtn.textContent = "🚴 " + (courierNamesFor(point.courier_tg_ids) || "Курьер не назначен");
       courierBtn.addEventListener("click", function (e) {
         e.stopPropagation();
         openCourierPicker(point);
@@ -781,27 +781,74 @@
     return c ? c.name || c.tg_id : tgId;
   }
 
+  // Точку можно закрепить сразу за несколькими курьерами — показываем все
+  // назначенные имена через запятую (порядок как в списке courier_tg_ids).
+  function courierNamesFor(tgIds) {
+    if (!tgIds || !tgIds.length) return "";
+    return tgIds.map(courierNameFor).join(", ");
+  }
+
+  // Модалка с переключателем (галочкой) у каждого курьера — можно отметить
+  // сразу нескольких, точка закрепляется за всеми отмеченными одновременно.
+  // Каждая галочка применяется сразу (как переключатели видимости на
+  // экране "Профиль"), без отдельной кнопки "Сохранить" — список читает
+  // актуальное состояние всех галочек в модалке при каждом изменении и
+  // отправляет его целиком.
   function openCourierPicker(point) {
     var modal = document.getElementById("courier-picker-modal");
     var list = document.getElementById("courier-picker-list");
     list.innerHTML = "";
     if (!state.couriers.length) {
       list.innerHTML = "<div class=\"modal-list-empty\">Нет ни одного курьера в справочнике «Курьеры»</div>";
-    } else {
-      state.couriers.forEach(function (c) {
-        var item = document.createElement("div");
-        item.className = "modal-list-item";
-        item.textContent = (c.name || c.tg_id) + (c.tg_id === point.courier_tg_id ? " ✓" : "");
-        item.addEventListener("click", function () {
-          modal.hidden = true;
-          var date = state.date;
-          api("/api/route/assign", { method: "POST", body: { date: date, point: point.point, courier_tg_id: c.tg_id } })
-            .then(function () { return loadRoute(date); })
-            .catch(function (err) { toast("Не удалось назначить курьера: " + err.message); });
-        });
-        list.appendChild(item);
-      });
+      modal.hidden = false;
+      return;
     }
+
+    function applySelection(inputEl) {
+      inputEl.disabled = true;
+      var date = state.date;
+      var ids = Array.prototype.filter.call(
+        list.querySelectorAll("input[type=checkbox]"),
+        function (el) { return el.checked; }
+      ).map(function (el) { return el.dataset.tgId; });
+      api("/api/route/assign", { method: "POST", body: { date: date, point: point.point, courier_tg_ids: ids } })
+        .then(function () {
+          point.courier_tg_ids = ids;
+          return loadRoute(date);
+        })
+        .catch(function (err) {
+          inputEl.checked = !inputEl.checked; // не удалось сохранить — откатываем галочку обратно
+          toast("Не удалось изменить курьеров: " + err.message);
+        })
+        .then(function () { inputEl.disabled = false; });
+    }
+
+    state.couriers.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "visibility-row";
+
+      var label = document.createElement("div");
+      label.className = "visibility-row-label";
+      label.textContent = c.name || c.tg_id;
+
+      var switchLabel = document.createElement("label");
+      switchLabel.className = "switch";
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.dataset.tgId = c.tg_id;
+      input.checked = point.courier_tg_ids.indexOf(c.tg_id) !== -1;
+      var slider = document.createElement("span");
+      slider.className = "switch-slider";
+      switchLabel.appendChild(input);
+      switchLabel.appendChild(slider);
+
+      input.addEventListener("change", function () { applySelection(input); });
+
+      row.appendChild(label);
+      row.appendChild(switchLabel);
+      list.appendChild(row);
+    });
+
     modal.hidden = false;
   }
 

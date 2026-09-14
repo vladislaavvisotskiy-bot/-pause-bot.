@@ -1516,6 +1516,14 @@ def sync_daily_route(date_str: str, people: dict = None) -> list:
     return rows
 
 
+def _parse_courier_ids(raw: str) -> list:
+    """Столбец "Курьер" (C, ROUTE_COURIER_TG_ID) может держать сразу
+    несколько Telegram ID через запятую — точку можно назначить нескольким
+    курьерам одновременно (см. set_route_courier). Пустые элементы (лишние
+    пробелы/запятые) отбрасываются."""
+    return [x.strip() for x in (raw or "").split(",") if x.strip()]
+
+
 def get_route_for_date(date_str: str) -> list:
     """Полный маршрут на дату — точки с людьми, координатами, ставкой,
     статусом, отсортирован по "Порядок" (= "Приоритет" из каталога для
@@ -1584,7 +1592,7 @@ def get_route_for_date(date_str: str) -> list:
             "lat": dp.get("lat", ""),
             "lon": dp.get("lon", ""),
             "rate": dp.get("rate", 0),
-            "courier_tg_id": cell(config.ROUTE_COURIER_TG_ID).strip(),
+            "courier_tg_ids": _parse_courier_ids(cell(config.ROUTE_COURIER_TG_ID)),
             "order": order_num,
             "status": status,
             "delivered_at": cell(config.ROUTE_DELIVERED_AT).strip(),
@@ -1801,15 +1809,23 @@ def remove_route_point(date_str: str, point_name: str):
             return
 
 
-def set_route_courier(date_str: str, point_name: str, courier_tg_id: str):
-    """Переназначает точку конкретному курьеру на конкретный день (столбец
-    C "Маршрут", тот же ROUTE_COURIER_TG_ID, что читает get_route_for_date).
+def set_route_courier(date_str: str, point_name: str, courier_tg_ids: list):
+    """Переназначает точку набору курьеров на конкретный день (столбец C
+    "Маршрут", тот же ROUTE_COURIER_TG_ID, что читает get_route_for_date,
+    разбирается через _parse_courier_ids) — точку можно закрепить сразу за
+    несколькими курьерами: каждый видит её у себя как обычную, а "Сдано"
+    от любого одного из них закрывает точку сразу для всех (общий статус
+    в этой же строке). courier_tg_ids — полный итоговый список ID
+    (не добавление/удаление одного, а замена целиком) — пустой список
+    снимает назначение вовсе.
+
     Нужно, когда активных курьеров больше одного — по умолчанию новая
     точка достаётся первому курьеру по списку в "Курьеры" (см.
     sync_daily_route), а не распределяется сама; админ переносит вручную
     через Mini App."""
     ws = _ws(config.SHEET_ROUTE)
     rows = ws.get_all_values()
+    value = ",".join(str(x).strip() for x in courier_tg_ids if str(x).strip())
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.ROUTE_DATA_START_ROW:
@@ -1817,7 +1833,16 @@ def set_route_courier(date_str: str, point_name: str, courier_tg_id: str):
         if len(row) < config.ROUTE_POINT:
             continue
         if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
-            ws.update_cell(r, config.ROUTE_COURIER_TG_ID, courier_tg_id)
+            # update_cell() по умолчанию пишет с value_input_option=USER_ENTERED
+            # (как если бы это вводил человек) — для одного ID (просто число)
+            # это было безобидно, но "7118369020,7851970384" Google Sheets
+            # то же самое USER_ENTERED пытается распарсить как ЧИСЛО (запятая —
+            # разделитель разрядов), получая 20-значное число, которое не
+            # влезает в точность double, и в ячейке остаётся исковерканный
+            # набор цифр — воспроизведено и подтверждено на реальной таблице.
+            # update_cells() с явным RAW пишет буквальный текст без такой
+            # переинтерпретации.
+            ws.update_cells([gspread.Cell(r, config.ROUTE_COURIER_TG_ID, value)], value_input_option="RAW")
             _invalidate_route_cache(date_str)
             return
 
@@ -1857,12 +1882,15 @@ def mark_route_delivered(date_str: str, point_name: str):
 
 
 def get_courier_earnings(courier_tg_id, date_str: str) -> int:
-    """Сумма ставок всех сданных ("Сдано") точек курьера за дату."""
+    """Сумма ставок всех сданных ("Сдано") точек курьера за дату. Точка,
+    назначенная нескольким курьерам сразу, засчитывается КАЖДОМУ из них
+    полной ставкой (не делится) — так и было для одного курьера, менять
+    это при добавлении множественного назначения не просили."""
     route = get_route_for_date(date_str)
     target = str(courier_tg_id)
     return sum(
         p["rate"] for p in route
-        if p["courier_tg_id"] == target and p["status"] == config.ROUTE_STATUS_DELIVERED
+        if target in p["courier_tg_ids"] and p["status"] == config.ROUTE_STATUS_DELIVERED
     )
 
 
@@ -1885,7 +1913,7 @@ def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
             continue
         if d.year != year or d.month != month:
             continue
-        if row[config.ROUTE_COURIER_TG_ID - 1].strip() != target:
+        if target not in _parse_courier_ids(row[config.ROUTE_COURIER_TG_ID - 1]):
             continue
         if row[config.ROUTE_STATUS - 1].strip() != config.ROUTE_STATUS_DELIVERED:
             continue
