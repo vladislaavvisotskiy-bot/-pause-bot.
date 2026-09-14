@@ -124,8 +124,9 @@ async def _finish_menu_date(bot: Bot, chat_id: int, date_str: str, state: FSMCon
     # просто перезаписывает это явным списком, если он есть.
     sheets.set_today_garnishes([])
     await bot.send_message(chat_id, texts.ADMIN_MENU_DATE_SAVED.format(date=date_str))
-    await _broadcast_new_menu(bot)
-    await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_GARNISH)
+    if not sheets.is_broadcasts_disabled():
+        await _broadcast_new_menu(bot)
+    await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_GARNISH, reply_markup=kb.admin_garnish_kb())
     await state.set_state(AdminMenu.waiting_garnishes)
 
 
@@ -163,19 +164,28 @@ async def _broadcast_new_menu(bot: Bot):
 @router.message(AdminMenu.waiting_garnishes)
 async def admin_today_garnish_save(message: Message, state: FSMContext):
     text = (message.text or "").strip()
-    # Гарниры уже сброшены в пустой список в _finish_menu_date — если админ
-    # явно пишет "нет"/"-" и т.п., это то же самое "гарниров сегодня нет",
-    # а не буквальное название гарнира.
-    if text.lower() in texts.ADMIN_GARNISH_NONE_WORDS:
-        garnishes = []
-    else:
-        garnishes = [g.strip() for g in text.split(",") if g.strip()]
+    garnishes = [g.strip() for g in text.split(",") if g.strip()]
     sheets.set_today_garnishes(garnishes)
     await state.clear()
     if garnishes:
         await message.answer(texts.ADMIN_GARNISH_SAVED.format(list=", ".join(garnishes)))
     else:
         await message.answer(texts.ADMIN_GARNISH_CLEARED)
+
+
+@router.callback_query(AdminMenu.waiting_garnishes, F.data == "garnish_none")
+async def admin_garnish_none(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    sheets.set_today_garnishes([])
+    await state.clear()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(texts.ADMIN_GARNISH_CLEARED)
+    await callback.answer()
 
 
 # ---------------------------------------------------------------------------

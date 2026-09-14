@@ -269,6 +269,13 @@ def report_dates_kb(report_type: str, dates: list) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def admin_garnish_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_GARNISH_NONE_BTN, callback_data="garnish_none")
+    b.adjust(1)
+    return b.as_markup()
+
+
 def admin_menu_date_kb(today_str: str, tomorrow_str: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_DATE_TODAY_BTN.format(date=today_str), callback_data=f"menudate:{today_str}")
