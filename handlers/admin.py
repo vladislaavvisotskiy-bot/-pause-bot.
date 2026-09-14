@@ -115,6 +115,14 @@ async def _save_menu_and_notify(bot: Bot, chat_id: int, photo_ids: list, caption
 
 async def _finish_menu_date(bot: Bot, chat_id: int, date_str: str, state: FSMContext):
     sheets.set_active_menu_date(date_str)
+    # Сбрасываем гарниры на сегодня СРАЗУ, ещё до вопроса — раньше, если
+    # админ игнорировал этот шаг (не ответил вообще), ячейка так и
+    # оставалась с гарнирами от предыдущей публикации, и клиенты продолжали
+    # видеть вчерашний список как будто он всё ещё актуален. Теперь
+    # безопасное значение по умолчанию — "гарниров нет", а не "что бы там
+    # ни было записано раньше"; ответ ниже (см. admin_today_garnish_save)
+    # просто перезаписывает это явным списком, если он есть.
+    sheets.set_today_garnishes([])
     await bot.send_message(chat_id, texts.ADMIN_MENU_DATE_SAVED.format(date=date_str))
     await _broadcast_new_menu(bot)
     await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_GARNISH)
@@ -154,7 +162,14 @@ async def _broadcast_new_menu(bot: Bot):
 
 @router.message(AdminMenu.waiting_garnishes)
 async def admin_today_garnish_save(message: Message, state: FSMContext):
-    garnishes = [g.strip() for g in (message.text or "").split(",") if g.strip()]
+    text = (message.text or "").strip()
+    # Гарниры уже сброшены в пустой список в _finish_menu_date — если админ
+    # явно пишет "нет"/"-" и т.п., это то же самое "гарниров сегодня нет",
+    # а не буквальное название гарнира.
+    if text.lower() in texts.ADMIN_GARNISH_NONE_WORDS:
+        garnishes = []
+    else:
+        garnishes = [g.strip() for g in text.split(",") if g.strip()]
     sheets.set_today_garnishes(garnishes)
     await state.clear()
     if garnishes:

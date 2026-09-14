@@ -105,11 +105,17 @@ async def chosen_set(callback: CallbackQuery, state: FSMContext):
 
     await state.update_data(cur_set=set_name)
 
-    if set_name.strip().lower() == "сет стандарт":
-        # Гарниры, реально доступные сегодня (задаёт админ после публикации
-        # меню); если ещё не заданы — берём общий справочник, чтобы не
-        # оставить клиента без вариантов.
-        garnishes = sheets.get_today_garnishes() or sheets.get_garnishes()
+    # Гарниры, реально доступные сегодня — задаёт админ после публикации
+    # меню (см. handlers/admin.py: admin_today_garnish_save). Если админ
+    # явно не указал ни одного (или явно очистил) — гарнира на выбор
+    # сегодня нет вообще, шаг просто пропускается, как у сетов без
+    # гарнира от природы ("Блюдо дня" и т.п.). Раньше тут был запасной
+    # вариант "взять общий список из Справочников" — из-за него клиент
+    # видел шаг выбора гарнира (иногда с давно неактуальными вариантами)
+    # даже в те дни, когда админ прямо сказал, что гарнира нет.
+    garnishes = sheets.get_today_garnishes() if set_name.strip().lower() == "сет стандарт" else []
+
+    if garnishes:
         await state.update_data(garnish_options=garnishes)
         await callback.message.answer(texts.CHOOSE_GARNISH, reply_markup=kb.garnish_kb(garnishes, back=True))
         await state.set_state(Order.choosing_garnish)

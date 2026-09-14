@@ -687,8 +687,11 @@ def get_garnishes() -> list:
 
 def get_today_garnishes() -> list:
     """Гарниры, которые реально есть сегодня — задаёт админ после публикации
-    меню. Если ещё не заданы, вызывающая сторона сама решает, что показать
-    (обычно — падать обратно на полный список get_garnishes())."""
+    меню (см. handlers/admin.py: _finish_menu_date сбрасывает это в пустой
+    список СРАЗУ при публикации, ещё до вопроса — так админ, который
+    ничего не ответит, никогда не унаследует гарниры от предыдущего дня).
+    Пустой список — это не "используй общий справочник", а "гарнира на
+    выбор сегодня нет вообще" (см. handlers/order.py: chosen_set)."""
     ws = _ws(config.SHEET_REFERENCE)
     raw = ws.acell(config.REF_TODAY_GARNISH_CELL).value or ""
     return [g.strip() for g in raw.split(",") if g.strip()]
