@@ -189,22 +189,21 @@
     if (!state.map) {
       state.map = L.map("map", { zoomControl: false, attributionControl: true });
       // CartoDB (basemaps.cartocdn.com) к 2026 году требует API-ключ —
-      // без него отдаёт водяной знак "API KEY REQUIRED" вместо тайлов
-      // (именно это и было видно на карте). Esri "World Dark Gray Canvas"
-      // — бесплатные тайлы без какого-либо ключа, тёмная база: два слоя,
-      // базовый (заливка/геометрия улиц и кварталов) и Reference поверх
-      // (подписи улиц и ориентиров светлым по тёмному). Лёгкий тёплый
-      // фильтр (см. styles.css #map .leaflet-tile-pane) подстраивает
-      // серую основу под тёплую палитру PAUSE, не трогая контраст подписей.
+      // без него отдаёт водяной знак "API KEY REQUIRED" вместо тайлов, на
+      // любом стиле (Voyager/Positron/Dark Matter — домен один и тот же).
+      // Esri "World Light Gray Canvas" — тот же бесплатный сервис без
+      // ключа, что и тёмный вариант, который уже был проверен рабочим,
+      // только светлая палитра: два слоя, базовый (заливка/геометрия
+      // улиц и кварталов) и Reference поверх (подписи улиц и
+      // ориентиров). Лёгкий тёплый фильтр (см. styles.css #map
+      // .leaflet-tile-pane) подстраивает нейтральный светло-серый под
+      // тёплую айвори-палитру PAUSE, не размывая подписи.
       L.tileLayer(
-        "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-        {
-          maxZoom: 16,
-          attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS community",
-        }
+        "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 16, attribution: "Tiles &copy; Esri" }
       ).addTo(state.map);
       L.tileLayer(
-        "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+        "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
         { maxZoom: 16 }
       ).addTo(state.map);
     }
@@ -260,12 +259,11 @@
     if (placedLatLngs.length > 1) {
       // Тонкая приглушённая пунктирная линия — просто ощущение
       // направления пути, а не акцент карты (акцент — сами точки).
-      // Тёплый светлый бежевый — тот же тон, что --bg-1 в styles.css
-      // (Leaflet не умеет читать CSS-переменные напрямую из JS) — на
-      // тёмной подложке карты тёмно-коричневый (как было раньше, под
-      // светлую карту) был бы почти не виден.
+      // Цвет — то же значение, что --ink-soft в styles.css (Leaflet не
+      // умеет читать CSS-переменные напрямую из JS) — карта снова
+      // светлая, тёмно-коричневый на ней хорошо читается.
       state.polyline = L.polyline(placedLatLngs, {
-        color: "#d8c9ab", weight: 2, opacity: 0.65, dashArray: "1 8", lineCap: "round",
+        color: "#6b5c48", weight: 2, opacity: 0.55, dashArray: "1 8", lineCap: "round",
       }).addTo(state.map);
 
       for (var i = 0; i < placedLatLngs.length - 1; i++) {

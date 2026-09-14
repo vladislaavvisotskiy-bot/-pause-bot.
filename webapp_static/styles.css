@@ -131,21 +131,27 @@ header h1 {
   z-index: 0;
 }
 
-/* Лёгкий тёплый фильтр поверх тёмных тайлов Esri (World Dark Gray Canvas),
-   чтобы серая основа не выглядела холодной/нейтральной, а вписывалась в
-   тёплую тёмную эстетику PAUSE — sepia() сам по себе почти не снижает
-   контраст и яркость, поэтому подписи улиц (слой Reference) остаются
-   чёткими. */
+/* Лёгкий тёплый фильтр поверх тайлов Esri (World Light Gray Canvas),
+   чтобы нейтральный светло-серый не выбивался из общей айвори-палитры
+   PAUSE — фильтр слабый, иначе подписи улиц (слой Reference) и мелкие
+   ориентиры замыливаются. */
 #map .leaflet-tile-pane {
-  filter: sepia(0.12);
+  filter: sepia(0.06) saturate(0.92) brightness(1.01);
 }
+/* Атрибуция провайдера тайлов обязательна по условиям использования
+   (Esri требует "Tiles © Esri" — см. app.js), но не должна читаться как
+   отдельная заметная строка под картой: Leaflet и так держит её в углу
+   самой карты (поверх тайлов), здесь только уменьшаем и делаем
+   малозаметной — без фоновой плашки, мелким полупрозрачным текстом. */
 #map .leaflet-control-attribution {
-  background: rgba(242, 234, 217, 0.75);
-  color: var(--ink-soft);
+  background: none;
+  color: rgba(58, 46, 34, 0.45);
   font-family: var(--font-sans);
-  font-size: 9px;
+  font-size: 8px;
+  padding: 0 4px;
+  text-shadow: 0 1px 2px rgba(242, 234, 217, 0.9), 0 0 3px rgba(242, 234, 217, 0.9);
 }
-#map .leaflet-control-attribution a { color: var(--ink-soft); }
+#map .leaflet-control-attribution a { color: rgba(58, 46, 34, 0.55); }
 
 .marker-badge {
   width: 24px;
@@ -175,11 +181,8 @@ header h1 {
   height: 0;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  /* Тот же тёплый бежевый, что у линии маршрута (см. app.js renderMap) —
-     на тёмной карте нужен светлый акцент, var(--ink-soft) здесь был бы
-     почти не виден. */
-  border-bottom: 7px solid #d8c9ab;
-  opacity: 0.6;
+  border-bottom: 7px solid var(--ink-soft);
+  opacity: 0.5;
 }
 
 .empty-state {
