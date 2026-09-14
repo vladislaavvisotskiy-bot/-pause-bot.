@@ -642,6 +642,8 @@ async def _broadcast_menu_survey(bot: Bot) -> tuple:
     отправки, что и в остальных рассылках (см. bot.py: send_warm_broadcast,
     _broadcast_new_menu) — один недоступный клиент не должен обрывать
     рассылку остальным."""
+    if sheets.is_broadcasts_disabled():
+        return 0, 0
     clients = sheets.get_broadcast_clients()
     sent = 0
     for c in clients:
@@ -660,6 +662,9 @@ async def _broadcast_menu_survey(bot: Bot) -> tuple:
 async def cmd_menu_survey(message: Message):
     if not _is_admin(message.from_user.id):
         await message.answer(texts.ADMIN_ONLY)
+        return
+    if sheets.is_broadcasts_disabled():
+        await message.answer(texts.ADMIN_SURVEY_BROADCASTS_OFF)
         return
     # Разослать разом всем клиентам — необратимо (не отозвать уже
     # прочитанные уведомления), поэтому обязательное подтверждение прежде
