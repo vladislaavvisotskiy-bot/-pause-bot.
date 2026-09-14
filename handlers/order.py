@@ -456,13 +456,19 @@ def _order_payment_value(data: dict) -> str:
     - картой, но "пришлю скрин позже" и ещё не прислал — оставляем
       пустым (в "Мои заказы" это "💳 Ожидает оплаты"), чтобы не путать
       с уже подтверждённой оплатой ("Картой" пишется только админом);
-    - наличными — способ оплаты как есть (сразу считается оплаченным)."""
+    - наличными — тоже "На проверке": формула столбца L показывает
+      "НЕ ОПЛАЧЕНО", пока админ лично не подтвердит получение наличных
+      кнопкой "✅ Подтвердить" (см. sheets.confirm_cash_payment) — так же
+      неавтоматически, как и для карты."""
     card_status = data.get("card_status", "")
     if card_status == "на проверке":
         return "На проверке"
     if card_status == "не подтверждена":
         return ""
-    return data.get("cur_payment", "")
+    payment = data.get("cur_payment", "")
+    if payment == "Наличными":
+        return "На проверке"
+    return payment
 
 
 @router.callback_query(Order.confirming, F.data == "order_confirm")

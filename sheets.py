@@ -451,6 +451,17 @@ def confirm_card_payment(row_nums: list):
         ws.update_cell(r, config.O_PAYMENT, "Картой")
 
 
+def confirm_cash_payment(row_nums: list):
+    """Админ лично подтвердил, что наличные получены — статус оплаты
+    (столбец K) становится "Наличными", формула столбца L показывает
+    "ОПЛАЧЕНО". До этого вызова заказ наличными держится в столбце K как
+    "На проверке" (та же строка, что и для карты) — L поэтому показывает
+    "НЕ ОПЛАЧЕНО", ровно как для неподтверждённой оплаты картой."""
+    ws = _ws(config.SHEET_ORDERS)
+    for r in row_nums:
+        ws.update_cell(r, config.O_PAYMENT, "Наличными")
+
+
 def mark_screenshot_sent(row_nums: list):
     """Клиент прислал скрин оплаты картой (сразу при заказе или позже) —
     статус оплаты (столбец K) становится "На проверке", формула столбца L
@@ -524,14 +535,19 @@ def get_unconfirmed_card_orders(date_str: str) -> list:
     return [by_client[cid] for cid in order]
 
 
-def get_payment_screenshots(date_str: str) -> list:
-    """Скрины оплаты за указанную дату — источник для /payments.
+def get_pending_payments_for_date(date_str: str) -> list:
+    """Все заказы за дату, ожидающие подтверждения оплаты админом —
+    источник единого флоу "Подтверждение оплаты" (см. handlers/admin.py:
+    _send_payments_for_date), объединяет то, что раньше показывал /payments
+    (только скрины картой), с оплатой наличными — она теперь так же не
+    считается оплаченной автоматически (см. confirm_cash_payment).
 
-    Без какой-либо фильтрации по статусу/отмене/способу оплаты: одна
-    запись на каждую строку «Заказы» за эту дату, где столбец
-    O_SCREENSHOT непустой — и всё. Если в одном заказе несколько сетов
-    (несколько строк с одним и тем же скрином), каждая строка всё равно
-    попадёт в список отдельной записью."""
+    И карта, и наличные на этапе ожидания подтверждения пишутся в столбец
+    K одинаково — "На проверке" (формула столбца L показывает
+    "НЕ ОПЛАЧЕНО") — различаем их по столбцу O_SCREENSHOT: если скрин
+    прикреплён — это оплата картой (метод "card"), если нет — наличными
+    (метод "cash"). Уже подтверждённые оплаты (K = "Картой"/"Наличными")
+    сюда не попадают — им нечего подтверждать."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
     prices = get_set_prices()
@@ -544,9 +560,13 @@ def get_payment_screenshots(date_str: str) -> list:
             continue
         if len(row) < config.O_DATE or row[config.O_DATE - 1].strip() != date_str:
             continue
-        screenshot = row[config.O_SCREENSHOT - 1].strip() if len(row) >= config.O_SCREENSHOT else ""
-        if not screenshot:
+        payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
+        if payment != "На проверке":
             continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
+            continue
+        screenshot = row[config.O_SCREENSHOT - 1].strip() if len(row) >= config.O_SCREENSHOT else ""
         client_id = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
         client = clients.get(client_id) or {}
         name = client.get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or client_id or "—"
@@ -558,7 +578,7 @@ def get_payment_screenshots(date_str: str) -> list:
             "qty": row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else "",
             "sum": _row_amount(row, prices),
             "screenshot": screenshot,
-            "payment": row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else "",
+            "method": "card" if screenshot else "cash",
         })
 
     return out
@@ -1831,27 +1851,3 @@ def save_menu_survey_answer(tg_id, name: str, answer1: str, answer2: str, answer
     )
 
 
-def get_menu_survey_results() -> list:
-    """Все прохождения опроса — [{"tg_id", "name", "a1", "a2", "a3", "date"}],
-    в порядке записи в таблице (старые сначала)."""
-    ws = _ws(config.SHEET_MENU_SURVEY)
-    rows = ws.get_all_values()
-    out = []
-    for i, row in enumerate(rows):
-        r = i + 1
-        if r < config.SURVEY_DATA_START_ROW:
-            continue
-        if len(row) < config.SURVEY_TG_ID or not row[config.SURVEY_TG_ID - 1].strip():
-            continue
-        def cell(col):
-            idx = col - 1
-            return row[idx].strip() if idx < len(row) else ""
-        out.append({
-            "tg_id": cell(config.SURVEY_TG_ID),
-            "name": cell(config.SURVEY_NAME),
-            "a1": cell(config.SURVEY_ANSWER1),
-            "a2": cell(config.SURVEY_ANSWER2),
-            "a3": cell(config.SURVEY_ANSWER3),
-            "date": cell(config.SURVEY_DATE),
-        })
-    return out

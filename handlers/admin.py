@@ -58,16 +58,19 @@ async def admin_panel(message: Message):
         await message.answer(texts.ADMIN_ONLY)
         return
     await message.answer(texts.ADMIN_ACTIVE_MENU_DATE.format(date=sheets.get_active_menu_date()))
-    await message.answer(texts.ADMIN_COMMANDS_LIST)
     await message.answer("Панель администратора:", reply_markup=kb.admin_panel_kb())
 
 
-@router.callback_query(F.data == "admin_menu_howto")
-async def admin_menu_howto(callback: CallbackQuery):
+@router.callback_query(F.data == "admin_instructions")
+async def admin_instructions(callback: CallbackQuery):
     if not _is_admin(callback.from_user.id):
         await callback.answer(texts.ADMIN_ONLY, show_alert=True)
         return
-    await callback.message.answer(texts.ADMIN_MENU_HOWTO)
+    for chunk in (
+        texts.ADMIN_INSTRUCTIONS_1, texts.ADMIN_INSTRUCTIONS_2, texts.ADMIN_INSTRUCTIONS_3,
+        texts.ADMIN_INSTRUCTIONS_4, texts.ADMIN_INSTRUCTIONS_5, texts.ADMIN_INSTRUCTIONS_6,
+    ):
+        await callback.message.answer(chunk)
     await callback.answer()
 
 
@@ -203,6 +206,28 @@ async def card_payment_confirmed(callback: CallbackQuery):
     try:
         await callback.message.edit_caption(
             caption=(callback.message.caption or "") + texts.ADMIN_CARD_CONFIRMED_SUFFIX
+        )
+    except Exception:
+        pass
+    await callback.answer(texts.ADMIN_CARD_CONFIRMED_TOAST)
+
+
+# ---------------------------------------------------------------------------
+# Подтверждение оплаты наличными — админ лично получил деньги
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data.startswith("cashok:"))
+async def cash_payment_confirmed(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    rows_str = callback.data.split(":", 1)[1]
+    row_nums = [int(r) for r in rows_str.split(",") if r.strip().isdigit()]
+    sheets.confirm_cash_payment(row_nums)
+    try:
+        await callback.message.edit_text(
+            (callback.message.text or "") + texts.ADMIN_CARD_CONFIRMED_SUFFIX,
+            reply_markup=None,
         )
     except Exception:
         pass
@@ -350,6 +375,14 @@ async def _send_report_by_type(bot: Bot, chat_id: int, report_type: str, date_st
         await send_kitchen_pdf(bot, chat_id, date_str)
     elif report_type == "payments":
         await _send_payments_for_date(bot, chat_id, date_str)
+    elif report_type == "kitchen_pick":
+        # Панель /admin: после даты сначала спрашиваем формат (PDF или
+        # текст), а не шлём отчёт сразу — сами PDF/текст используют ту же
+        # логику, что и report_type "kitchen"/"kitchen_pdf" выше.
+        await bot.send_message(
+            chat_id, texts.ADMIN_KITCHEN_FORMAT_PROMPT.format(date=date_str),
+            reply_markup=kb.admin_kitchen_format_kb(date_str),
+        )
 
 
 @router.callback_query(F.data.startswith("adminrep:"))
@@ -359,6 +392,88 @@ async def admin_report_date_chosen(callback: CallbackQuery, bot: Bot):
         return
     _, report_type, date_str = callback.data.split(":", 2)
     await _send_report_by_type(bot, callback.message.chat.id, report_type, date_str)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("kitchenfmt:"))
+async def admin_kitchen_format_chosen(callback: CallbackQuery, bot: Bot):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    _, fmt, date_str = callback.data.split(":", 2)
+    report_type = "kitchen_pdf" if fmt == "pdf" else "kitchen"
+    await _send_report_by_type(bot, callback.message.chat.id, report_type, date_str)
+    await callback.answer()
+
+
+# ---------------------------------------------------------------------------
+# Панель /admin — кнопки, ведущие в ту же логику отчётов/оплаты/рассылок,
+# что и соответствующие команды текстом (см. ниже).
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data == "admin_kitchen_report")
+async def admin_panel_kitchen(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await _ask_report_date(callback.message, "kitchen_pick")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_courier_report")
+async def admin_panel_courier(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await _ask_report_date(callback.message, "courier")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_payments_report")
+async def admin_panel_payments(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await _ask_report_date(callback.message, "payments")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_broadcast_panel")
+async def admin_panel_broadcast(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    disabled = sheets.is_broadcasts_disabled()
+    status_text = texts.ADMIN_BROADCASTS_STATUS_OFF if disabled else texts.ADMIN_BROADCASTS_STATUS_ON
+    await callback.message.answer(status_text, reply_markup=kb.admin_broadcast_toggle_kb(disabled))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "broadcast_toggle_off")
+async def admin_panel_broadcast_off(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    sheets.set_broadcasts_disabled(True)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(texts.ADMIN_BROADCASTS_OFF)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "broadcast_toggle_on")
+async def admin_panel_broadcast_on(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    sheets.set_broadcasts_disabled(False)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(texts.ADMIN_BROADCASTS_ON)
     await callback.answer()
 
 
@@ -437,7 +552,10 @@ async def cmd_payments(message: Message, bot: Bot, command: CommandObject):
 
 
 async def _send_payments_for_date(bot: Bot, chat_id: int, date_str: str):
-    entries = sheets.get_payment_screenshots(date_str)
+    """Единый список оплат, ожидающих подтверждения на дату — и скрины
+    картой, и заказы наличными, вперемешку (см. sheets.get_pending_payments_for_date).
+    Уже подтверждённые оплаты сюда не попадают — это список дел, а не архив."""
+    entries = sheets.get_pending_payments_for_date(date_str)
     if not entries:
         await bot.send_message(chat_id, texts.ADMIN_NO_PAYMENTS_FOR_DATE.format(date=date_str))
         return
@@ -450,24 +568,24 @@ async def _send_payments_for_date(bot: Bot, chat_id: int, date_str: str):
             set_name=texts.display_set_name(entry["set"]) if entry.get("set") else "",
             sum=f"{entry['sum']:,}".replace(",", " "),
         )
-        # Уже подтверждённые скрины (столбец K = "Картой") показываем без
-        # кнопки — иначе повторный /payments снова предлагал "Подтвердить"
-        # то, что уже подтверждено.
-        already_confirmed = entry.get("payment") == "Картой"
-        if already_confirmed:
-            caption += texts.ADMIN_PAYMENT_ALREADY_CONFIRMED_SUFFIX
-        try:
-            await bot.send_photo(
-                chat_id, entry["screenshot"], caption=caption,
-                reply_markup=None if already_confirmed else kb.card_confirm_admin_kb(str(entry["row"])),
-            )
-        except Exception as e:
-            logger.exception("Не удалось отправить скрин оплаты клиента %s (строка %s)", entry.get("client_id"), entry.get("row"))
+        if entry["method"] == "card":
+            try:
+                await bot.send_photo(
+                    chat_id, entry["screenshot"], caption=caption,
+                    reply_markup=kb.card_confirm_admin_kb(str(entry["row"])),
+                )
+            except Exception as e:
+                logger.exception("Не удалось отправить скрин оплаты клиента %s (строка %s)", entry.get("client_id"), entry.get("row"))
+                await bot.send_message(
+                    chat_id,
+                    texts.ADMIN_PAYMENT_SEND_FAILED.format(
+                        name=entry["name"], row=entry.get("row"), error=e,
+                    ),
+                )
+        else:
             await bot.send_message(
-                chat_id,
-                texts.ADMIN_PAYMENT_SEND_FAILED.format(
-                    name=entry["name"], row=entry.get("row"), error=e,
-                ),
+                chat_id, texts.ADMIN_PAYMENT_CASH_PREFIX + caption,
+                reply_markup=kb.cash_confirm_admin_kb(str(entry["row"])),
             )
 
 
@@ -530,24 +648,6 @@ async def admin_giveaway_save(message: Message, state: FSMContext):
         await message.answer(texts.ADMIN_GIVEAWAY_SAVED)
 
 
-@router.message(Command("giveaway"))
-async def cmd_giveaway(message: Message, state: FSMContext):
-    if not _is_admin(message.from_user.id):
-        await message.answer(texts.ADMIN_ONLY)
-        return
-    await message.answer(texts.ADMIN_GIVEAWAY_PROMPT)
-    await state.set_state(AdminClub.waiting_giveaway)
-
-
-@router.message(Command("giveaway_finish"))
-async def cmd_giveaway_finish(message: Message):
-    if not _is_admin(message.from_user.id):
-        await message.answer(texts.ADMIN_ONLY)
-        return
-    sheets.set_giveaway("", False)
-    await message.answer(texts.ADMIN_GIVEAWAY_OFF)
-
-
 # ---------------------------------------------------------------------------
 # Ежедневный розыгрыш "Пауза в подарок" — просмотр участников в реальном
 # времени, отдельно от /giveaway.
@@ -584,18 +684,6 @@ async def cmd_giveaway_today(message: Message):
     lines.append("")
     lines.append(f"Всего билетов: {total} {_tickets_word(total)}")
     await message.answer("\n".join(lines))
-
-
-@router.message(Command("giveaway_close"))
-async def cmd_giveaway_close(message: Message):
-    """Ручное закрытие приёма участников — админ сам решает, когда подводить
-    итоги (например, перед live-эфиром с розыгрышем). Снова открывается
-    автоматически при публикации следующего меню (set_active_menu_date)."""
-    if not _is_admin(message.from_user.id):
-        await message.answer(texts.ADMIN_ONLY)
-        return
-    sheets.close_giveaway_window()
-    await message.answer(texts.ADMIN_GIVEAWAY_CLOSED)
 
 
 # ---------------------------------------------------------------------------
@@ -698,33 +786,3 @@ async def survey_broadcast_confirmed(callback: CallbackQuery, bot: Bot):
     await callback.message.answer(texts.ADMIN_SURVEY_SENDING)
     sent, total = await _broadcast_menu_survey(bot)
     await callback.message.answer(texts.ADMIN_SURVEY_SENT.format(sent=sent, total=total))
-
-
-@router.message(Command("menu_survey_results"))
-async def cmd_menu_survey_results(message: Message):
-    if not _is_admin(message.from_user.id):
-        await message.answer(texts.ADMIN_ONLY)
-        return
-    results = sheets.get_menu_survey_results()
-    if not results:
-        await message.answer(texts.ADMIN_SURVEY_RESULTS_EMPTY)
-        return
-
-    await message.answer(texts.ADMIN_SURVEY_RESULTS_HEADER.format(count=len(results)))
-
-    # Разбиваем на несколько сообщений (лимит Telegram — 4096 символов на
-    # сообщение) — при большом числе ответов один текст всё бы не влез и
-    # оборвался бы посередине.
-    chunk, chunk_len = [], 0
-    for r in results:
-        item = texts.ADMIN_SURVEY_RESULT_ITEM.format(
-            name=r["name"] or "—", tg_id=r["tg_id"], date=r["date"] or "—",
-            a1=r["a1"] or "—", a2=r["a2"] or "—", a3=r["a3"] or "—",
-        )
-        if chunk and chunk_len + len(item) + 2 > 3500:
-            await message.answer("\n\n".join(chunk))
-            chunk, chunk_len = [], 0
-        chunk.append(item)
-        chunk_len += len(item) + 2
-    if chunk:
-        await message.answer("\n\n".join(chunk))

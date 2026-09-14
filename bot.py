@@ -91,16 +91,12 @@ async def setup_commands(bot: Bot):
             BotCommand(command="kitchen", description="Текстовый отчёт для кухни"),
             BotCommand(command="kitchen_pdf", description="PDF-отчёт для кухни"),
             BotCommand(command="courier", description="Отчёт для курьера"),
-            BotCommand(command="payments", description="Скрины оплаты за дату"),
-            BotCommand(command="giveaway", description="Запустить/обновить розыгрыш"),
-            BotCommand(command="giveaway_finish", description="Завершить текущий розыгрыш"),
+            BotCommand(command="payments", description="Оплаты, ожидающие подтверждения, за дату"),
             BotCommand(command="giveaway_today", description="Участники «Паузы в подарок» сегодня"),
-            BotCommand(command="giveaway_close", description="Закрыть приём участников вручную"),
             BotCommand(command="broadcasts_off", description="Выключить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_on", description="Включить автоматические рассылки клиентам"),
             BotCommand(command="broadcasts_status", description="Статус автоматических рассылок"),
             BotCommand(command="menu_survey", description="Разослать разовый опрос о меню"),
-            BotCommand(command="menu_survey_results", description="Результаты опроса о меню"),
         ]
         try:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))

@@ -114,6 +114,12 @@ def card_confirm_admin_kb(rows_str: str) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def cash_confirm_admin_kb(rows_str: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ Подтвердить", callback_data=f"cashok:{rows_str}")
+    return b.as_markup()
+
+
 def pending_point_admin_kb(pending_id: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_PENDING_APPROVE_BTN, callback_data=f"pendok:{pending_id}")
@@ -244,9 +250,33 @@ def daily_giveaway_kb(has_order_today: bool, is_participating: bool) -> InlineKe
 
 def admin_panel_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.button(text="📝 Как загрузить меню", callback_data="admin_menu_howto")
+    b.button(text=texts.ADMIN_KITCHEN_REPORT_BTN, callback_data="admin_kitchen_report")
+    b.button(text=texts.ADMIN_COURIER_REPORT_BTN, callback_data="admin_courier_report")
+    b.button(text=texts.ADMIN_PAYMENTS_BTN, callback_data="admin_payments_report")
+    b.button(text=texts.ADMIN_BROADCAST_BTN, callback_data="admin_broadcast_panel")
     b.button(text="💰 Должники", callback_data="admin_debtors")
     b.button(text=texts.ADMIN_CLUB_PANEL_BTN, callback_data="admin_club_panel")
+    # "Инструкция" всегда последней — независимо от того, сколько кнопок
+    # выше появится в будущем.
+    b.button(text=texts.ADMIN_INSTRUCTIONS_BTN, callback_data="admin_instructions")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_kitchen_format_kb(date_str: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_KITCHEN_FORMAT_PDF_BTN, callback_data=f"kitchenfmt:pdf:{date_str}")
+    b.button(text=texts.ADMIN_KITCHEN_FORMAT_TEXT_BTN, callback_data=f"kitchenfmt:text:{date_str}")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_broadcast_toggle_kb(disabled: bool) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    if disabled:
+        b.button(text=texts.ADMIN_BROADCAST_TOGGLE_ON_BTN, callback_data="broadcast_toggle_on")
+    else:
+        b.button(text=texts.ADMIN_BROADCAST_TOGGLE_OFF_BTN, callback_data="broadcast_toggle_off")
     b.adjust(1)
     return b.as_markup()
 
