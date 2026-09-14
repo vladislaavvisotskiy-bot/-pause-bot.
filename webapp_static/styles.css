@@ -122,10 +122,13 @@ header h1 {
   box-shadow: 0 6px 18px rgba(58, 46, 34, 0.1);
 }
 
-/* Тёплый фильтр поверх тайлов CartoDB Positron, чтобы карта не выбивалась
-   из общей айвори-палитры. */
+/* Лёгкий тёплый фильтр поверх тайлов CartoDB Voyager, чтобы карта не
+   выбивалась из общей айвори-палитры — Voyager сам по себе заметно теплее
+   и детальнее Positron (подписи улиц, значки ориентиров, цветные парки/
+   вода), поэтому фильтр здесь гораздо слабее, чем был для Positron —
+   иначе подписи и мелкие ориентиры просто замыливаются. */
 #map .leaflet-tile-pane {
-  filter: sepia(0.16) saturate(1.05) brightness(1.01) hue-rotate(-4deg);
+  filter: sepia(0.06) saturate(0.92) brightness(1.01);
 }
 #map .leaflet-control-attribution {
   background: rgba(242, 234, 217, 0.75);
@@ -140,15 +143,15 @@ header h1 {
   height: 24px;
   border-radius: 50%;
   background: var(--rose-deep);
-  color: var(--on-accent);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-sans);
   font-weight: 700;
   font-size: 12px;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(58, 46, 34, 0.35);
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 6px rgba(58, 46, 34, 0.4);
 }
 .marker-badge.done { background: var(--sage-dark); }
 .marker-badge.depot {
@@ -156,6 +159,15 @@ header h1 {
   height: 30px;
   background: var(--ink);
   font-size: 15px;
+}
+
+.route-arrow {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 7px solid var(--ink-soft);
+  opacity: 0.5;
 }
 
 .empty-state {

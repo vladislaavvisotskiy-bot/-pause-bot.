@@ -119,6 +119,60 @@
     });
   }
 
+  function arrowIcon(angleDeg) {
+    return L.divIcon({
+      className: "",
+      html: '<div class="route-arrow" style="transform: rotate(' + angleDeg + 'deg);"></div>',
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+    });
+  }
+
+  // Азимут a->b в градусах (0 = север, по часовой стрелке) — плоское
+  // приближение, для масштаба одного города точности более чем достаточно.
+  function bearingDeg(a, b) {
+    var dy = b.lat - a.lat;
+    var dx = (b.lng - a.lng) * Math.cos(a.lat * Math.PI / 180);
+    return Math.atan2(dx, dy) * 180 / Math.PI;
+  }
+
+  // Раздвигает визуально слипшиеся метки (одно здание, соседние входы) —
+  // только положение самих значков на экране, порядок и данные маршрута
+  // не меняются. Вызывать ПОСЛЕ того, как у карты выставлен окончательный
+  // масштаб (fitBounds/setView), иначе пиксельные расстояния будут не те.
+  function declutterLatLngs(map, latlngs) {
+    var THRESHOLD = 26; // px — чуть больше диаметра бейджа (24px)
+    var pts = latlngs.map(function (ll) { return map.latLngToLayerPoint(ll); });
+    var used = new Array(pts.length).fill(false);
+    var groups = [];
+    for (var i = 0; i < pts.length; i++) {
+      if (used[i]) continue;
+      var group = [i];
+      used[i] = true;
+      for (var j = i + 1; j < pts.length; j++) {
+        if (used[j]) continue;
+        if (pts[i].distanceTo(pts[j]) < THRESHOLD) {
+          group.push(j);
+          used[j] = true;
+        }
+      }
+      groups.push(group);
+    }
+    groups.forEach(function (group) {
+      if (group.length < 2) return;
+      var cx = 0, cy = 0;
+      group.forEach(function (idx) { cx += pts[idx].x; cy += pts[idx].y; });
+      cx /= group.length;
+      cy /= group.length;
+      var radius = Math.max(15, 9 + group.length * 3);
+      group.forEach(function (idx, k) {
+        var angle = (2 * Math.PI * k) / group.length - Math.PI / 2;
+        pts[idx] = L.point(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
+      });
+    });
+    return pts.map(function (pt) { return map.layerPointToLatLng(pt); });
+  }
+
   function renderMap(points) {
     if (typeof L === "undefined") {
       // Leaflet не подгрузился (например, нет связи с CDN) — карту просто
@@ -134,10 +188,11 @@
 
     if (!state.map) {
       state.map = L.map("map", { zoomControl: false, attributionControl: true });
-      // CartoDB Positron — визуально спокойнее и чище дефолтного OSM Mapnik,
-      // бесплатно и без API-ключа; тёплый sepia-фильтр поверх (см. styles.css
-      // #map .leaflet-tile-pane) подстраивает его под палитру PAUSE.
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      // CartoDB Voyager — детальнее Positron (подписи улиц, значки
+      // ориентиров), но остаётся бесплатным и без API-ключа; лёгкий тёплый
+      // фильтр поверх (см. styles.css #map .leaflet-tile-pane) подстраивает
+      // его под палитру PAUSE, не размывая подписи.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
         maxZoom: 19,
         subdomains: "abcd",
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
@@ -148,48 +203,65 @@
     state.markers = [];
     if (state.polyline) { state.map.removeLayer(state.polyline); state.polyline = null; }
 
-    var latlngs = [];
-
-    // Точка отправления (кухня) — всегда первая на карте, отдельной
-    // иконкой, не пронумерованная. Только визуальная: в карточки, "Сдано"
-    // и заработок не входит — это не точка доставки, а начало маршрута.
+    // Собираем ИСТИННЫЕ координаты по порядку: точка отправления (если
+    // есть) первой, затем точки доставки — используются для выставления
+    // масштаба карты (fitBounds), чтобы геометрическая рамка была точной.
+    // Метки на экране после этого чуть раздвигаются (см. declutterLatLngs),
+    // если легли бы друг на друга — сам маршрут при этом не искажается.
+    var trueLatLngs = [];
     var depot = state.depot;
     if (depot && depot.lat && depot.lon) {
-      var depotLatLng = [parseFloat(depot.lat), parseFloat(depot.lon)];
-      var depotMarker = L.marker(depotLatLng, { icon: depotIcon() }).addTo(state.map);
-      depotMarker.bindPopup(depot.name + (depot.address ? " — " + depot.address : ""));
-      state.markers.push(depotMarker);
-      latlngs.push(depotLatLng);
+      trueLatLngs.push(L.latLng(parseFloat(depot.lat), parseFloat(depot.lon)));
     }
+    withCoords.forEach(function (p) {
+      trueLatLngs.push(L.latLng(parseFloat(p.lat), parseFloat(p.lon)));
+    });
 
-    if (!withCoords.length) {
-      if (latlngs.length) {
-        state.map.setView(latlngs[0], 14);
-      } else {
-        state.map.setView([41.311081, 69.240562], 12); // Ташкент, центр — по умолчанию
-      }
+    if (!trueLatLngs.length) {
+      state.map.setView([41.311081, 69.240562], 12); // Ташкент, центр — по умолчанию
       return;
     }
 
+    if (trueLatLngs.length === 1) {
+      state.map.setView(trueLatLngs[0], 15);
+    } else {
+      state.map.fitBounds(L.latLngBounds(trueLatLngs), { padding: [30, 30] });
+    }
+
+    var placedLatLngs = declutterLatLngs(state.map, trueLatLngs);
+    var cursor = 0;
+
+    if (depot && depot.lat && depot.lon) {
+      var depotMarker = L.marker(placedLatLngs[cursor], { icon: depotIcon() }).addTo(state.map);
+      depotMarker.bindPopup(depot.name + (depot.address ? " — " + depot.address : ""));
+      state.markers.push(depotMarker);
+      cursor++;
+    }
+
     withCoords.forEach(function (p, idx) {
-      var lat = parseFloat(p.lat), lon = parseFloat(p.lon);
-      var marker = L.marker([lat, lon], {
+      var marker = L.marker(placedLatLngs[cursor], {
         icon: numberedIcon(idx + 1, p.status === "Сдано"),
       }).addTo(state.map);
       marker.bindPopup(p.address || p.point);
       state.markers.push(marker);
-      latlngs.push([lat, lon]);
+      cursor++;
     });
 
-    // Линия маршрута идёт от точки отправления (если она есть в latlngs)
-    // через все точки доставки по порядку — не от первой точки доставки.
-    state.polyline = L.polyline(latlngs, { color: "#b87e6c", weight: 3, opacity: 0.55, dashArray: "6 6" })
-      .addTo(state.map);
+    if (placedLatLngs.length > 1) {
+      // Тонкая приглушённая пунктирная линия — просто ощущение
+      // направления пути, а не акцент карты (акцент — сами точки).
+      // Цвет — то же значение, что --ink-soft в styles.css (Leaflet не
+      // умеет читать CSS-переменные напрямую из JS).
+      state.polyline = L.polyline(placedLatLngs, {
+        color: "#6b5c48", weight: 2, opacity: 0.55, dashArray: "1 8", lineCap: "round",
+      }).addTo(state.map);
 
-    if (latlngs.length === 1) {
-      state.map.setView(latlngs[0], 15);
-    } else {
-      state.map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
+      for (var i = 0; i < placedLatLngs.length - 1; i++) {
+        var a = placedLatLngs[i], b = placedLatLngs[i + 1];
+        var mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
+        var arrow = L.marker(mid, { icon: arrowIcon(bearingDeg(a, b)), interactive: false }).addTo(state.map);
+        state.markers.push(arrow);
+      }
     }
   }
 
