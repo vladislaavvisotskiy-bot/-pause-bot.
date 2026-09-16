@@ -88,6 +88,7 @@
   var SET_DISPLAY_NAMES = {
     "Блюдо дня": "Пауза дня.",
     "Сет стандарт": "Для тебя.",
+    "Боул": "Пауза в балансе.",
   };
 
   function displaySetName(name) {
