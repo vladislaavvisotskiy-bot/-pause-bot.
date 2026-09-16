@@ -112,6 +112,30 @@
     return "tel:+" + digits;
   }
 
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    // Старые WebView без Clipboard API — запасной способ через невидимый
+    // <textarea> и document.execCommand("copy").
+    return new Promise(function (resolve, reject) {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (ok) resolve(); else reject(new Error("execCommand('copy') failed"));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
   // -------------------------------------------------------------------
   // Маршрут — карта
   // -------------------------------------------------------------------
@@ -512,8 +536,46 @@
         var contactLink = document.createElement("a");
         contactLink.href = tel;
         contactLink.textContent = p.contact;
+        // Известный баг Telegram: в WebView на iOS клик по <a href="tel:">
+        // (и точно так же tg.openLink()/openTelegramLink() — тот вовсе
+        // отклоняет tel: с ошибкой "Url protocol is not supported") просто
+        // ничего не делает, хотя на Android та же ссылка работает как
+        // обычно (подтверждено сообществом: issues в Telegram-Mini-Apps/
+        // tma.js #677 и TelegramMessenger/Telegram-iOS). Рабочий обход —
+        // вызвать window.open(tel, "_self") СИНХРОННО прямо в обработчике
+        // клика (не через промис/таймаут — iOS считает такое всплывающим
+        // окном и блокирует). На Android трогать не нужно: там обычный
+        // href и так работает, а дублирующий window.open() показал бы
+        // курьеру два системных диалога звонка подряд.
+        if (tg && tg.platform === "ios") {
+          contactLink.addEventListener("click", function (e) {
+            e.preventDefault();
+            window.open(tel, "_self");
+          });
+        }
         line1.appendChild(contactLink);
         line1.appendChild(document.createTextNode(" · " + itemsText(p.items)));
+
+        // Запасной вариант на случай, если обход выше всё же не сработает
+        // на каком-то конкретном iOS/Telegram сочетании версий (у нас нет
+        // возможности проверить это на реальном iPhone) — гарантированно
+        // рабочий способ добыть номер: скопировать и вставить в "Телефон"
+        // вручную. Показываем только на iOS, чтобы не загромождать
+        // карточку там, где обычный клик и так работает.
+        if (tg && tg.platform === "ios") {
+          var copyBtn = document.createElement("button");
+          copyBtn.type = "button";
+          copyBtn.className = "copy-tel-btn";
+          copyBtn.textContent = "📋";
+          copyBtn.title = "Скопировать номер";
+          copyBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            copyToClipboard(p.contact)
+              .then(function () { toast("Номер скопирован: " + p.contact); })
+              .catch(function () { toast("Не удалось скопировать номер"); });
+          });
+          line1.appendChild(copyBtn);
+        }
       } else {
         line1.textContent = p.contact + " · " + itemsText(p.items);
       }

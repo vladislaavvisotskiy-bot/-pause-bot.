@@ -432,6 +432,17 @@ header h1 {
 .person-line a { color: var(--rose-deep); text-decoration: none; }
 .person-line a:active { opacity: .7; }
 
+.copy-tel-btn {
+  border: none;
+  background: none;
+  padding: 0 0 0 6px;
+  font-size: 13px;
+  line-height: 1;
+  vertical-align: -1px;
+  cursor: pointer;
+}
+.copy-tel-btn:active { opacity: .6; }
+
 .route-comment-block {
   background: rgba(184, 126, 108, 0.1);
   border: 1px solid rgba(184, 126, 108, 0.25);
