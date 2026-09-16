@@ -750,6 +750,22 @@ def get_sets() -> list:
     return [v[0] for v in ws.get(config.REF_SETS_RANGE) if v]
 
 
+def get_sets_with_garnish() -> set:
+    """Имена сетов (в нижнем регистре, без пробелов по краям), для которых
+    в "Справочники" столбец "Гарнир (да/нет)" (H, рядом с Сет/Цена) стоит
+    "Да" — только у них клиент видит шаг выбора гарнира (см.
+    handlers/order.py: chosen_set). Раньше это было жёстко привязано к
+    имени "Сет стандарт" — теперь для нового сета с гарниром достаточно
+    отметить "Да" в этой таблице, без правки кода."""
+    ws = _ws(config.SHEET_REFERENCE)
+    values = ws.get(config.REF_SET_GARNISH_RANGE)
+    return {
+        row[0].strip().lower()
+        for row in values
+        if len(row) >= 3 and row[0] and row[2].strip().lower() == "да"
+    }
+
+
 def get_garnishes() -> list:
     """Полный список всех возможных гарниров — справочник на будущее."""
     ws = _ws(config.SHEET_REFERENCE)
@@ -1117,11 +1133,22 @@ def get_kitchen_line_items(date_str: str) -> list:
 
 
 def build_kitchen_report(date_str: str) -> str:
+    """Раньше разбивка по видам сетов ("N - Блюдо дня"/"N - Сет стандарт")
+    была жёстко на два конкретных имени — третий сет считался бы в общий
+    total, но не попадал в разбивку вовсе. Теперь строчки собираются по
+    каталогу сетов ("Справочники", см. get_sets) — сет без единого заказа
+    сегодня по-прежнему показывается с "0", как и раньше для двух старых
+    сетов; сет, которого нет в каталоге (опечатка в "Заказы" или его
+    убрали из каталога), но по нему всё же пришёл заказ — добавляется в
+    конец, чтобы штуки не терялись молча. Тот же порядок и тот же принцип
+    "показывать 0" использует и формула на листе "Кухня" (ячейка A7) —
+    сверено построчно на реальных данных."""
     items = get_kitchen_line_items(date_str)
     lines_by_name = {}
     order_by_name = []
     comments = []
-    total = blyudo = standart = 0
+    total = 0
+    counts_by_set = {}
 
     for item in items:
         try:
@@ -1129,10 +1156,7 @@ def build_kitchen_report(date_str: str) -> str:
         except ValueError:
             q = 0
         total += q
-        if item["set"] == "Блюдо дня":
-            blyudo += q
-        elif item["set"] == "Сет стандарт":
-            standart += q
+        counts_by_set[item["set"]] = counts_by_set.get(item["set"], 0) + q
 
         name = item["name"]
         if name not in lines_by_name:
@@ -1143,7 +1167,13 @@ def build_kitchen_report(date_str: str) -> str:
         if item["comment"]:
             comments.append(f"{name} - {item['comment']}")
 
-    out = ["ИНФОРМАЦИЯ ДЛЯ КУХНИ", "", f"{total} сетов", f"{blyudo} - Блюдо дня", f"{standart} - Сет стандарт", ""]
+    known_sets = get_sets()
+    set_lines = [f"{counts_by_set.get(s, 0)} - {s}" for s in known_sets]
+    for s in counts_by_set:
+        if s not in known_sets:
+            set_lines.append(f"{counts_by_set[s]} - {s}")
+
+    out = ["ИНФОРМАЦИЯ ДЛЯ КУХНИ", "", f"{total} сетов"] + set_lines + [""]
     for name in order_by_name:
         out.append("○ " + name + " - " + " ".join(lines_by_name[name]))
     if comments:

@@ -113,7 +113,14 @@ async def chosen_set(callback: CallbackQuery, state: FSMContext):
     # вариант "взять общий список из Справочников" — из-за него клиент
     # видел шаг выбора гарнира (иногда с давно неактуальными вариантами)
     # даже в те дни, когда админ прямо сказал, что гарнира нет.
-    garnishes = sheets.get_today_garnishes() if set_name.strip().lower() == "сет стандарт" else []
+    #
+    # Какие сеты вообще поддерживают гарнир — решает столбец "Гарнир
+    # (да/нет)" в "Справочники" (см. sheets.get_sets_with_garnish), а не
+    # жёстко зашитое имя "Сет стандарт" — так новый сет с гарниром
+    # (например, "Боул") достаточно отметить "Да" в таблице, без правки
+    # кода.
+    sets_with_garnish = sheets.get_sets_with_garnish()
+    garnishes = sheets.get_today_garnishes() if set_name.strip().lower() in sets_with_garnish else []
 
     if garnishes:
         await state.update_data(garnish_options=garnishes)
