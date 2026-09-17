@@ -84,7 +84,10 @@ async def menu_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
 async def _ask_set(message: Message, state: FSMContext):
     data = await state.get_data()
     back = bool(data.get("cart"))
-    sets = sheets.get_sets()
+    # Сеты, реально доступные СЕГОДНЯ (задаёт админ после публикации меню,
+    # см. sheets.get_today_sets) — не весь каталог целиком, иначе клиент
+    # видел бы кнопку на сет, которого в сегодняшнем меню нет вовсе.
+    sets = sheets.get_today_sets()
     await message.answer(texts.CHOOSE_SET, reply_markup=kb.set_kb(sets, back=back))
     await state.set_state(Order.choosing_set)
 

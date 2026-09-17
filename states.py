@@ -47,6 +47,7 @@ class AdminClub(StatesGroup):
 class AdminMenu(StatesGroup):
     waiting_date = State()
     waiting_garnishes = State()
+    waiting_sets = State()
 
 
 class MenuSurvey(StatesGroup):

@@ -321,6 +321,13 @@ def admin_garnish_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def admin_sets_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_SETS_ALL_BTN, callback_data="sets_all")
+    b.adjust(1)
+    return b.as_markup()
+
+
 def admin_menu_date_kb(today_str: str, tomorrow_str: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_DATE_TODAY_BTN.format(date=today_str), callback_data=f"menudate:{today_str}")

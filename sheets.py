@@ -789,6 +789,36 @@ def set_today_garnishes(garnishes: list):
     ws.update_acell(config.REF_TODAY_GARNISH_CELL, ", ".join(garnishes))
 
 
+def get_today_sets() -> list:
+    """Сеты, реально доступные сегодня для заказа — задаёт админ после
+    публикации меню (см. handlers/admin.py: admin_today_sets_save/
+    admin_sets_all), тем же способом, что и get_today_garnishes(). Раньше
+    этого шага не было вовсе — клиент всегда видел ВЕСЬ каталог
+    (get_sets(), "Справочники"!B2:B20) целиком, независимо от того, что
+    реально было в опубликованном меню; из-за этого, например, "Боул"
+    показывался клиенту как вариант заказа даже в те дни, когда его не
+    было в меню вообще — воспроизведено и подтверждено на реальных
+    данных.
+
+    В отличие от гарниров пустое значение здесь означает НЕ "сетов
+    сегодня нет" (это увело бы клиента в меню вовсе без единой кнопки
+    заказа — несравнимо хуже, чем лишняя кнопка), а "явного сужения нет,
+    показываем весь каталог целиком" — ровно то поведение, что и было
+    единственно возможным до появления этой функции. Поэтому
+    _finish_menu_date сбрасывает это в пустой список при каждой публикации
+    (см. set_today_sets([])), но это безопасный откат к "показываем всё",
+    а не отказ в обслуживании, если админ не ответит на вопрос."""
+    ws = _ws(config.SHEET_REFERENCE)
+    raw = ws.acell(config.REF_TODAY_SETS_CELL).value or ""
+    sets = [s.strip() for s in raw.split(",") if s.strip()]
+    return sets if sets else get_sets()
+
+
+def set_today_sets(sets: list):
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_TODAY_SETS_CELL, ", ".join(sets))
+
+
 def get_payment_options() -> list:
     ws = _ws(config.SHEET_REFERENCE)
     return [v[0] for v in ws.get(config.REF_PAYMENT_RANGE) if v]

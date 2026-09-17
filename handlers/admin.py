@@ -166,6 +166,16 @@ async def _finish_menu_date(bot: Bot, chat_id: int, date_str: str, state: FSMCon
     # ни было записано раньше"; ответ ниже (см. admin_today_garnish_save)
     # просто перезаписывает это явным списком, если он есть.
     sheets.set_today_garnishes([])
+    # Тот же приём для сетов — сбрасываем на "не сужено" при каждой
+    # публикации, ещё до вопроса (см. admin_today_sets_save/admin_sets_all
+    # и sheets.get_today_sets — пустое значение здесь безопасно откатывает
+    # к полному каталогу, а не оставляет клиента без кнопок заказа).
+    # Раньше этого шага не было вовсе — набор кнопок сета клиенту всегда
+    # брался напрямую из каталога "Справочники", независимо от того, что
+    # реально было в сегодняшнем меню, и вчерашний сет (например, "Боул")
+    # молча "переживал" публикацию сегодняшнего меню без него —
+    # воспроизведено и подтверждено на реальных данных.
+    sheets.set_today_sets([])
     await bot.send_message(chat_id, texts.ADMIN_MENU_DATE_SAVED.format(date=date_str))
     if not sheets.is_broadcasts_disabled():
         await _broadcast_new_menu(bot)
@@ -209,11 +219,12 @@ async def admin_today_garnish_save(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     garnishes = [g.strip() for g in text.split(",") if g.strip()]
     sheets.set_today_garnishes(garnishes)
-    await state.clear()
     if garnishes:
         await message.answer(texts.ADMIN_GARNISH_SAVED.format(list=", ".join(garnishes)))
     else:
         await message.answer(texts.ADMIN_GARNISH_CLEARED)
+    await message.answer(texts.ADMIN_ASK_TODAY_SETS, reply_markup=kb.admin_sets_kb())
+    await state.set_state(AdminMenu.waiting_sets)
 
 
 @router.callback_query(AdminMenu.waiting_garnishes, F.data == "garnish_none")
@@ -222,12 +233,40 @@ async def admin_garnish_none(callback: CallbackQuery, state: FSMContext):
         await callback.answer(texts.ADMIN_ONLY, show_alert=True)
         return
     sheets.set_today_garnishes([])
-    await state.clear()
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
     await callback.message.answer(texts.ADMIN_GARNISH_CLEARED)
+    await callback.message.answer(texts.ADMIN_ASK_TODAY_SETS, reply_markup=kb.admin_sets_kb())
+    await state.set_state(AdminMenu.waiting_sets)
+    await callback.answer()
+
+
+@router.message(AdminMenu.waiting_sets)
+async def admin_today_sets_save(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    sets = [s.strip() for s in text.split(",") if s.strip()]
+    sheets.set_today_sets(sets)
+    await state.clear()
+    if sets:
+        await message.answer(texts.ADMIN_SETS_SAVED.format(list=", ".join(sets)))
+    else:
+        await message.answer(texts.ADMIN_SETS_ALL)
+
+
+@router.callback_query(AdminMenu.waiting_sets, F.data == "sets_all")
+async def admin_sets_all(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    sheets.set_today_sets([])
+    await state.clear()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(texts.ADMIN_SETS_ALL)
     await callback.answer()
 
 
