@@ -1491,11 +1491,24 @@ def sync_daily_route(date_str: str, people: dict = None) -> list:
     (через параметр people), и "Маршрут" читаются теперь ровно один раз на
     вызов get_route_for_date.
 
-    Новая точка ставится в маршрут с "Порядок" = её "Приоритет" из каталога
-    "Точки доставки" (прямое значение, не подстроенное под текущий конец
-    списка) — админ поддерживает приоритеты с шагом (10, 20, 30…) именно
-    для того, чтобы порядок в маршруте отражал его расстановку, а не момент,
-    когда по точке пришёл первый заказ за день.
+    Новая точка ставится в маршрут с "Порядок" = текущий максимальный
+    "Порядок" среди уже существующих на эту дату точек + 10 за каждую
+    новую — то есть в КОНЕЦ уже выстроенного на сегодня списка. Раньше
+    здесь напрямую использовался "Приоритет" из каталога "Точки
+    доставки" — из-за этого новая точка (по факту нового заказа) могла
+    воткнуться в середину или начало уже вручную перестроенного
+    администратором на сегодня порядка, а не в конец, как ожидалось.
+    Если новых точек несколько за один вызов (например, самая первая
+    синхронизация за день, когда в "Маршрут" ещё вообще нет строк) —
+    относительный порядок МЕЖДУ НИМИ по-прежнему берётся из каталожного
+    "Приоритета", чтобы не оказаться в случайном порядке.
+
+    Новая точка сразу назначается ВСЕМ активным курьерам (полный список
+    из "Курьеры", через set_route_courier/ROUTE_COURIER_TG_ID) — раньше
+    доставалась только первому по списку, и чтобы её увидел кто-то ещё,
+    админу приходилось вручную включать видимость через переключатель
+    курьера. Отдельного курьера при необходимости по-прежнему можно снять
+    той же кнопкой на карточке.
 
     Точка, которую убрали из маршрута через Mini App (см.
     remove_route_point — помечается статусом ROUTE_STATUS_REMOVED, а не
@@ -1514,14 +1527,21 @@ def sync_daily_route(date_str: str, people: dict = None) -> list:
         return rows
 
     existing = set()
+    max_order = 0.0
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.ROUTE_DATA_START_ROW:
             continue
         if len(row) < config.ROUTE_POINT:
             continue
-        if row[config.ROUTE_DATE - 1].strip() == date_str:
-            existing.add(row[config.ROUTE_POINT - 1].strip())
+        if row[config.ROUTE_DATE - 1].strip() != date_str:
+            continue
+        existing.add(row[config.ROUTE_POINT - 1].strip())
+        if len(row) >= config.ROUTE_ORDER:
+            try:
+                max_order = max(max_order, float(row[config.ROUTE_ORDER - 1] or 0))
+            except ValueError:
+                pass
 
     missing = points_with_orders - existing
     if not missing:
@@ -1529,13 +1549,13 @@ def sync_daily_route(date_str: str, people: dict = None) -> list:
 
     dp_index = _delivery_points_index()
     couriers = get_couriers()
-    default_courier = couriers[0]["tg_id"] if couriers else ""
+    all_courier_ids = ",".join(c["tg_id"] for c in couriers)
 
-    new_rows = [
-        [date_str, point, default_courier, dp_index.get(point, {}).get("priority", 0),
-         config.ROUTE_STATUS_WAITING, ""]
-        for point in missing
-    ]
+    missing_sorted = sorted(missing, key=lambda p: dp_index.get(p, {}).get("priority", 0))
+    new_rows = []
+    for point in missing_sorted:
+        max_order += 10
+        new_rows.append([date_str, point, all_courier_ids, max_order, config.ROUTE_STATUS_WAITING, ""])
     ws.append_rows(new_rows, value_input_option="RAW")
     # Строки для дальнейшей обработки в ЭТОМ же вызове нужны в виде текста
     # (как их вернул бы повторный ws.get_all_values()) — иначе код ниже,
@@ -1627,6 +1647,7 @@ def get_route_for_date(date_str: str) -> list:
             "status": status,
             "delivered_at": cell(config.ROUTE_DELIVERED_AT).strip(),
             "courier_comment": cell(config.ROUTE_COURIER_COMMENT).strip(),
+            "pinned": cell(config.ROUTE_PINNED).strip().lower() == "да",
             "people": people.get(point_name, []),
         })
 
@@ -1783,6 +1804,33 @@ def reorder_route(date_str: str, order_map: dict):
     _invalidate_route_cache(date_str)
 
 
+def set_route_pinned(date_str: str, point_name: str, pinned: bool):
+    """Закрепляет/открепляет точку на её текущей позиции в "Маршрут"
+    (столбец H, ROUTE_PINNED) — только админ, через кнопку "📌 Закрепить"
+    на карточке. Закреплённая точка не двигается ни перетаскиванием (см.
+    app.js: Sortable filter + пересборка order в onReorder), ни
+    автодобавлением новых точек (sync_daily_route/add_route_point всегда
+    дописывают В КОНЕЦ, не трогая существующие строки, так что для
+    закрепления там ничего специально проверять не нужно — оно и так
+    не меняет "Порядок" у уже существующих точек). На остальные действия
+    с точкой (разворачивание, комментарий, "Поехали"/"Сдано", курьеры) не
+    влияет вовсе — это только про столбец "Порядок" и возможность
+    перетащить карточку."""
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    value = "Да" if pinned else ""
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
+            ws.update_cell(r, config.ROUTE_PINNED, value)
+            _invalidate_route_cache(date_str)
+            return
+
+
 def add_route_point(date_str: str, point_name: str):
     """Добавляет точку в маршрут вручную (админ) — для точек без реального
     заказа на эту дату (точки с заказом и так появляются сами через
@@ -1807,12 +1855,13 @@ def add_route_point(date_str: str, point_name: str):
 
     existing = get_route_for_date(date_str)  # заодно синхронизирует
     couriers = get_couriers()
-    default_courier = couriers[0]["tg_id"] if couriers else ""
+    all_courier_ids = ",".join(c["tg_id"] for c in couriers)
+    # В конец текущего списка (см. sync_daily_route) — не по каталожному
+    # "Приоритету", чтобы не воткнуться в середину уже расставленного на
+    # сегодня порядка.
     max_order = max([p["order"] for p in existing], default=0)
-    priority = _delivery_points_index().get(point_name, {}).get("priority", 0)
-    order_value = priority if priority else max_order + 1
     ws.append_row(
-        [date_str, point_name, default_courier, order_value, config.ROUTE_STATUS_WAITING, ""],
+        [date_str, point_name, all_courier_ids, max_order + 10, config.ROUTE_STATUS_WAITING, ""],
         value_input_option="RAW",
     )
     _invalidate_route_cache(date_str)

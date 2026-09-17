@@ -330,6 +330,20 @@ async def api_route_reorder(request: web.Request):
     return web.json_response({"ok": True})
 
 
+async def api_route_pin(request: web.Request):
+    if request["role"] != "admin":
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or _today()
+    point = (body.get("point") or "").strip()
+    pinned = bool(body.get("pinned"))
+    if not point:
+        return web.json_response({"error": "point required"}, status=400)
+    async with _route_lock:
+        await _retry_sheets(sheets.set_route_pinned, date_str, point, pinned)
+    return web.json_response({"ok": True})
+
+
 async def api_route_add(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
@@ -431,6 +445,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/delivery_points", api_delivery_points)
     app.router.add_get("/api/couriers", api_couriers)
     app.router.add_post("/api/route/reorder", api_route_reorder)
+    app.router.add_post("/api/route/pin", api_route_pin)
     app.router.add_post("/api/route/add", api_route_add)
     app.router.add_post("/api/route/remove", api_route_remove)
     app.router.add_post("/api/route/comment", api_route_comment)

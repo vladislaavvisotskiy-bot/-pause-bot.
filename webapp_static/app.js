@@ -371,7 +371,7 @@
   function buildCard(point, index, active) {
     var totalPeople = point.people.length;
     var card = document.createElement("div");
-    card.className = "card" + (point.status === "Сдано" ? " done" : "");
+    card.className = "card" + (point.status === "Сдано" ? " done" : "") + (point.pinned ? " pinned" : "");
     card.dataset.point = point.point;
 
     var head = document.createElement("div");
@@ -457,10 +457,10 @@
     var body = document.createElement("div");
     body.className = "card-body";
 
-    // Кнопка-переключатель курьера — видна только админу, нужна когда
-    // активных курьеров больше одного (по умолчанию новая точка достаётся
-    // первому курьеру по списку в "Курьеры", см. sync_daily_route — без
-    // этой кнопки перенести точку другому курьеру было нечем).
+    // Кнопка-переключатель курьера — видна только админу (по умолчанию
+    // новая точка достаётся сразу всем активным курьерам, см.
+    // sync_daily_route — эта кнопка нужна, чтобы снять кого-то конкретного
+    // или назначить точку только одному).
     if (state.role === "admin") {
       var courierBtn = document.createElement("button");
       courierBtn.className = "ghost-btn route-courier-btn";
@@ -470,6 +470,22 @@
         openCourierPicker(point);
       });
       body.appendChild(courierBtn);
+    }
+
+    // "📌 Закрепить" — только админ. Закрепление касается ТОЛЬКО позиции
+    // карточки (запрет перетаскивания + автодобавление новых точек её не
+    // сдвигает, см. sync_daily_route/add_route_point — они и так всегда
+    // дописывают в конец, не трогая существующие строки) — все остальные
+    // действия с точкой работают как обычно вне зависимости от этого флага.
+    if (state.role === "admin") {
+      var pinBtn = document.createElement("button");
+      pinBtn.className = "ghost-btn route-pin-btn";
+      pinBtn.textContent = point.pinned ? "📌 Открепить" : "📌 Закрепить";
+      pinBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        setRoutePinned(point.point, !point.pinned);
+      });
+      body.appendChild(pinBtn);
     }
 
     // "Комментарий для курьера" — на этот день у этой точки, не связан с
@@ -626,6 +642,11 @@
     if (state.role === "admin" && window.Sortable && !container._sortable) {
       container._sortable = new Sortable(container, {
         handle: ".drag-handle",
+        // Закреплённую карточку саму нельзя взять и потащить (см. "📌
+        // Закрепить" на карточке) — filter не даёт Sortable начать
+        // перетаскивание при клике на элемент с этим классом.
+        filter: ".pinned",
+        preventOnFilter: true,
         animation: 150,
         onEnd: onReorder,
       });
@@ -752,6 +773,13 @@
         state.points = state.points.slice().sort(function (a, b) {
           return (order[a.point] || 0) - (order[b.point] || 0);
         });
+        // Если в списке есть закреплённые точки, реальный сохранённый
+        // порядок (после того как onReorder вернул их на место) может
+        // отличаться от того, что Sortable уже показал в DOM во время
+        // перетаскивания — перерисовываем карточки, чтобы закреплённая
+        // точка визуально сразу "вернулась" на свою позицию, а не только
+        // после следующей полной перезагрузки экрана.
+        renderCards();
       })
       .catch(function (err) {
         // Сохранить не удалось — не оставляем на экране порядок, который
@@ -774,9 +802,36 @@
 
   function onReorder() {
     var container = document.getElementById("cards");
+    var domOrder = Array.prototype.map.call(container.children, function (card) {
+      return card.dataset.point;
+    });
+
+    // Закреплённую карточку саму перетащить нельзя (см. Sortable filter
+    // выше), но когда мимо неё тащат ДРУГУЮ карточку, Sortable всё равно
+    // визуально сдвигает её на соседнюю позицию — это неизбежный побочный
+    // эффект перетаскивания списка. Возвращаем каждую закреплённую точку
+    // на ту же ОТНОСИТЕЛЬНУЮ позицию в списке, где она была до этого
+    // перетаскивания, а все обычные точки — в новом порядке, в котором их
+    // расставил админ, просто "перетекая" мимо зафиксированных мест.
+    var pinnedPoints = state.points.filter(function (p) { return p.pinned; }).map(function (p) { return p.point; });
+    if (pinnedPoints.length) {
+      var movedWithoutPinned = domOrder.filter(function (name) { return pinnedPoints.indexOf(name) === -1; });
+      var originalOrder = state.points.map(function (p) { return p.point; });
+      var fixed = [];
+      var wi = 0;
+      originalOrder.forEach(function (name) {
+        if (pinnedPoints.indexOf(name) !== -1) {
+          fixed.push(name);
+        } else if (wi < movedWithoutPinned.length) {
+          fixed.push(movedWithoutPinned[wi++]);
+        }
+      });
+      domOrder = fixed;
+    }
+
     var order = {};
-    Array.prototype.forEach.call(container.children, function (card, idx) {
-      order[card.dataset.point] = idx + 1;
+    domOrder.forEach(function (point, idx) {
+      order[point] = idx + 1;
     });
 
     // Если админ перетаскивает вторую карточку, пока сохранение первой ещё
@@ -798,6 +853,13 @@
     api("/api/route/remove", { method: "POST", body: { date: date, point: point } })
       .then(function () { return loadRoute(date); })
       .catch(function (err) { toast("Не удалось убрать точку: " + err.message); });
+  }
+
+  function setRoutePinned(point, pinned) {
+    var date = state.date;
+    api("/api/route/pin", { method: "POST", body: { date: date, point: point, pinned: pinned } })
+      .then(function () { return loadRoute(date); })
+      .catch(function (err) { toast("Не удалось изменить закрепление: " + err.message); });
   }
 
   function completePoint(point) {

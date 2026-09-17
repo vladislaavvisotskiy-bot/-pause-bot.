@@ -203,6 +203,8 @@ ROUTE_ORDER = 4         # D  Порядок (число)
 ROUTE_STATUS = 5        # E
 ROUTE_DELIVERED_AT = 6  # F  Время сдачи (заполняется автоматически)
 ROUTE_COURIER_COMMENT = 7  # G  Комментарий для курьера на этот день (вводит админ)
+ROUTE_PINNED = 8           # H  "Да" — точка закреплена админом на своей позиции
+                           #     (нельзя перетащить, автодобавление новых точек её не двигает)
 ROUTE_STATUS_WAITING = "Ожидает"
 ROUTE_STATUS_IN_PROGRESS = "В пути"
 ROUTE_STATUS_DELIVERED = "Сдано"

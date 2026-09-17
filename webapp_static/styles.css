@@ -8,6 +8,7 @@
   --rose: #cf9d8c;
   --rose-deep: #b87e6c;
   --card: #f2ead9;
+  --card-pinned: #e8dabb;
   --line: rgba(58, 46, 34, 0.16);
   --on-accent: #fbf5ea;
   --radius: 18px;
@@ -204,6 +205,7 @@ header h1 {
 }
 .card.done { opacity: .6; }
 .card.sortable-ghost { opacity: .35; }
+.card.pinned { background: var(--card-pinned); }
 
 .card-head {
   display: flex;
@@ -265,6 +267,7 @@ header h1 {
   padding: 0 4px;
   touch-action: none;
 }
+.card.pinned .drag-handle { opacity: .35; cursor: default; }
 
 .card-body {
   display: none;
@@ -455,6 +458,13 @@ header h1 {
 }
 
 .route-courier-btn {
+  display: block;
+  margin: 0 0 12px;
+  padding: 6px 4px;
+  font-weight: 600;
+}
+
+.route-pin-btn {
   display: block;
   margin: 0 0 12px;
   padding: 6px 4px;
