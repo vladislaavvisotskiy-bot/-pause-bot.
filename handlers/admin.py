@@ -2,6 +2,7 @@
 import asyncio
 import datetime as dt
 import logging
+import uuid
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandObject
@@ -328,6 +329,9 @@ async def pending_point_approved(callback: CallbackQuery, bot: Bot):
         await callback.answer(texts.ADMIN_PENDING_ALREADY_HANDLED, show_alert=True)
         return
 
+    # Одна метка на ВСЮ корзину этого подтверждения — тот же приём, что и
+    # для обычного оформления (см. config.O_ORDER_BATCH/handlers/order.py).
+    batch_id = uuid.uuid4().hex
     row_nums = []
     for item in pending["cart"]:
         row_num = sheets.append_order(
@@ -340,6 +344,7 @@ async def pending_point_approved(callback: CallbackQuery, bot: Bot):
             garnish=item.get("garnish", ""),
             payment=pending["payment"],
             comment=pending["comment"],
+            batch_id=batch_id,
         )
         row_nums.append(row_num)
 

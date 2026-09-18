@@ -341,18 +341,32 @@ def get_client_orders(client_id, limit=10) -> list:
                 "payment": row[config.O_PAYMENT - 1] if len(row) >= config.O_PAYMENT else "",
                 "comment": comment,
                 "canceled": is_canceled(comment),
+                "batch": row[config.O_ORDER_BATCH - 1].strip() if len(row) >= config.O_ORDER_BATCH else "",
             })
     return out[-limit:][::-1]
 
 
 def get_client_order_groups(client_id, limit=10) -> list:
-    """Заказы клиента, сгруппированные по дате — один оформленный заказ мог
-    занять несколько строк (несколько сетов), но это по-прежнему один заказ
-    для отмены/отзыва/истории. Возвращает от новых к старым."""
+    """Заказы клиента, сгруппированные по ОДНОМУ оформлению — один
+    оформленный заказ мог занять несколько строк (несколько сетов), но это
+    по-прежнему один заказ для отмены/отзыва/истории/скрина оплаты.
+
+    Группировка — по (дата, batch) — см. config.O_ORDER_BATCH, а не просто
+    по дате: раньше группировка была только по дате, и ДВА РАЗНЫХ заказа
+    одного клиента за один день (например, утром — картой со скрином
+    сразу, вечером — отдельный заказ "оплачу позже") схлопывались в одну
+    группу. Из-за этого: (1) кнопка "Прикрепить скрин" могла не
+    показаться вовсе — она зависела от payment ПЕРВОЙ по счёту строки в
+    группе, а не от реально нужной; (2) если бы клиент всё же прикрепил
+    скрин через такую смешанную группу, он ушёл бы на ВСЕ строки группы
+    разом, затерев/переприкрепив скрин к чужому (уже оформленному отдельно)
+    заказу. Строки без batch (старые, до этого фикса) группируются по
+    дате как раньше — обратная совместимость, ничего не расщепляет задним
+    числом. Возвращает от новых к старым."""
     rows = get_client_orders(client_id, limit=10**9)  # уже от новых к старым
     groups, order = {}, []
     for r in rows:
-        key = r["date"]
+        key = (r["date"], r["batch"])
         if key not in groups:
             groups[key] = {
                 "date": r["date"],
@@ -410,8 +424,15 @@ def _next_empty_order_row() -> int:
 
 def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
                   qty: int, garnish: str, payment: str, comment: str = "",
-                  screenshot: str = "") -> int:
-    """Добавляет строку заказа, возвращает номер строки (нужен для подтверждения оплаты картой)."""
+                  screenshot: str = "", batch_id: str = "") -> int:
+    """Добавляет строку заказа, возвращает номер строки (нужен для подтверждения оплаты картой).
+
+    batch_id — метка одного оформления (см. config.O_ORDER_BATCH): все
+    строки одной корзины, отправленные одним нажатием "Всё верно,
+    отправить" (или одним подтверждением новой точки координатором),
+    должны прийти с ОДНИМ И ТЕМ ЖЕ batch_id — вызывающий код генерирует
+    его один раз на весь цикл append_order по корзине, не по одному на
+    строку."""
     ws = _ws(config.SHEET_ORDERS)
     row_num = _next_empty_order_row()
     updates = [
@@ -427,6 +448,8 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
     ]
     if screenshot:
         updates.append((config.O_SCREENSHOT, screenshot))
+    if batch_id:
+        updates.append((config.O_ORDER_BATCH, batch_id))
     cells = [gspread.Cell(row_num, col, value) for col, value in updates]
     ws.update_cells(cells)
     return row_num

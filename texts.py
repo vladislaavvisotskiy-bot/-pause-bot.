@@ -143,11 +143,16 @@ ORDER_SUMMARY_HEADER = "Проверьте заказ:"
 ORDER_PAYMENT_STATUS_CHECKING = "\nОплата: скрин на проверке"
 ORDER_PAYMENT_STATUS_LATER = "\nОплата: подтвердите позже"
 
-ORDER_CONFIRM_BTN = "Всё верно, отправить"
-ORDER_RESTART_BTN = "Изменить"
+ORDER_CONFIRM_BTN = "✅ Всё верно, отправить"
+ORDER_RESTART_BTN = "❌ Изменить"
 ADD_COMMENT_BTN = "💬 Добавить комментарий"
 EDIT_COMMENT_BTN = "✏️ Изменить комментарий"
 ADD_COMMENT_PROMPT = "Напишите комментарий к заказу:"
+
+ORDER_CONFIRM_REMINDER = (
+    "Ваш заказ пока не подтверждён — нажмите «✅ Всё верно, отправить», "
+    "чтобы мы начали готовить 🌿"
+)
 
 ORDER_SENT = (
     "Записал 🪴, спасибо за выбор 🌿✨\n\n"

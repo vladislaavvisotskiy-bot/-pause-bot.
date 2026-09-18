@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
+import asyncio
 import logging
 import random
+import uuid
 
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, InputMediaPhoto
@@ -15,6 +17,11 @@ from states import Order, PaymentReminder
 
 router = Router()
 logger = logging.getLogger("pause_bot")
+
+# Разовое напоминание клиенту, зависшему на экране "Проверьте заказ" дольше
+# 10 минут — по одной задаче на чат, сильная ссылка обязательна (иначе
+# asyncio может собрать задачу как мусор до её выполнения).
+_confirm_reminder_tasks: dict[int, asyncio.Task] = {}
 
 
 def _require_client(callback_or_message):
@@ -393,6 +400,38 @@ async def card_screenshot_not_photo(message: Message):
     await message.answer(texts.CARD_SCREENSHOT_EXPECTED)
 
 
+def _cancel_confirm_reminder(chat_id: int):
+    task = _confirm_reminder_tasks.pop(chat_id, None)
+    if task and not task.done():
+        task.cancel()
+
+
+async def _confirm_reminder_job(bot: Bot, chat_id: int, state: FSMContext, has_comment: bool):
+    try:
+        await asyncio.sleep(600)
+    except asyncio.CancelledError:
+        return
+    # Убираем себя из реестра ДО отправки — если параллельно уже
+    # запланировали новую задачу на этот чат, чужую запись не затираем
+    # (см. _cancel_confirm_reminder, которая сначала pop-ит, потом cancel-ит).
+    _confirm_reminder_tasks.pop(chat_id, None)
+    if await state.get_state() == Order.confirming.state:
+        await bot.send_message(
+            chat_id, texts.ORDER_CONFIRM_REMINDER,
+            reply_markup=kb.confirm_order_kb(has_comment=has_comment),
+        )
+
+
+def _schedule_confirm_reminder(message: Message, state: FSMContext, has_comment: bool):
+    """Каждый повторный показ экрана подтверждения (например, после
+    добавления комментария) начинает отсчёт 10 минут заново — старая
+    задача на этот чат отменяется, ставится новая."""
+    chat_id = message.chat.id
+    _cancel_confirm_reminder(chat_id)
+    task = asyncio.create_task(_confirm_reminder_job(message.bot, chat_id, state, has_comment))
+    _confirm_reminder_tasks[chat_id] = task
+
+
 async def _show_summary(message: Message, state: FSMContext):
     data = await state.get_data()
     cart = data.get("cart", [])
@@ -423,7 +462,9 @@ async def _show_summary(message: Message, state: FSMContext):
     elif card_status == "не подтверждена":
         lines.append(texts.ORDER_PAYMENT_STATUS_LATER)
 
-    await message.answer("\n".join(lines), reply_markup=kb.confirm_order_kb(has_comment=bool(data.get("cur_comment"))))
+    has_comment = bool(data.get("cur_comment"))
+    await message.answer("\n".join(lines), reply_markup=kb.confirm_order_kb(has_comment=has_comment))
+    _schedule_confirm_reminder(message, state, has_comment=has_comment)
 
 
 @router.callback_query(Order.confirming, F.data == "add_comment")
@@ -532,12 +573,17 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             except Exception:
                 pass
 
+        _cancel_confirm_reminder(callback.message.chat.id)
         await state.clear()
         await callback.message.answer(texts.ORDER_PENDING_NEW_POINT.format(support=texts.SUPPORT_USERNAME))
         await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(callback.from_user.id))
         await callback.answer()
         return
 
+    # Одна метка на ВСЮ корзину этого нажатия "Всё верно, отправить" — чтобы
+    # отличать этот заказ от других заказов того же клиента в тот же день
+    # (см. config.O_ORDER_BATCH/sheets.get_client_order_groups).
+    batch_id = uuid.uuid4().hex
     row_nums = []
     for item in cart:
         row_num = sheets.append_order(
@@ -551,6 +597,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             payment=payment_value,
             comment=full_comment,
             screenshot=data.get("card_screenshot") or "",
+            batch_id=batch_id,
         )
         row_nums.append(row_num)
 
@@ -586,6 +633,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
         except Exception:
             pass
 
+    _cancel_confirm_reminder(callback.message.chat.id)
     await state.clear()
     await callback.message.answer(texts.ORDER_SENT)
     await _send_care_message(callback.message, callback.from_user.id, data.get("client_name", ""))
@@ -599,6 +647,7 @@ async def restart_order(callback: CallbackQuery, state: FSMContext):
     # Начинаем собирать заказ заново с чистого листа — не точечная правка,
     # а полный перезапуск; данные клиента (id, точка по умолчанию и т.п.)
     # сохраняем, чтобы не проходить регистрацию/точку заново.
+    _cancel_confirm_reminder(callback.message.chat.id)
     data = await state.get_data()
     await state.set_data({
         "client_id": data.get("client_id"),

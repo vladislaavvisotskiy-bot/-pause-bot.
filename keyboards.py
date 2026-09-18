@@ -132,9 +132,9 @@ def pending_point_admin_kb(pending_id: str) -> InlineKeyboardMarkup:
 def confirm_order_kb(has_comment: bool = False) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ORDER_CONFIRM_BTN, callback_data="order_confirm")
+    b.button(text=texts.ORDER_RESTART_BTN, callback_data="order_restart")
     comment_text = texts.EDIT_COMMENT_BTN if has_comment else texts.ADD_COMMENT_BTN
     b.button(text=comment_text, callback_data="add_comment")
-    b.button(text=texts.ORDER_RESTART_BTN, callback_data="order_restart")
     b.adjust(1)
     return b.as_markup()
 
