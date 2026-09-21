@@ -27,7 +27,7 @@ def main_menu_kb(tg_id: int = None) -> InlineKeyboardMarkup:
     # Кнопка "Администратор" видна только самому админу — открывает ту же
     # панель /admin, что и текстовая команда (кнопка маршрута для него
     # переехала внутрь этой панели, см. admin_panel_kb).
-    if config.ADMIN_CHAT_ID and tg_id == config.ADMIN_CHAT_ID:
+    if tg_id in config.ADMIN_IDS:
         b.button(text=texts.ADMIN_PANEL_BTN, callback_data="admin_panel_open")
 
     # Кнопка маршрута для курьера — тот же Mini App, режим (можно ли

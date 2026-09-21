@@ -12,6 +12,7 @@ import sheets
 import texts
 import keyboards as kb
 import config
+from admin_notify import notify_admins, notify_admins_photo
 from care_phrases import CARE_PHRASES
 from states import Order, PaymentReminder
 
@@ -546,7 +547,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             screenshot=data.get("card_screenshot") or "",
         )
 
-        if config.ADMIN_CHAT_ID:
+        if config.ADMIN_IDS:
             try:
                 prices = sheets.get_set_prices()
                 total = sum(prices.get(i["set"], 0) * i["qty"] for i in cart)
@@ -567,9 +568,9 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
                 screenshot = data.get("card_screenshot")
                 if screenshot:
                     alert += texts.ADMIN_PENDING_SCREENSHOT_NOTE
-                    await bot.send_photo(config.ADMIN_CHAT_ID, screenshot, caption=alert, reply_markup=markup)
+                    await notify_admins_photo(bot, screenshot, alert, reply_markup=markup)
                 else:
-                    await bot.send_message(config.ADMIN_CHAT_ID, alert, reply_markup=markup)
+                    await notify_admins(bot, alert, reply_markup=markup)
             except Exception:
                 pass
 
@@ -611,7 +612,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
     # скрин оплаты картой — отправляем админу на подтверждение
     screenshot = data.get("card_screenshot")
-    if screenshot and config.ADMIN_CHAT_ID:
+    if screenshot and config.ADMIN_IDS:
         try:
             prices = sheets.get_set_prices()
             total = sum(prices.get(i["set"], 0) * i["qty"] for i in cart)
@@ -626,8 +627,8 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
                 sum=f"{total:,}".replace(",", " "),
             )
             rows_str = ",".join(str(r) for r in row_nums)
-            await bot.send_photo(
-                config.ADMIN_CHAT_ID, screenshot, caption=caption,
+            await notify_admins_photo(
+                bot, screenshot, caption,
                 reply_markup=kb.card_confirm_admin_kb(rows_str),
             )
         except Exception:
@@ -688,7 +689,7 @@ async def reminder_screenshot_received(message: Message, state: FSMContext, bot:
     await message.answer(texts.CARD_SCREENSHOT_RECEIVED)
     await state.clear()
 
-    if row_nums and config.ADMIN_CHAT_ID:
+    if row_nums and config.ADMIN_IDS:
         try:
             client = sheets.find_client_by_tg_id(message.from_user.id) or {}
             order_rows = sheets.get_order_rows(row_nums)
@@ -704,8 +705,8 @@ async def reminder_screenshot_received(message: Message, state: FSMContext, bot:
                 items=items_text,
                 sum=f"{total:,}".replace(",", " "),
             )
-            await bot.send_photo(
-                config.ADMIN_CHAT_ID, file_id, caption=caption,
+            await notify_admins_photo(
+                bot, file_id, caption,
                 reply_markup=kb.card_confirm_admin_kb(rows_str),
             )
         except Exception:

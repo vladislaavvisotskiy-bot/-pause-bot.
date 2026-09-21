@@ -20,19 +20,27 @@ logger = logging.getLogger("pause_bot")
 
 
 async def send_morning_reports(bot: Bot):
-    if not config.ADMIN_CHAT_ID:
+    if not config.ADMIN_IDS:
         return
     date_str = sheets.get_active_menu_date()
     try:
         kitchen = sheets.build_kitchen_report(date_str)
         courier = sheets.build_courier_report(date_str)
-        await bot.send_message(config.ADMIN_CHAT_ID, texts.ADMIN_MORNING_HEADER)
-        await bot.send_message(config.ADMIN_CHAT_ID, kitchen or texts.ADMIN_NO_ORDERS_TODAY)
-        if courier:
-            await bot.send_message(config.ADMIN_CHAT_ID, courier)
-        await admin.send_kitchen_pdf(bot, config.ADMIN_CHAT_ID, date_str)
     except Exception as e:
-        logger.exception("Не удалось отправить утренний отчёт: %s", e)
+        logger.exception("Не удалось построить утренний отчёт: %s", e)
+        return
+    # Каждому админу — отдельно, один недоступный/заблокировавший бота не
+    # должен обрывать отчёт остальным (тот же приём, что и в клиентских
+    # рассылках, см. send_warm_broadcast).
+    for admin_id in config.ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, texts.ADMIN_MORNING_HEADER)
+            await bot.send_message(admin_id, kitchen or texts.ADMIN_NO_ORDERS_TODAY)
+            if courier:
+                await bot.send_message(admin_id, courier)
+            await admin.send_kitchen_pdf(bot, admin_id, date_str)
+        except Exception:
+            logger.exception("Не удалось отправить утренний отчёт админу ID %s", admin_id)
 
 
 async def send_warm_broadcast(bot: Bot):
@@ -88,7 +96,7 @@ async def setup_commands(bot: Bot):
     # меню, а не саму команду (её ловит отдельный CommandStart() фильтр
     # в handlers/start.py, никак не связанный со списком команд).
     await bot.delete_my_commands(scope=BotCommandScopeDefault())
-    if config.ADMIN_CHAT_ID:
+    if config.ADMIN_IDS:
         # Всё, кроме /start и /admin, теперь доступно кнопками внутри самой
         # панели /admin — остальные команды (kitchen, courier, payments,
         # broadcasts_*, giveaway_today, menu_survey) по-прежнему работают,
@@ -97,10 +105,11 @@ async def setup_commands(bot: Bot):
             BotCommand(command="start", description="Начать / открыть главное меню"),
             BotCommand(command="admin", description="Панель администратора"),
         ]
-        try:
-            await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=config.ADMIN_CHAT_ID))
-        except Exception:
-            logger.exception("Не удалось задать список команд для админа")
+        for admin_id in config.ADMIN_IDS:
+            try:
+                await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id))
+            except Exception:
+                logger.exception("Не удалось задать список команд для админа ID %s", admin_id)
 
 
 async def main():

@@ -14,6 +14,7 @@ import texts
 import keyboards as kb
 import config
 import pdf_report
+from admin_notify import notify_admins
 from states import AdminClub, AdminMenu
 
 router = Router()
@@ -26,7 +27,7 @@ _ALBUM_WAIT = 1.5  # секунд ждём остальные фото альб�
 
 
 def _is_admin(user_id: int) -> bool:
-    return config.ADMIN_CHAT_ID and user_id == config.ADMIN_CHAT_ID
+    return user_id in config.ADMIN_IDS
 
 
 @router.message(Command("webapp_debug"))
@@ -37,14 +38,14 @@ async def cmd_webapp_debug(message: Message):
     объяснила. Команда не в /admin и не в списке команд бота — набирается
     вручную."""
     tg_id = message.from_user.id
-    is_admin = bool(config.ADMIN_CHAT_ID) and tg_id == config.ADMIN_CHAT_ID
+    is_admin = tg_id in config.ADMIN_IDS
     is_courier = sheets.is_courier(tg_id)
 
     lines = [
         f"Ваш Telegram ID: {tg_id}",
         "WEBAPP_URL на сервере: " + (config.WEBAPP_URL if config.WEBAPP_URL else "⚠️ НЕ ЗАДАН (пусто)"),
-        "ADMIN_CHAT_ID задан: " + ("да" if config.ADMIN_CHAT_ID else "⚠️ НЕТ (0 или пусто)"),
-        "Ваш ID совпадает с ADMIN_CHAT_ID: " + ("да" if is_admin else "нет"),
+        "ADMIN_CHAT_ID задан: " + ("да, админов: " + str(len(config.ADMIN_IDS)) if config.ADMIN_IDS else "⚠️ НЕТ (пусто)"),
+        "Ваш ID есть в списке админов: " + ("да" if is_admin else "нет"),
         "Вы в листе «Курьеры»: " + ("да" if is_courier else "нет"),
     ]
     should_show = bool(config.WEBAPP_URL) and (is_admin or is_courier)
@@ -119,7 +120,7 @@ async def admin_instructions(callback: CallbackQuery):
 # Меню на сегодня — координатор просто присылает фото(и) с подписью
 # ---------------------------------------------------------------------------
 
-@router.message(F.photo, F.from_user.id == config.ADMIN_CHAT_ID)
+@router.message(F.photo, F.from_user.id.in_(config.ADMIN_IDS))
 async def admin_menu_photo(message: Message, bot: Bot, state: FSMContext):
     file_id = message.photo[-1].file_id
     caption = message.caption or ""
@@ -864,4 +865,7 @@ async def survey_broadcast_confirmed(callback: CallbackQuery, bot: Bot):
     await callback.answer()
     await callback.message.answer(texts.ADMIN_SURVEY_SENDING)
     sent, total = await _broadcast_menu_survey(bot)
-    await callback.message.answer(texts.ADMIN_SURVEY_SENT.format(sent=sent, total=total))
+    # Итог рассылки — всем админам разом, а не только тому, кто запустил
+    # (см. admin_notify.notify_admins) — остальные тоже должны знать, что
+    # рассылка ушла и скольким клиентам.
+    await notify_admins(bot, texts.ADMIN_SURVEY_SENT.format(sent=sent, total=total))

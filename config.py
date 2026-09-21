@@ -10,7 +10,26 @@ GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json
 # туда весь credentials.json кладут одной строкой в переменную окружения.
 # Если она задана, используем её; если нет — как раньше, читаем файл.
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON", "")
-ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0") or 0)
+
+
+def _parse_admin_ids(raw: str) -> list:
+    """ADMIN_CHAT_ID может содержать несколько Telegram ID через запятую
+    (например "614897018,987654321") — так у бота может быть больше одного
+    администратора. Все проверки прав и все push-уведомления админу должны
+    идти по этому списку (ADMIN_IDS), а не по одному конкретному числу."""
+    ids = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.lstrip("-").isdigit():
+            ids.append(int(part))
+    return ids
+
+
+ADMIN_IDS = _parse_admin_ids(os.getenv("ADMIN_CHAT_ID", ""))
+# Первый ID из списка — там, где исторически нужен ровно один chat_id (не
+# список), например BotCommandScopeChat для одного конкретного чата задаётся
+# отдельно на каждого админа (см. bot.py:setup_commands), а не через это поле.
+ADMIN_CHAT_ID = ADMIN_IDS[0] if ADMIN_IDS else 0
 ORDER_CUTOFF_TIME = os.getenv("ORDER_CUTOFF_TIME", "10:00")
 CANCEL_CUTOFF_TIME = os.getenv("CANCEL_CUTOFF_TIME", "09:00")
 ORDER_COMPLETE_TIME = os.getenv("ORDER_COMPLETE_TIME", "13:00")

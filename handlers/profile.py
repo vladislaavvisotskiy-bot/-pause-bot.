@@ -7,6 +7,7 @@ import sheets
 import texts
 import keyboards as kb
 import config
+from admin_notify import notify_admins
 from states import EditProfile, Feedback
 
 router = Router()
@@ -288,10 +289,10 @@ async def _save_point(tg_id: int, state: FSMContext, point: str, bot: Bot, is_ne
     client = sheets.find_client_by_tg_id(tg_id)
     if client:
         sheets.update_client_point(client["row"], zone, point)
-        if is_new and config.ADMIN_CHAT_ID:
+        if is_new and config.ADMIN_IDS:
             try:
-                await bot.send_message(
-                    config.ADMIN_CHAT_ID,
+                await notify_admins(
+                    bot,
                     texts.ADMIN_NEW_POINT_ALERT.format(
                         name=client.get("name", ""),
                         client_id=client.get("id", ""),
@@ -379,10 +380,10 @@ async def cancel_order_yes(callback: CallbackQuery, bot: Bot):
     sheets.cancel_order_rows(g["rows"])
     await callback.message.answer(texts.CANCEL_DONE)
 
-    if config.ADMIN_CHAT_ID:
+    if config.ADMIN_IDS:
         try:
-            await bot.send_message(
-                config.ADMIN_CHAT_ID,
+            await notify_admins(
+                bot,
                 texts.ADMIN_ORDER_CANCELLED_ALERT.format(
                     name=client.get("name", ""),
                     client_id=client.get("id", ""),
@@ -448,10 +449,10 @@ async def feedback_save(message: Message, state: FSMContext, bot: Bot):
     order_info = data.get("feedback_order", "—")
     await state.clear()
 
-    if config.ADMIN_CHAT_ID and client:
+    if config.ADMIN_IDS and client:
         try:
-            await bot.send_message(
-                config.ADMIN_CHAT_ID,
+            await notify_admins(
+                bot,
                 texts.ADMIN_FEEDBACK_ALERT.format(
                     name=client.get("name", ""),
                     client_id=client.get("id", ""),
