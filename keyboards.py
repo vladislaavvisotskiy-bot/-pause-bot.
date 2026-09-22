@@ -60,13 +60,42 @@ def options_kb(options: list, prefix: str, back: bool = False, other: bool = Fal
 def set_kb(sets: list, back: bool = False) -> InlineKeyboardMarkup:
     """Кнопки выбора сета — показывают клиенту дружелюбное название
     («Пауза дня»/«Для тебя»), а в callback_data и в таблицу по-прежнему
-    уходит исходное название из Справочников."""
+    уходит исходное название из Справочников.
+
+    Сет с переменной ценой (см. config.SET_VARIANTS, например "Самса" —
+    технически два разных сета с разной ценой) показывается ОДНОЙ кнопкой,
+    а не двумя дублирующими друг друга — дальше отдельный шаг выбора
+    варианта (см. set_variant_kb) сам решает, какое из двух технических
+    имён записать в заказ."""
     b = InlineKeyboardBuilder()
+    shown_variant_groups = set()
     for opt in sets:
-        b.button(text=texts.display_set_name(opt), callback_data=f"set:{opt}")
+        group = config.SET_VARIANT_GROUP.get(opt.strip())
+        if group:
+            if group in shown_variant_groups:
+                continue
+            shown_variant_groups.add(group)
+            b.button(text=texts.display_set_name(group), callback_data=f"set:__variant__:{group}")
+        else:
+            b.button(text=texts.display_set_name(opt), callback_data=f"set:{opt}")
     if back:
         b.button(text=texts.BACK_BTN, callback_data="set:__back__")
     _home(b)
+    b.adjust(1)
+    return b.as_markup()
+
+
+def set_variant_kb(group: str, prices: dict) -> InlineKeyboardMarkup:
+    """Шаг выбора варианта переменной цены (см. config.SET_VARIANTS) —
+    кнопка с ценой на каждый вариант, цена берётся из Справочники в момент
+    показа (не хранится в коде), чтобы админ мог поменять её там же, где
+    все остальные цены."""
+    b = InlineKeyboardBuilder()
+    for technical, label in config.SET_VARIANTS[group]:
+        price = prices.get(technical, 0)
+        price_text = f"{price:,}".replace(",", " ")
+        b.button(text=f"{label} — {price_text} uzs", callback_data=f"setvariant:{technical}")
+    b.button(text=texts.BACK_BTN, callback_data="setvariant:__back__")
     b.adjust(1)
     return b.as_markup()
 

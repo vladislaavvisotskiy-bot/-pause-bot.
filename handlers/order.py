@@ -114,8 +114,40 @@ async def chosen_set(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    await state.update_data(cur_set=set_name)
+    if set_name.startswith("__variant__:"):
+        # Сет с переменной ценой (см. config.SET_VARIANTS) — сначала
+        # спрашиваем, какой именно вариант, технический "cur_set"
+        # определится только в chosen_set_variant.
+        group = set_name.split(":", 1)[1]
+        prices = sheets.get_set_prices()
+        await callback.message.answer(texts.CHOOSE_SET_VARIANT, reply_markup=kb.set_variant_kb(group, prices))
+        await state.set_state(Order.choosing_set_variant)
+        await callback.answer()
+        return
 
+    await state.update_data(cur_set=set_name)
+    await _proceed_after_set_choice(callback.message, state, set_name)
+    await callback.answer()
+
+
+@router.callback_query(Order.choosing_set_variant, F.data.startswith("setvariant:"))
+async def chosen_set_variant(callback: CallbackQuery, state: FSMContext):
+    value = callback.data.split(":", 1)[1]
+
+    if value == "__back__":
+        await _ask_set(callback.message, state)
+        await callback.answer()
+        return
+
+    # value — конкретное техническое имя варианта (например "Самса без
+    # компота", см. config.SET_VARIANTS) — дальше это обычный "cur_set",
+    # как для любого другого сета.
+    await state.update_data(cur_set=value)
+    await _proceed_after_set_choice(callback.message, state, value)
+    await callback.answer()
+
+
+async def _proceed_after_set_choice(message: Message, state: FSMContext, set_name: str):
     # Гарниры, реально доступные сегодня — задаёт админ после публикации
     # меню (см. handlers/admin.py: admin_today_garnish_save). Если админ
     # явно не указал ни одного (или явно очистил) — гарнира на выбор
@@ -135,13 +167,12 @@ async def chosen_set(callback: CallbackQuery, state: FSMContext):
 
     if garnishes:
         await state.update_data(garnish_options=garnishes)
-        await callback.message.answer(texts.CHOOSE_GARNISH, reply_markup=kb.garnish_kb(garnishes, back=True))
+        await message.answer(texts.CHOOSE_GARNISH, reply_markup=kb.garnish_kb(garnishes, back=True))
         await state.set_state(Order.choosing_garnish)
     else:
         await state.update_data(cur_garnish="")
-        await callback.message.answer(texts.ASK_QTY, reply_markup=kb.qty_kb())
+        await message.answer(texts.ASK_QTY, reply_markup=kb.qty_kb())
         await state.set_state(Order.choosing_qty)
-    await callback.answer()
 
 
 @router.callback_query(Order.choosing_garnish, F.data.startswith("garnish:"))

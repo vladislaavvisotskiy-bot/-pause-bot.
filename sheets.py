@@ -830,11 +830,27 @@ def get_today_sets() -> list:
     единственно возможным до появления этой функции. Поэтому
     _finish_menu_date сбрасывает это в пустой список при каждой публикации
     (см. set_today_sets([])), но это безопасный откат к "показываем всё",
-    а не отказ в обслуживании, если админ не ответит на вопрос."""
+    а не отказ в обслуживании, если админ не ответит на вопрос.
+
+    Сет с переменной ценой (см. config.SET_VARIANTS) технически заведён
+    как НЕСКОЛЬКО имён — если админ впишет сюда только одно из них (или
+    имя группы), достраиваем остальные автоматически, чтобы не оставить
+    один из вариантов молча недоступным для заказа."""
     ws = _ws(config.SHEET_REFERENCE)
     raw = ws.acell(config.REF_TODAY_SETS_CELL).value or ""
     sets = [s.strip() for s in raw.split(",") if s.strip()]
-    return sets if sets else get_sets()
+    if not sets:
+        return get_sets()
+    out = []
+    for s in sets:
+        group = config.SET_VARIANT_GROUP.get(s)
+        if group:
+            for technical, _ in config.SET_VARIANTS[group]:
+                if technical not in out:
+                    out.append(technical)
+        elif s not in out:
+            out.append(s)
+    return out
 
 
 def set_today_sets(sets: list):

@@ -9,6 +9,7 @@ class Registration(StatesGroup):
 
 class Order(StatesGroup):
     choosing_set = State()
+    choosing_set_variant = State()
     choosing_garnish = State()
     choosing_garnish_mix1 = State()
     choosing_garnish_mix2 = State()
