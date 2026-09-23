@@ -350,9 +350,25 @@ def admin_garnish_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def admin_sets_kb() -> InlineKeyboardMarkup:
+def admin_sets_toggle_kb(catalog: list, selected: list) -> InlineKeyboardMarkup:
+    """Клавиатура множественного выбора сегодняшних сетов при публикации
+    меню — по кнопке-чекбоксу на КАЖДЫЙ сет из каталога "Справочники" (см.
+    sheets.get_sets), а не текстовый ввод: админ нажатием отмечает нужные
+    (✅/⬜), затем "Готово". Сет с переменной ценой (см. config.SET_VARIANTS,
+    например "Самса") показывается ОДНОЙ кнопкой на группу — для админа это
+    один пункт меню, хотя в каталоге у него несколько строк с разной
+    ценой."""
     b = InlineKeyboardBuilder()
-    b.button(text=texts.ADMIN_SETS_ALL_BTN, callback_data="sets_all")
+    seen = set()
+    for name in catalog:
+        key = config.SET_VARIANT_GROUP.get(name, name)
+        if key in seen:
+            continue
+        seen.add(key)
+        mark = "✅" if key in selected else "⬜"
+        b.button(text=f"{mark} {key}", callback_data=f"settoggle:{key}")
+    b.button(text=texts.ADMIN_SETS_ALL_BTN, callback_data="setsall_toggle")
+    b.button(text=texts.ADMIN_SETS_DONE_BTN, callback_data="setsdone")
     b.adjust(1)
     return b.as_markup()
 

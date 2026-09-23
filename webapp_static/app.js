@@ -91,6 +91,8 @@
     "Боул": "Пауза в балансе.",
     "Самса": "Пауза дуо.",
     "Самса без компота": "Пауза дуо.",
+    "Chicken bowl": "Chicken bowl.",
+    "Beef bowl": "Beef bowl.",
   };
 
   function displaySetName(name) {

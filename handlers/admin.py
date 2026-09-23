@@ -182,7 +182,11 @@ async def _finish_menu_date(bot: Bot, chat_id: int, date_str: str, state: FSMCon
     await bot.send_message(chat_id, texts.ADMIN_MENU_DATE_SAVED.format(date=date_str))
     if not sheets.is_broadcasts_disabled():
         await _broadcast_new_menu(bot)
-    await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_SETS, reply_markup=kb.admin_sets_kb())
+    await state.update_data(sets_selected=[])
+    await bot.send_message(
+        chat_id, texts.ADMIN_ASK_TODAY_SETS,
+        reply_markup=kb.admin_sets_toggle_kb(sheets.get_sets(), []),
+    )
     await state.set_state(AdminMenu.waiting_sets)
 
 
@@ -218,28 +222,73 @@ async def _broadcast_new_menu(bot: Bot):
 
 
 @router.message(AdminMenu.waiting_sets)
-async def admin_today_sets_save(message: Message, state: FSMContext):
-    text = (message.text or "").strip()
-    sets = [s.strip() for s in text.split(",") if s.strip()]
-    sheets.set_today_sets(sets)
-    if sets:
-        await message.answer(texts.ADMIN_SETS_SAVED.format(list=", ".join(sets)))
-    else:
-        await message.answer(texts.ADMIN_SETS_ALL)
-    await _start_garnish_queue(message, state)
+async def admin_sets_text_reminder(message: Message):
+    # Выбор сетов теперь только кнопками (см. kb.admin_sets_toggle_kb) —
+    # текстовый ввод и распознавание заголовков в тексте меню сюда
+    # сознательно не подключены. Мягкое напоминание вместо тишины, если
+    # админ по привычке напишет текстом.
+    await message.answer(texts.ADMIN_SETS_USE_BUTTONS)
 
 
-@router.callback_query(AdminMenu.waiting_sets, F.data == "sets_all")
-async def admin_sets_all(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(AdminMenu.waiting_sets, F.data.startswith("settoggle:"))
+async def admin_sets_toggle(callback: CallbackQuery, state: FSMContext):
     if not _is_admin(callback.from_user.id):
         await callback.answer(texts.ADMIN_ONLY, show_alert=True)
         return
-    sheets.set_today_sets([])
+    set_name = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    selected = data.get("sets_selected", [])
+    if set_name in selected:
+        selected = [s for s in selected if s != set_name]
+    else:
+        selected = selected + [set_name]
+    await state.update_data(sets_selected=selected)
+    try:
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.admin_sets_toggle_kb(sheets.get_sets(), selected)
+        )
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.callback_query(AdminMenu.waiting_sets, F.data == "setsall_toggle")
+async def admin_sets_toggle_all(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    catalog = sheets.get_sets()
+    all_keys = []
+    seen = set()
+    for name in catalog:
+        key = config.SET_VARIANT_GROUP.get(name, name)
+        if key not in seen:
+            seen.add(key)
+            all_keys.append(key)
+    await state.update_data(sets_selected=all_keys)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=kb.admin_sets_toggle_kb(catalog, all_keys))
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.callback_query(AdminMenu.waiting_sets, F.data == "setsdone")
+async def admin_sets_done(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    data = await state.get_data()
+    selected = data.get("sets_selected", [])
+    sheets.set_today_sets(selected)
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await callback.message.answer(texts.ADMIN_SETS_ALL)
+    if selected:
+        await callback.message.answer(texts.ADMIN_SETS_SAVED.format(list=", ".join(selected)))
+    else:
+        await callback.message.answer(texts.ADMIN_SETS_ALL)
     await _start_garnish_queue(callback.message, state)
     await callback.answer()
 
