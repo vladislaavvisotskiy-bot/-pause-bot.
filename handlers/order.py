@@ -148,10 +148,12 @@ async def chosen_set_variant(callback: CallbackQuery, state: FSMContext):
 
 
 async def _proceed_after_set_choice(message: Message, state: FSMContext, set_name: str):
-    # Гарниры, реально доступные сегодня — задаёт админ после публикации
-    # меню (см. handlers/admin.py: admin_today_garnish_save). Если админ
-    # явно не указал ни одного (или явно очистил) — гарнира на выбор
-    # сегодня нет вообще, шаг просто пропускается, как у сетов без
+    # Гарниры, реально доступные сегодня ДЛЯ ЭТОГО КОНКРЕТНОГО сета — задаёт
+    # админ после публикации меню, отдельным вопросом на каждый сет (см.
+    # handlers/admin.py: admin_today_garnish_save/_start_garnish_queue) — у
+    # разных сетов сегодня могут быть разные гарниры. Если админ явно не
+    # указал ни одного (или явно очистил) для этого сета — гарнира на выбор
+    # сегодня для него нет вообще, шаг просто пропускается, как у сетов без
     # гарнира от природы ("Блюдо дня" и т.п.). Раньше тут был запасной
     # вариант "взять общий список из Справочников" — из-за него клиент
     # видел шаг выбора гарнира (иногда с давно неактуальными вариантами)
@@ -163,7 +165,10 @@ async def _proceed_after_set_choice(message: Message, state: FSMContext, set_nam
     # (например, "Боул") достаточно отметить "Да" в таблице, без правки
     # кода.
     sets_with_garnish = sheets.get_sets_with_garnish()
-    garnishes = sheets.get_today_garnishes() if set_name.strip().lower() in sets_with_garnish else []
+    garnishes = (
+        sheets.get_today_garnishes_for_set(set_name)
+        if set_name.strip().lower() in sets_with_garnish else []
+    )
 
     if garnishes:
         await state.update_data(garnish_options=garnishes)

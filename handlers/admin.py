@@ -160,29 +160,30 @@ async def _save_menu_and_notify(bot: Bot, chat_id: int, photo_ids: list, caption
 
 async def _finish_menu_date(bot: Bot, chat_id: int, date_str: str, state: FSMContext):
     sheets.set_active_menu_date(date_str)
-    # Сбрасываем гарниры на сегодня СРАЗУ, ещё до вопроса — раньше, если
-    # админ игнорировал этот шаг (не ответил вообще), ячейка так и
-    # оставалась с гарнирами от предыдущей публикации, и клиенты продолжали
-    # видеть вчерашний список как будто он всё ещё актуален. Теперь
-    # безопасное значение по умолчанию — "гарниров нет", а не "что бы там
-    # ни было записано раньше"; ответ ниже (см. admin_today_garnish_save)
-    # просто перезаписывает это явным списком, если он есть.
-    sheets.set_today_garnishes([])
-    # Тот же приём для сетов — сбрасываем на "не сужено" при каждой
-    # публикации, ещё до вопроса (см. admin_today_sets_save/admin_sets_all
-    # и sheets.get_today_sets — пустое значение здесь безопасно откатывает
-    # к полному каталогу, а не оставляет клиента без кнопок заказа).
-    # Раньше этого шага не было вовсе — набор кнопок сета клиенту всегда
+    # Сбрасываем гарниры на сегодня (для ВСЕХ сетов каталога разом — см.
+    # reset_all_set_garnishes) И сеты на сегодня — оба СРАЗУ, ещё до
+    # вопросов. Раньше, если админ игнорировал шаг (не ответил вообще),
+    # ячейка так и оставалась с данными от предыдущей публикации, и клиенты
+    # продолжали видеть вчерашний список как будто он всё ещё актуален.
+    # Безопасное значение по умолчанию — "гарниров/сужения нет", а не "что
+    # бы там ни было записано раньше".
+    #
+    # Сначала спрашиваем СЕТЫ, а не гарниры — гарнир теперь отдельным
+    # вопросом на КАЖДЫЙ сет с Гарнир=Да (см. _start_garnish_queue), и
+    # чтобы понять, про какие сеты вообще спрашивать гарнир, нужно сперва
+    # знать, какие сеты реально в сегодняшнем меню. Раньше этого шага
+    # (сужения сетов) не было вовсе — набор кнопок сета клиенту всегда
     # брался напрямую из каталога "Справочники", независимо от того, что
     # реально было в сегодняшнем меню, и вчерашний сет (например, "Боул")
     # молча "переживал" публикацию сегодняшнего меню без него —
     # воспроизведено и подтверждено на реальных данных.
+    sheets.reset_all_set_garnishes()
     sheets.set_today_sets([])
     await bot.send_message(chat_id, texts.ADMIN_MENU_DATE_SAVED.format(date=date_str))
     if not sheets.is_broadcasts_disabled():
         await _broadcast_new_menu(bot)
-    await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_GARNISH, reply_markup=kb.admin_garnish_kb())
-    await state.set_state(AdminMenu.waiting_garnishes)
+    await bot.send_message(chat_id, texts.ADMIN_ASK_TODAY_SETS, reply_markup=kb.admin_sets_kb())
+    await state.set_state(AdminMenu.waiting_sets)
 
 
 @router.callback_query(AdminMenu.waiting_date, F.data.startswith("menudate:"))
@@ -216,45 +217,16 @@ async def _broadcast_new_menu(bot: Bot):
         await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
 
 
-@router.message(AdminMenu.waiting_garnishes)
-async def admin_today_garnish_save(message: Message, state: FSMContext):
-    text = (message.text or "").strip()
-    garnishes = [g.strip() for g in text.split(",") if g.strip()]
-    sheets.set_today_garnishes(garnishes)
-    if garnishes:
-        await message.answer(texts.ADMIN_GARNISH_SAVED.format(list=", ".join(garnishes)))
-    else:
-        await message.answer(texts.ADMIN_GARNISH_CLEARED)
-    await message.answer(texts.ADMIN_ASK_TODAY_SETS, reply_markup=kb.admin_sets_kb())
-    await state.set_state(AdminMenu.waiting_sets)
-
-
-@router.callback_query(AdminMenu.waiting_garnishes, F.data == "garnish_none")
-async def admin_garnish_none(callback: CallbackQuery, state: FSMContext):
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
-        return
-    sheets.set_today_garnishes([])
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.message.answer(texts.ADMIN_GARNISH_CLEARED)
-    await callback.message.answer(texts.ADMIN_ASK_TODAY_SETS, reply_markup=kb.admin_sets_kb())
-    await state.set_state(AdminMenu.waiting_sets)
-    await callback.answer()
-
-
 @router.message(AdminMenu.waiting_sets)
 async def admin_today_sets_save(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     sets = [s.strip() for s in text.split(",") if s.strip()]
     sheets.set_today_sets(sets)
-    await state.clear()
     if sets:
         await message.answer(texts.ADMIN_SETS_SAVED.format(list=", ".join(sets)))
     else:
         await message.answer(texts.ADMIN_SETS_ALL)
+    await _start_garnish_queue(message, state)
 
 
 @router.callback_query(AdminMenu.waiting_sets, F.data == "sets_all")
@@ -263,12 +235,95 @@ async def admin_sets_all(callback: CallbackQuery, state: FSMContext):
         await callback.answer(texts.ADMIN_ONLY, show_alert=True)
         return
     sheets.set_today_sets([])
-    await state.clear()
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
     await callback.message.answer(texts.ADMIN_SETS_ALL)
+    await _start_garnish_queue(callback.message, state)
+    await callback.answer()
+
+
+async def _start_garnish_queue(message: Message, state: FSMContext):
+    """После того как известны сегодняшние сеты — строим очередь вопросов
+    про гарнир, по одному на КАЖДЫЙ сет с Гарнир=Да, реально входящий в
+    сегодняшнее меню (см. sheets.get_sets_with_garnish/get_today_sets).
+    Сет с переменной ценой (config.SET_VARIANTS, например "Самса") — один
+    вопрос на всю группу, а не на каждый технический вариант отдельно
+    (гарнир у них общий, в отличие от цены). Если ни у одного сегодняшнего
+    сета нет гарнира — вопросов не будет вовсе, публикация меню на этом
+    закончена."""
+    today_sets = sheets.get_today_sets()
+    sets_with_garnish = sheets.get_sets_with_garnish()
+    queue = []
+    seen = set()
+    for s in today_sets:
+        if s.strip().lower() not in sets_with_garnish:
+            continue
+        key = config.SET_VARIANT_GROUP.get(s, s)
+        if key in seen:
+            continue
+        seen.add(key)
+        queue.append(key)
+
+    if not queue:
+        await state.clear()
+        return
+    await _ask_next_garnish(message, state, queue)
+
+
+async def _ask_next_garnish(message: Message, state: FSMContext, queue: list):
+    # Админу показываем ТЕХНИЧЕСКОЕ имя сета (как в Справочники), а не
+    # клиентское отображаемое — тот же принцип, что и в ADMIN_ASK_TODAY_SETS
+    # ("технические названиями из каталога, как в «Справочники»"); иначе для
+    # разных сетов вопрос выглядел бы непоследовательно — часть по
+    # техническому имени, часть по клиентскому (например "Сет стандарт" ->
+    # "Для тебя.").
+    cur_set, remaining = queue[0], queue[1:]
+    await state.update_data(garnish_queue=remaining, cur_garnish_set=cur_set)
+    await message.answer(
+        texts.ADMIN_ASK_TODAY_GARNISH.format(set=cur_set),
+        reply_markup=kb.admin_garnish_kb(),
+    )
+    await state.set_state(AdminMenu.waiting_garnishes)
+
+
+@router.message(AdminMenu.waiting_garnishes)
+async def admin_today_garnish_save(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    garnishes = [g.strip() for g in text.split(",") if g.strip()]
+    data = await state.get_data()
+    cur_set = data.get("cur_garnish_set", "")
+    sheets.set_today_garnishes_for_set(cur_set, garnishes)
+    if garnishes:
+        await message.answer(texts.ADMIN_GARNISH_SAVED.format(set=cur_set, list=", ".join(garnishes)))
+    else:
+        await message.answer(texts.ADMIN_GARNISH_CLEARED.format(set=cur_set))
+    queue = data.get("garnish_queue", [])
+    if queue:
+        await _ask_next_garnish(message, state, queue)
+    else:
+        await state.clear()
+
+
+@router.callback_query(AdminMenu.waiting_garnishes, F.data == "garnish_none")
+async def admin_garnish_none(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    data = await state.get_data()
+    cur_set = data.get("cur_garnish_set", "")
+    sheets.set_today_garnishes_for_set(cur_set, [])
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(texts.ADMIN_GARNISH_CLEARED.format(set=cur_set))
+    queue = data.get("garnish_queue", [])
+    if queue:
+        await _ask_next_garnish(callback.message, state, queue)
+    else:
+        await state.clear()
     await callback.answer()
 
 

@@ -795,28 +795,68 @@ def get_garnishes() -> list:
     return [v[0] for v in ws.get(config.REF_GARNISH_RANGE) if v]
 
 
-def get_today_garnishes() -> list:
-    """Гарниры, которые реально есть сегодня — задаёт админ после публикации
-    меню (см. handlers/admin.py: _finish_menu_date сбрасывает это в пустой
-    список СРАЗУ при публикации, ещё до вопроса — так админ, который
-    ничего не ответит, никогда не унаследует гарниры от предыдущего дня).
-    Пустой список — это не "используй общий справочник", а "гарнира на
-    выбор сегодня нет вообще" (см. handlers/order.py: chosen_set)."""
+def get_today_garnishes_for_set(set_name: str) -> list:
+    """Гарниры, которые реально есть СЕГОДНЯ для КОНКРЕТНОГО сета — раньше
+    был один общий список на все сеты сразу (одна ячейка), теперь отдельный
+    список на каждый сет (столбец I той же строки, что цена/признак гарнира
+    этого сета — см. config.REF_SET_TODAY_GARNISH_COL/REF_SET_GARNISH_RANGE):
+    у "Сет стандарт" и, например, "Chiken bowl" могут быть РАЗНЫЕ гарниры на
+    один и тот же день. Задаёт админ после публикации меню, отдельным
+    вопросом на каждый сет с Гарнир=Да (см. handlers/admin.py:
+    _start_garnish_queue — reset_all_set_garnishes сбрасывает это в пустой
+    список СРАЗУ при публикации, ещё до вопросов — так админ, который
+    ничего не ответит на какой-то из вопросов, никогда не унаследует
+    гарниры этого сета от предыдущего дня). Пустой список — это не
+    "используй общий справочник", а "гарнира на выбор сегодня для ЭТОГО
+    сета нет вообще" (см. handlers/order.py: _proceed_after_set_choice)."""
     ws = _ws(config.SHEET_REFERENCE)
-    raw = ws.acell(config.REF_TODAY_GARNISH_CELL).value or ""
-    return [g.strip() for g in raw.split(",") if g.strip()]
+    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    name = set_name.strip().lower()
+    for i, row in enumerate(rows):
+        if row and row[0].strip().lower() == name:
+            r = 2 + i
+            val = ws.cell(r, config.REF_SET_TODAY_GARNISH_COL).value or ""
+            return [g.strip() for g in val.split(",") if g.strip()]
+    return []
 
 
-def set_today_garnishes(garnishes: list):
+def set_today_garnishes_for_set(set_name: str, garnishes: list):
+    """Записывает гарниры на сегодня для одного сета. Если set_name — имя
+    группы переменной цены (config.SET_VARIANTS, например "Самса"), пишет
+    ОДИНАКОВЫЙ список во ВСЕ технические варианты группы разом — гарнир
+    общий для всех вариантов группы, в отличие от цены."""
+    names = [t for t, _ in config.SET_VARIANTS[set_name]] if set_name in config.SET_VARIANTS else [set_name]
     ws = _ws(config.SHEET_REFERENCE)
-    ws.update_acell(config.REF_TODAY_GARNISH_CELL, ", ".join(garnishes))
+    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    value = ", ".join(garnishes)
+    cells = [
+        gspread.Cell(2 + i, config.REF_SET_TODAY_GARNISH_COL, value)
+        for i, row in enumerate(rows)
+        if row and row[0].strip() in names
+    ]
+    if cells:
+        ws.update_cells(cells)
+
+
+def reset_all_set_garnishes():
+    """Сбрасывает гарниры на сегодня для ВСЕХ сетов каталога разом —
+    вызывается при каждой публикации меню, ещё ДО вопросов про сеты/гарнир
+    (см. handlers/admin.py: _finish_menu_date), тем же приёмом, что раньше
+    был для одной общей ячейки: безопасный дефолт "гарнира нет", а не
+    наследование вчерашних данных для сета, про который админ забудет
+    ответить (или который сегодня вообще не в меню)."""
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    cells = [gspread.Cell(2 + i, config.REF_SET_TODAY_GARNISH_COL, "") for i in range(len(rows))]
+    if cells:
+        ws.update_cells(cells)
 
 
 def get_today_sets() -> list:
     """Сеты, реально доступные сегодня для заказа — задаёт админ после
     публикации меню (см. handlers/admin.py: admin_today_sets_save/
-    admin_sets_all), тем же способом, что и get_today_garnishes(). Раньше
-    этого шага не было вовсе — клиент всегда видел ВЕСЬ каталог
+    admin_sets_all), похожим способом на get_today_garnishes_for_set().
+    Раньше этого шага не было вовсе — клиент всегда видел ВЕСЬ каталог
     (get_sets(), "Справочники"!B2:B20) целиком, независимо от того, что
     реально было в опубликованном меню; из-за этого, например, "Боул"
     показывался клиенту как вариант заказа даже в те дни, когда его не
