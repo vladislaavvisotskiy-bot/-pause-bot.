@@ -16,13 +16,18 @@
 
   <header id="header">
     <div class="brand">PAUSE</div>
-    <div id="header-title">Меню</div>
+    <div id="header-title">Главная</div>
   </header>
 
   <main id="content">
 
+    <!-- ==================== ГЛАВНАЯ ==================== -->
+    <section id="screen-home" class="screen">
+      <div id="home-root"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div>
+    </section>
+
     <!-- ==================== МЕНЮ ==================== -->
-    <section id="screen-menu" class="screen">
+    <section id="screen-menu" class="screen" hidden>
       <div id="menu-root"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div>
     </section>
 
@@ -37,6 +42,16 @@
       <div id="feed-root"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div>
     </section>
 
+    <!-- ==================== ПОСЛАНИЯ ==================== -->
+    <section id="screen-messages" class="screen" hidden>
+      <div class="club-header">
+        <h2>Послания</h2>
+        <p>анонсы, розыгрыши и послания дня</p>
+      </div>
+      <div id="messages-feed-filters" class="feed-filters"></div>
+      <div id="messages-feed-root"><div class="skeleton-block"></div><div class="skeleton-block"></div></div>
+    </section>
+
     <!-- ==================== ПРОФИЛЬ ==================== -->
     <section id="screen-profile" class="screen" hidden>
       <div id="profile-root"><div class="skeleton-block"></div><div class="skeleton-block"></div></div>
@@ -45,19 +60,37 @@
   </main>
 
   <nav id="bottom-nav">
+    <button class="nav-item active" data-screen="home" aria-label="Главная">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>
+      <span>Главная</span>
+    </button>
+    <button class="nav-item" data-screen="menu" aria-label="Меню">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 10h8M8 14h5"/></svg>
+      <span>Меню</span>
+    </button>
     <button class="nav-item" data-screen="club" aria-label="PAUSE Club">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3c-2 2.5-3 4.7-3 6.6A3 3 0 0 0 12 12a3 3 0 0 0 3-3.4C15 7.7 14 5.5 12 3Z"/><path d="M12 12v9"/></svg>
       <span>Club</span>
     </button>
-    <button class="nav-item nav-item-main active" data-screen="menu" aria-label="Меню">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 10h8M8 14h5"/></svg>
-      <span>Меню</span>
+    <button class="nav-item" data-screen="messages" aria-label="Послания">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>
+      <span>Послания</span>
     </button>
     <button class="nav-item" data-screen="profile" aria-label="Профиль">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.8 4-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>
       <span>Профиль</span>
     </button>
   </nav>
+
+  <!-- Приветственный экран — один раз, дальше запоминаем в localStorage
+       этого устройства и не показываем повторно (см. app.js: SPLASH_KEY). -->
+  <div id="splash" class="splash" hidden>
+    <div class="splash-body">
+      <div class="splash-logo">PAUSE.</div>
+      <div class="splash-tagline">more than lunch,<br>packed with care</div>
+    </div>
+    <button id="splash-start" class="btn-gold splash-start">Начать</button>
+  </div>
 
   <!-- Полноэкранный визард заказа -->
   <div id="wizard" class="wizard" hidden>

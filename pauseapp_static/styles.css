@@ -259,6 +259,25 @@ hr.thin-gold {
 .modal-actions { display: flex; flex-direction: column; gap: 10px; }
 
 /* ------------------------------------------------------------------ */
+/* Приветственный экран — один раз на устройство                       */
+/* ------------------------------------------------------------------ */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: linear-gradient(160deg, var(--forest) 0%, var(--emerald) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px);
+}
+.splash-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.splash-logo { font-family: var(--font-serif); font-style: italic; font-weight: 600; font-size: 44px; color: var(--gold); letter-spacing: 0.02em; }
+.splash-tagline { margin-top: 16px; color: rgba(244, 235, 221, 0.75); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1.9; }
+.splash-start { width: 100%; }
+
+/* ------------------------------------------------------------------ */
 /* PAUSE Club — лента                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -288,6 +307,14 @@ hr.thin-gold {
   white-space: nowrap;
 }
 .filter-chip.active { background: var(--forest); border-color: var(--forest); color: var(--ivory); }
+
+.feed-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px;
+}
+.feed-photo-cell { aspect-ratio: 1 / 1; overflow: hidden; border-radius: var(--radius-sm); cursor: pointer; }
+.feed-photo-thumb { width: 100%; height: 100%; object-fit: cover; display: block; background: var(--ivory-deep); }
 
 .feed-post { margin-bottom: 16px; padding: 0; overflow: hidden; position: relative; }
 .feed-post-photo {
@@ -349,6 +376,38 @@ hr.thin-gold {
 .type-picker-chip.selected { background: var(--forest); border-color: var(--forest); color: var(--ivory); }
 
 /* ------------------------------------------------------------------ */
+/* Главная                                                             */
+/* ------------------------------------------------------------------ */
+
+.home-hero { text-align: center; padding: 10px 6px 22px; }
+.home-brand { font-family: var(--font-serif); font-style: italic; font-weight: 600; font-size: 26px; color: var(--gold); }
+.home-hero h2 { margin-top: 10px; }
+.home-hero p { margin-top: 4px; }
+
+.home-promo { display: flex; align-items: center; gap: 14px; cursor: pointer; margin-bottom: 20px; }
+.home-promo-icon { color: var(--gold); flex: 0 0 auto; }
+.home-promo-icon svg { width: 30px; height: 30px; }
+.home-promo-title { font-family: var(--font-serif); font-weight: 600; color: var(--forest); font-size: 16px; }
+.home-promo-sub { color: var(--ink-soft); font-size: 12.5px; margin-top: 2px; }
+.home-promo-arrow { margin-left: auto; color: var(--ink-soft); flex: 0 0 auto; }
+
+.home-quick-row { display: flex; gap: 8px; margin-bottom: 26px; }
+.home-quick-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 14px 4px;
+  color: var(--forest);
+}
+.home-quick-item svg { width: 22px; height: 22px; }
+.home-quick-item span { font-size: 10.5px; font-weight: 600; text-align: center; }
+
+/* ------------------------------------------------------------------ */
 /* Меню — сегодняшний постер + витрина сетов                           */
 /* ------------------------------------------------------------------ */
 
@@ -375,27 +434,62 @@ hr.thin-gold {
 
 .menu-category-chips { margin-bottom: 18px; }
 
-.menu-set-grid { display: flex; flex-direction: column; gap: 16px; }
+.menu-set-grid { display: flex; flex-direction: column; gap: 10px; }
 .menu-set-card {
-  padding: 0;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
   cursor: pointer;
 }
-.menu-set-photo {
+.menu-set-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: var(--ivory-deep);
+}
+.menu-set-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+}
+.menu-set-thumb-empty svg { width: 26px; height: 26px; }
+.menu-set-card-body { flex: 1; min-width: 0; }
+.menu-set-card-name { font-family: var(--font-serif); font-weight: 600; font-size: 16.5px; color: var(--forest); }
+.menu-set-card-price { color: var(--gold); font-weight: 600; font-size: 13.5px; margin-top: 3px; }
+.menu-set-card-note { color: var(--ink-soft); font-size: 11.5px; margin-top: 2px; }
+.menu-set-card-chevron { color: var(--ink-soft); flex: 0 0 auto; }
+
+/* Детальная карточка блюда — отдельный "экран" визарда перед заказом */
+.set-detail-photo {
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
+  border-radius: var(--radius-lg);
   display: block;
+  margin-bottom: 16px;
   background: var(--ivory-deep);
 }
-.menu-set-card-body {
-  padding: 16px 18px;
-  border-top: 1px solid var(--line);
+.set-detail-fav {
+  position: absolute;
+  top: calc(var(--safe-top) + 14px);
+  right: 18px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 253, 248, 0.9);
+  color: var(--forest);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.menu-set-card.has-photo .menu-set-card-body { border-top: none; }
-.menu-set-card-name { font-family: var(--font-serif); font-weight: 600; font-size: 19px; color: var(--forest); }
-.menu-set-card-price { color: var(--gold); font-weight: 600; font-size: 14px; margin-top: 4px; }
-.menu-set-card-note { color: var(--ink-soft); font-size: 12px; margin-top: 3px; }
+.set-detail-body { margin-bottom: 20px; }
+.set-detail-price { color: var(--gold); font-weight: 600; font-size: 18px; margin-top: 4px; }
+.set-detail-note { color: var(--ink-soft); font-size: 13px; margin-top: 6px; }
 
 /* ------------------------------------------------------------------ */
 /* Профиль                                                             */
@@ -421,6 +515,7 @@ hr.thin-gold {
 .profile-name { font-family: var(--font-serif); font-size: 21px; font-weight: 600; color: var(--forest); }
 .profile-username { color: var(--gold); font-size: 13px; font-weight: 600; margin-top: 2px; }
 .profile-contact { color: var(--ink-soft); font-size: 13.5px; margin-top: 2px; }
+.profile-club-badge { margin-top: 10px; }
 
 .profile-stat-row { display: flex; gap: 10px; margin: 16px 0; }
 .profile-stat { flex: 1; text-align: center; background: var(--card); border-radius: var(--radius-md); border: 1px solid var(--line); padding: 14px 8px; }
@@ -445,6 +540,21 @@ hr.thin-gold {
   letter-spacing: 0.05em;
   margin: 22px 4px 8px;
 }
+
+.profile-nav-list { padding: 4px 16px; margin-top: 18px; }
+.profile-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.profile-nav-row:last-child { border-bottom: none; }
+.profile-nav-row-icon { color: var(--emerald); flex: 0 0 auto; display: flex; }
+.profile-nav-row-label { flex: 1; font-size: 14.5px; color: var(--ink); }
+.profile-nav-row-chevron { color: var(--ink-soft); flex: 0 0 auto; display: flex; }
+.profile-exit-btn { margin-top: 18px; }
 
 .list-row {
   display: flex;

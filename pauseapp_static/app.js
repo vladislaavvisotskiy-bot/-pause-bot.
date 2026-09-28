@@ -10,12 +10,14 @@
   }
 
   var state = {
-    screen: "menu",
-    profile: null,     // {registered, name, phone, zone, point, order_count, club, ...}
-    menu: null,         // ответ /api/menu
-    menuCategory: "all", // выбранный чип категории на экране Меню
-    feed: null,         // список постов ленты PAUSE Club (ответ /api/feed)
-    feedFilter: "all",  // "all" | один из config.FEED_POST_TYPES
+    screen: "home",
+    home: null,          // отметка, что главная уже загружалась (использует profile+menu)
+    profile: null,       // {registered, name, phone, zone, point, order_count, club, ...}
+    menu: null,           // ответ /api/menu
+    menuCategory: "all",  // выбранный чип категории на экране Меню
+    feed: null,           // список постов ленты PAUSE Club (ответ /api/feed) — общий и для CLUB, и для Послания
+    feedFilter: "all",    // "all" | один из config.FEED_POST_TYPES — фильтр экрана CLUB
+    messagesFilter: "all", // тот же принцип, отдельный фильтр экрана Послания
   };
 
   // -------------------------------------------------------------------
@@ -126,20 +128,24 @@
   // Навигация — нижняя панель, 3 экрана
   // -------------------------------------------------------------------
 
-  var TITLES = { menu: "Меню", club: "Pause Club", profile: "Профиль" };
+  var TITLES = { home: "Главная", menu: "Меню", club: "Pause Club", messages: "Послания", profile: "Профиль" };
+  var SCREEN_NAMES = ["home", "menu", "club", "messages", "profile"];
 
   function showScreen(name) {
     state.screen = name;
-    ["menu", "club", "profile"].forEach(function (s) {
+    SCREEN_NAMES.forEach(function (s) {
       document.getElementById("screen-" + s).hidden = s !== name;
     });
     document.getElementById("header-title").textContent = TITLES[name];
     Array.prototype.forEach.call(document.querySelectorAll(".nav-item"), function (b) {
       b.classList.toggle("active", b.dataset.screen === name);
     });
+    if (name === "home" && !state.home) loadHome();
     if (name === "profile" && !state.profile) loadProfile();
     if (name === "menu" && !state.menu) loadMenu();
     if (name === "club" && !state.feed) loadFeed();
+    if (name === "messages" && !state.feed) loadFeed();
+    if (name === "messages" && state.feed) renderMessagesFeedScreen();
   }
 
   function initNav() {
@@ -226,6 +232,87 @@
       closeWizard();
     }
   });
+
+  // -------------------------------------------------------------------
+  // ГЛАВНАЯ — приветствие + переход к разделам, всё на реальных данных
+  // (профиль клиента + сегодняшнее меню, те же самые ответы API, что и у
+  // экранов Меню/Профиль — просто дублируем их локально в state, чтобы
+  // при заходе на сами эти вкладки не перезапрашивать то, что уже есть).
+  // -------------------------------------------------------------------
+
+  var QUICK_NAV = [
+    { screen: "menu", label: "Меню", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 10h8M8 14h5"/></svg>' },
+    { screen: "club", label: "Pause Club", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3c-2 2.5-3 4.7-3 6.6A3 3 0 0 0 12 12a3 3 0 0 0 3-3.4C15 7.7 14 5.5 12 3Z"/><path d="M12 12v9"/></svg>' },
+    { screen: "messages", label: "Послания", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>' },
+    { screen: "profile", label: "Профиль", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.8 4-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>' },
+  ];
+
+  function loadHome() {
+    var root = document.getElementById("home-root");
+    Promise.all([
+      state.profile ? Promise.resolve(state.profile) : api("/api/profile"),
+      state.menu ? Promise.resolve(state.menu) : api("/api/menu"),
+    ]).then(function (results) {
+      state.profile = results[0];
+      state.menu = results[1];
+      state.home = true;
+      renderHomeScreen();
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить данные: " + err.message));
+    });
+  }
+
+  function renderHomeScreen() {
+    var root = document.getElementById("home-root");
+    root.innerHTML = "";
+    var p = state.profile;
+    var m = state.menu;
+
+    var firstName = (p && p.registered && p.name) ? p.name.trim().split(/\s+/)[0] : "";
+    var hero = el("div", "home-hero");
+    hero.innerHTML =
+      '<div class="home-brand">PAUSE.</div>' +
+      '<h2>' + (firstName ? "Добро пожаловать, " + escapeHtml(firstName) : "Добро пожаловать") + '</h2>' +
+      '<p>Вкусные обеды. Забота о тебе.</p>';
+    root.appendChild(hero);
+
+    var promo = el("div", "card home-promo");
+    promo.addEventListener("click", function () { showScreen("menu"); });
+    if (m.published && !m.cutoff_passed) {
+      promo.innerHTML =
+        '<div class="home-promo-icon">' + ICON_LEAF + '</div>' +
+        '<div><div class="home-promo-title">Сегодняшнее меню</div>' +
+        '<div class="home-promo-sub">На ' + escapeHtml(m.date || "") + ' — открыт приём заказов</div></div>' +
+        '<div class="home-promo-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg></div>';
+    } else {
+      promo.innerHTML =
+        '<div class="home-promo-icon">' + ICON_CLOCK + '</div>' +
+        '<div><div class="home-promo-title">Меню сегодня</div>' +
+        '<div class="home-promo-sub">' + (m.published ? "Приём заказов на сегодня закрыт" : "Готовим, скоро опубликуем") + '</div></div>';
+    }
+    root.appendChild(promo);
+
+    var quickRow = el("div", "home-quick-row");
+    QUICK_NAV.forEach(function (item) {
+      var btn = el("button", "home-quick-item", item.icon + "<span>" + item.label + "</span>");
+      btn.addEventListener("click", function () { haptic("select"); showScreen(item.screen); });
+      quickRow.appendChild(btn);
+    });
+    root.appendChild(quickRow);
+
+    // "Сегодня в меню" — вместо "Популярное" с макета: реальной статистики
+    // популярности блюд в системе нет (не считается нигде), а показывать
+    // выдуманный рейтинг — фиктивные данные; вместо этого честно берём то
+    // же самое сегодняшнее меню, что и на вкладке Меню (первые несколько
+    // позиций), той же самой карточкой (см. buildMenuSetCard).
+    if (m.published && m.sets && m.sets.length) {
+      root.appendChild(el("div", "profile-section-title", "Сегодня в меню"));
+      var list = el("div", "menu-set-grid");
+      m.sets.slice(0, 3).forEach(function (s) { list.appendChild(buildMenuSetCard(s)); });
+      root.appendChild(list);
+    }
+  }
 
   // -------------------------------------------------------------------
   // МЕНЮ — показ сегодняшнего меню
@@ -328,18 +415,19 @@
   }
 
   function buildMenuSetCard(s) {
+    // Горизонтальная карточка (миниатюра слева) — как в списке блюд на
+    // макете; полноразмерное фото/детали — уже на отдельном экране
+    // (см. openSetDetail), сама карточка в списке только открывает его.
     var card = el("div", "card menu-set-card");
     if (s.photo_url) {
-      card.classList.add("has-photo");
-      var img = el("img", "menu-set-photo");
+      var img = el("img", "menu-set-thumb");
       img.src = s.photo_url;
       img.alt = "";
       img.loading = "lazy";
-      // Если ссылка окажется битой (например, админ ещё вставляет фото и
-      // вставил не то) — просто скрываем блок, а не показываем "битую
-      // картинку" на премиальном экране.
-      img.addEventListener("error", function () { img.remove(); card.classList.remove("has-photo"); });
+      img.addEventListener("error", function () { img.remove(); });
       card.appendChild(img);
+    } else {
+      card.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
     }
     var body = el("div", "menu-set-card-body");
     body.appendChild(el("div", "menu-set-card-name", escapeHtml(s.display_name)));
@@ -351,8 +439,48 @@
       if (s.has_garnish) body.appendChild(el("div", "menu-set-card-note", "с выбором гарнира"));
     }
     card.appendChild(body);
-    card.addEventListener("click", function () { startOrderFromCard(s); });
+    card.appendChild(el("div", "menu-set-card-chevron", '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>'));
+    card.addEventListener("click", function () { openSetDetail(s); });
     return card;
+  }
+
+  // --- Детальная карточка блюда (открывается по клику из списка/с
+  // Главной) — отдельный экран перед визардом заказа, как на макете:
+  // крупное фото, цена, кнопка "Заказать" запускает тот же самый
+  // startOrderFromCard, что раньше вызывался прямо по клику на карточку. --
+
+  function openSetDetail(s) {
+    haptic("select");
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      if (s.photo_url) {
+        var img = el("img", "set-detail-photo");
+        img.src = s.photo_url;
+        img.alt = "";
+        img.addEventListener("error", function () { img.remove(); });
+        body.appendChild(img);
+      }
+      var favBtn = el("button", "set-detail-fav", '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 20s-7-4.4-9.3-8.8C1.3 8 2.7 5 6 5c2 0 3.3 1 4 2.3.7-1.3 2-2.3 4-2.3 3.3 0 4.7 3 3.3 6.2C19 15.6 12 20 12 20Z"/></svg>');
+      // "Избранное" в системе пока нет (см. отчёт) — честная заглушка,
+      // а не притворяющаяся рабочей кнопка.
+      favBtn.addEventListener("click", function (e) { e.stopPropagation(); toast("Избранное — скоро добавим"); });
+      body.appendChild(favBtn);
+
+      var wrap = el("div", "set-detail-body");
+      wrap.appendChild(el("h2", "wizard-title", s.display_name));
+      if (s.is_variant_group) {
+        var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
+        wrap.appendChild(el("div", "set-detail-price", "от " + fmtSum(minP)));
+      } else {
+        wrap.appendChild(el("div", "set-detail-price", fmtSum(s.price)));
+        if (s.has_garnish) wrap.appendChild(el("div", "set-detail-note", "Гарнир выбирается на следующем шаге"));
+      }
+      body.appendChild(wrap);
+
+      var orderBtn = el("button", "btn-gold wizard-footer-btn", s.is_variant_group ? "Выбрать вариант" : "Заказать");
+      orderBtn.addEventListener("click", function () { startOrderFromCard(s); });
+      body.appendChild(orderBtn);
+    });
   }
 
   function startOrderFromCard(s) {
@@ -436,10 +564,18 @@
     var root = document.getElementById("feed-root");
     api("/api/feed").then(function (data) {
       state.feed = data.posts;
+      // Один и тот же /api/feed кормит два экрана — CLUB (все типы) и
+      // Послания (см. renderMessagesFeedScreen, без типа "photo") — оба
+      // просто перерисовываются сразу, независимо от того, какой сейчас
+      // виден; невидимый экран просто перерисуется молча, это дёшево.
       renderFeedScreen();
+      renderMessagesFeedScreen();
     }).catch(function () {
       root.innerHTML = "";
       root.appendChild(el("div", "feed-empty", "Не удалось загрузить ленту — потяните вниз, чтобы попробовать снова."));
+      var msgRoot = document.getElementById("messages-feed-root");
+      msgRoot.innerHTML = "";
+      msgRoot.appendChild(el("div", "feed-empty", "Не удалось загрузить послания — потяните вниз, чтобы попробовать снова."));
     });
   }
 
@@ -469,6 +605,82 @@
 
     if (!posts.length) {
       root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>Пока здесь тихо — самое время опубликовать первый пост.</p>"));
+      return;
+    }
+
+    // Отдельный чип "Фото" — сеткой миниатюр (как на макете), а не
+    // полноразмерными карточками; остальные фильтры (включая "Все") —
+    // обычный вертикальный список карточек, как и раньше.
+    if (state.feedFilter === "photo") {
+      var grid = el("div", "feed-photo-grid");
+      posts.forEach(function (post) {
+        var url = (post.image_urls || [])[0];
+        if (!url) return;
+        var cell = el("div", "feed-photo-cell");
+        var img = el("img", "feed-photo-thumb");
+        img.alt = "";
+        cell.appendChild(img);
+        loadFeedImage(url, img);
+        cell.addEventListener("click", function () { openFeedPostDetail(post); });
+        grid.appendChild(cell);
+      });
+      root.appendChild(grid);
+      return;
+    }
+
+    posts.forEach(function (post) { root.appendChild(buildFeedPostCard(post)); });
+  }
+
+  // Открывает один пост ленты крупно (из сетки миниатюр) — переиспользует
+  // ровно ту же карточку, что и обычный список, просто в оверлее визарда.
+  function openFeedPostDetail(post) {
+    haptic("select");
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(buildFeedPostCard(post));
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // Послания — отдельный экран нижней навигации (на макете это своя
+  // вкладка, не фильтр внутри CLUB). Данные те же самые /api/feed, что и
+  // у CLUB (см. loadFeed) — просто без типа "photo" (фото — только в
+  // CLUB) и со своим набором чипов/своим выбранным фильтром.
+  // -------------------------------------------------------------------
+
+  var MESSAGES_TYPES_ORDER = ["message", "announcement", "giveaway", "news"];
+
+  function messagesFeedPosts() {
+    return (state.feed || []).filter(function (p) { return p.type !== "photo"; });
+  }
+
+  function renderMessagesFeedFilters() {
+    var root = document.getElementById("messages-feed-filters");
+    root.innerHTML = "";
+    var counts = {};
+    messagesFeedPosts().forEach(function (p) { counts[p.type] = (counts[p.type] || 0) + 1; });
+
+    var allChip = el("button", "filter-chip" + (state.messagesFilter === "all" ? " active" : ""), "Все");
+    allChip.addEventListener("click", function () { state.messagesFilter = "all"; renderMessagesFeedScreen(); });
+    root.appendChild(allChip);
+
+    MESSAGES_TYPES_ORDER.forEach(function (t) {
+      if (!counts[t]) return;
+      var chip = el("button", "filter-chip" + (state.messagesFilter === t ? " active" : ""), FEED_TYPE_LABELS[t]);
+      chip.addEventListener("click", function () { state.messagesFilter = t; renderMessagesFeedScreen(); });
+      root.appendChild(chip);
+    });
+  }
+
+  function renderMessagesFeedScreen() {
+    var root = document.getElementById("messages-feed-root");
+    renderMessagesFeedFilters();
+    root.innerHTML = "";
+    var posts = messagesFeedPosts().filter(function (p) {
+      return state.messagesFilter === "all" || p.type === state.messagesFilter;
+    });
+    if (!posts.length) {
+      root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>Пока никаких посланий нет.</p>"));
       return;
     }
     posts.forEach(function (post) { root.appendChild(buildFeedPostCard(post)); });
@@ -1013,8 +1225,13 @@
 
   function loadProfile() {
     var root = document.getElementById("profile-root");
-    api("/api/profile").then(function (data) {
-      state.profile = data;
+    // Заодно подгружаем ленту, если её ещё нет — нужна только для счётчика
+    // "постов" в статистике (см. renderProfileScreen); если запрос не
+    // удастся, профиль всё равно должен открыться, просто без этого
+    // счётчика — поэтому свой catch, а не общий с профилем.
+    var feedPromise = state.feed ? Promise.resolve() : api("/api/feed").then(function (data) { state.feed = data.posts; }).catch(function () {});
+    Promise.all([api("/api/profile"), feedPromise]).then(function (results) {
+      state.profile = results[0];
       renderProfileScreen();
     }).catch(function (err) {
       root.innerHTML = "";
@@ -1034,6 +1251,66 @@
       var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
       return u && u.username ? u.username : null;
     } catch (e) { return null; }
+  }
+
+  // Иконки строк меню профиля — чисто декоративные, 20×20.
+  var ICON_ORDERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>';
+  var ICON_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M12 20s-7-4.4-9.3-8.8C1.3 8 2.7 5 6 5c2 0 3.3 1 4 2.3.7-1.3 2-2.3 4-2.3 3.3 0 4.7 3 3.3 6.2C19 15.6 12 20 12 20Z"/></svg>';
+  var ICON_ENVELOPE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>';
+  var ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>';
+  var ICON_TAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M3 12 12 3h7v7l-9 9-7-7Z"/><circle cx="15.5" cy="7.5" r="1.2"/></svg>';
+  var ICON_SLIDERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M4 7h11M4 12h16M4 17h8"/><circle cx="17" cy="7" r="1.6"/><circle cx="9" cy="17" r="1.6"/></svg>';
+  var ICON_SUPPORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><circle cx="12" cy="12" r="9"/><path d="M9.3 9.7a2.7 2.7 0 1 1 3.7 2.5c-.7.3-1 .9-1 1.6v.3"/><circle cx="12" cy="16.8" r="0.6" fill="currentColor" stroke="none"/></svg>';
+
+  function buildProfileRow(icon, label, onClick) {
+    var row = el("div", "profile-nav-row");
+    row.innerHTML =
+      '<span class="profile-nav-row-icon">' + icon + '</span>' +
+      '<span class="profile-nav-row-label">' + escapeHtml(label) + '</span>' +
+      '<span class="profile-nav-row-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg></span>';
+    row.addEventListener("click", function () { haptic("select"); onClick(); });
+    return row;
+  }
+
+  // Открывает содержимое одного раздела профиля в оверлее визарда —
+  // loaderFn это уже существующие loadOrders/loadMessages(root), просто
+  // теперь вызываются по тапу на строку, а не сразу все разом на экране.
+  function openProfileSubscreen(title, loaderFn) {
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", title));
+      var sub = el("div");
+      sub.appendChild(el("div", "skeleton-block"));
+      body.appendChild(sub);
+      loaderFn(sub);
+    });
+  }
+
+  function openSettingsSubscreen() {
+    var p = state.profile;
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", "Настройки"));
+      var pointCard = el("div", "card");
+      pointCard.innerHTML =
+        '<div class="list-row"><span class="list-row-label">Точка доставки</span><span class="list-row-value">' +
+        escapeHtml((p.zone && p.point) ? (p.zone + ", " + p.point) : "не указана") + '</span></div>';
+      body.appendChild(pointCard);
+      var editBtn = el("button", "btn-ghost", "Редактировать профиль");
+      editBtn.style.marginTop = "12px";
+      editBtn.addEventListener("click", function () { editState = {}; openEditProfile(); });
+      body.appendChild(editBtn);
+    });
+  }
+
+  function openSupportSubscreen() {
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", "Поддержка"));
+      var supportCard = el("div", "card");
+      supportCard.innerHTML = 'Что-то пошло не так или есть вопрос? Напишите нам напрямую — <span class="link-inline">@ssaavveeyy</span>.';
+      body.appendChild(supportCard);
+    });
   }
 
   function renderProfileScreen() {
@@ -1064,15 +1341,22 @@
     var username = tgUsername();
     if (username) head.appendChild(el("div", "profile-username", "@" + username));
     head.appendChild(el("div", "profile-contact", p.phone || "Телефон не указан"));
+    if (p.order_count > 0) head.appendChild(el("div", "pill gold profile-club-badge", "Участник " + p.club.emoji + " " + p.club.label));
     root.appendChild(head);
 
-    root.appendChild(el("div", "profile-section-title", "PAUSE CLUB"));
+    // 3 плашки статистики — "заказов" и "постов" реальные (заказы из
+    // профиля, посты — те же самые /api/feed, посчитанные по автору);
+    // "акции" — тире, а не выдуманное число: участие в розыгрышах нигде
+    // не считается (см. отчёт пользователю).
     var statRow = el("div", "profile-stat-row");
     var s1 = el("div", "profile-stat");
     s1.innerHTML = '<div class="profile-stat-value">' + p.order_count + '</div><div class="profile-stat-label">заказов</div>';
     var s2 = el("div", "profile-stat");
-    s2.innerHTML = '<div class="profile-stat-value">' + p.club.emoji + '</div><div class="profile-stat-label">' + p.club.label + '</div>';
-    statRow.appendChild(s1); statRow.appendChild(s2);
+    s2.innerHTML = '<div class="profile-stat-value">—</div><div class="profile-stat-label">акции</div>';
+    var s3 = el("div", "profile-stat");
+    var postsCount = (state.feed || []).filter(function (post) { return post.author === p.name; }).length;
+    s3.innerHTML = '<div class="profile-stat-value">' + postsCount + '</div><div class="profile-stat-label">постов</div>';
+    statRow.appendChild(s1); statRow.appendChild(s2); statRow.appendChild(s3);
     root.appendChild(statRow);
 
     if (p.club.next_label) {
@@ -1085,34 +1369,24 @@
       root.appendChild(prog);
     }
 
-    root.appendChild(el("div", "profile-section-title", "Настройки"));
-    var pointCard = el("div", "card");
-    pointCard.innerHTML =
-      '<div class="list-row"><span class="list-row-label">Точка доставки</span><span class="list-row-value">' +
-      escapeHtml((p.zone && p.point) ? (p.zone + ", " + p.point) : "не указана") + '</span></div>';
-    root.appendChild(pointCard);
+    var rows = el("div", "card profile-nav-list");
+    rows.appendChild(buildProfileRow(ICON_ORDERS, "Мои заказы", function () { openProfileSubscreen("Мои заказы", loadOrders); }));
+    rows.appendChild(buildProfileRow(ICON_HEART, "Избранное", function () { toast("Избранное — скоро добавим"); }));
+    rows.appendChild(buildProfileRow(ICON_ENVELOPE, "Мои послания", function () { openProfileSubscreen("Мои послания", loadMessages); }));
+    rows.appendChild(buildProfileRow(ICON_BELL, "Уведомления", function () { toast("Уведомления — скоро добавим"); }));
+    rows.appendChild(buildProfileRow(ICON_TAG, "Бонусы и промокоды", function () { toast("Бонусы и промокоды — скоро добавим"); }));
+    rows.appendChild(buildProfileRow(ICON_SLIDERS, "Настройки", openSettingsSubscreen));
+    rows.appendChild(buildProfileRow(ICON_SUPPORT, "Поддержка", openSupportSubscreen));
+    root.appendChild(rows);
 
-    var editBtn = el("button", "btn-ghost", "Редактировать профиль");
-    editBtn.style.marginTop = "12px";
-    editBtn.addEventListener("click", function () { editState = {}; openEditProfile(); });
-    root.appendChild(editBtn);
-
-    root.appendChild(el("div", "profile-section-title", "Мои заказы"));
-    var ordersRoot = el("div");
-    ordersRoot.appendChild(el("div", "skeleton-block"));
-    root.appendChild(ordersRoot);
-    loadOrders(ordersRoot);
-
-    root.appendChild(el("div", "profile-section-title", "Мои послания"));
-    var msgRoot = el("div");
-    msgRoot.appendChild(el("div", "skeleton-block"));
-    root.appendChild(msgRoot);
-    loadMessages(msgRoot);
-
-    root.appendChild(el("div", "profile-section-title", "Поддержка"));
-    var supportCard = el("div", "card");
-    supportCard.innerHTML = 'Что-то пошло не так или есть вопрос? Напишите нам напрямую — <span class="link-inline">@ssaavveeyy</span>.';
-    root.appendChild(supportCard);
+    if (tg) {
+      var exitBtn = el("button", "btn-ghost profile-exit-btn", "Выйти");
+      // Отдельного "логина" в системе нет — личность приходит из Telegram
+      // автоматически при каждом открытии, выходить не из чего технически;
+      // честный эквивалент "Выйти" здесь — просто закрыть Mini App.
+      exitBtn.addEventListener("click", function () { tg.close(); });
+      root.appendChild(exitBtn);
+    }
   }
 
   // --- Мои заказы --------------------------------------------------------
@@ -1355,14 +1629,31 @@
     if (e.target.id === "confirm-modal") hideConfirm();
   });
 
+  // Приветственный экран — один раз на устройство, дальше не мешает: сам
+  // прогруз данных ниже не ждёт, пока его закроют, просто рисуется поверх.
+  var SPLASH_KEY = "pauseapp_seen_splash_v1";
+  function maybeShowSplash() {
+    var seen = false;
+    try { seen = localStorage.getItem(SPLASH_KEY) === "1"; } catch (e) {}
+    if (seen) return;
+    var splash = document.getElementById("splash");
+    splash.hidden = false;
+    document.getElementById("splash-start").addEventListener("click", function () {
+      haptic("select");
+      try { localStorage.setItem(SPLASH_KEY, "1"); } catch (e) {}
+      splash.hidden = true;
+    });
+  }
+
   function init() {
+    maybeShowSplash();
     resetOrder();
     editState = {};
     initNav();
     api("/api/me").then(function () {
-      showScreen("menu");
+      showScreen("home");
     }).catch(function (err) {
-      var root = document.getElementById("menu-root");
+      var root = document.getElementById("home-root");
       root.innerHTML = "";
       if (err.status === 401 || err.status === 403) {
         root.appendChild(el("div", "menu-state", "<h2>Доступ ограничен</h2><p>PAUSE App пока открыт только для команды PAUSE.</p>"));
