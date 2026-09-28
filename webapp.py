@@ -456,11 +456,20 @@ def create_app(bot=None) -> web.Application:
     return app
 
 
-async def run_webapp(bot=None):
+async def run_webapp(bot=None, extra_subapps: dict = None):
     """Запускает веб-сервер на config.WEBAPP_PORT — вызывать вместе с
     dp.start_polling(bot) через asyncio.gather, не вместо него. bot нужен
-    для отправки пуш-уведомлений курьеру (см. create_app)."""
+    для отправки пуш-уведомлений курьеру (см. create_app).
+
+    extra_subapps — {"/путь/": aiohttp.web.Application, ...}: другие Mini
+    App (например pauseapp.py) примонтированные рядом, БЕЗ единой правки
+    в create_app()/маршрутах курьерского приложения выше — Railway отдаёт
+    только один публичный порт, поэтому несколько aiohttp-приложений в
+    одном процессе делятся именно так, через add_subapp. Параметр
+    необязателен и по умолчанию ничего не меняет в поведении этой функции."""
     app = create_app(bot)
+    for prefix, subapp in (extra_subapps or {}).items():
+        app.add_subapp(prefix, subapp)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", config.WEBAPP_PORT)
