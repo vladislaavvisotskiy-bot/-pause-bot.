@@ -23,7 +23,58 @@
     polyline: null,
     earningsDateISO: null,
     couriers: [],       // [{tg_id, name, status}] — только для админа, см. loadCouriers
+    splitView: false,   // флаг ROUTE_SPLIT_VIEW с сервера (см. /api/me) — пробное разделение
+                         // курьеров на экране "Маршрут"; при false всё как было раньше
+    courierTab: "all",  // "all" | tg_id курьера — какая вкладка сейчас активна (только админ)
   };
+
+  // Тёплая палитра для цветов курьеров на вкладке "Все" (см. renderMap,
+  // courierColor) — цвет назначается по порядковому номеру курьера в
+  // /api/couriers, зациклен по модулю, если курьеров больше, чем цветов.
+  var COURIER_PALETTE = ["#b8563f", "#c9962b", "#8a6a3f", "#9c5b6b", "#5f7a52", "#a8452e"];
+
+  function courierColor(tgId) {
+    var idx = state.couriers.map(function (c) { return c.tg_id; }).indexOf(tgId);
+    return COURIER_PALETTE[(idx === -1 ? 0 : idx) % COURIER_PALETTE.length];
+  }
+
+  // Точки, которые сейчас должны быть показаны на карте/в списке — ВСЕ (на
+  // вкладке "Все" или когда ROUTE_SPLIT_VIEW выключен/роль не админ), либо
+  // только точки одного курьера (на его вкладке). Порядок сохраняется тем
+  // же, что и в state.points (уже отсортирован по общему столбцу
+  // "Порядок") — просто отфильтрован, поэтому нумерация 1,2,3 внутри
+  // вкладки курьера получается автоматически его личным относительным
+  // порядком, без отдельного столбца в таблице.
+  function visiblePoints() {
+    if (!state.splitView || state.role !== "admin" || state.courierTab === "all") {
+      return state.points;
+    }
+    var tab = state.courierTab;
+    return state.points.filter(function (p) { return p.courier_tg_ids.indexOf(tab) !== -1; });
+  }
+
+  // Переносит новый ОТНОСИТЕЛЬНЫЙ порядок отображаемого поднабора точек
+  // (newSubsetOrder — имена точек в новом порядке, например только точки
+  // одного курьера с его вкладки) в ПОЛНЫЙ список fullList, не трогая
+  // позиции остальных точек — единственный способ тащить карточки только
+  // внутри вкладки курьера, продолжая хранить ОДИН общий столбец "Порядок"
+  // в листе "Маршрут" (структуру листа менять нельзя, см. ROUTE_SPLIT_VIEW
+  // в config.py). Если newSubsetOrder содержит вообще все точки (вкладка
+  // "Все" или флаг выключен) — результат совпадает с прежним поведением
+  // "просто пронумеровать DOM-порядок подряд".
+  function mergeSubsetOrder(fullList, newSubsetOrder) {
+    var subsetSet = {};
+    newSubsetOrder.forEach(function (name) { subsetSet[name] = true; });
+    var slots = [];
+    fullList.forEach(function (p, idx) {
+      if (subsetSet[p.point]) slots.push(idx);
+    });
+    var merged = fullList.map(function (p) { return p.point; });
+    slots.forEach(function (slotIdx, i) { merged[slotIdx] = newSubsetOrder[i]; });
+    var order = {};
+    merged.forEach(function (name, idx) { order[name] = idx + 1; });
+    return order;
+  }
 
   // -------------------------------------------------------------------
   // Утилиты
@@ -145,13 +196,41 @@
   // Маршрут — карта
   // -------------------------------------------------------------------
 
-  function numberedIcon(num, done) {
+  function numberedIcon(num, done, colorInfo) {
+    // colorInfo — цвет курьера (см. ROUTE_SPLIT_VIEW/markerColorFor): либо
+    // строка (один назначенный курьер), либо массив строк (точка назначена
+    // нескольким курьерам сразу — рисуем маркер несколькими секторами,
+    // "особая отметка" по ТЗ). Сданная точка (done) всегда красится
+    // обычным цветом "сдано" — статус важнее принадлежности курьеру.
+    var style = "";
+    if (!done && colorInfo) {
+      if (Array.isArray(colorInfo)) {
+        var pct = 100 / colorInfo.length;
+        var stops = colorInfo.map(function (c, i) {
+          return c + " " + (i * pct) + "% " + ((i + 1) * pct) + "%";
+        }).join(", ");
+        style = ' style="background: conic-gradient(' + stops + ');"';
+      } else {
+        style = ' style="background:' + colorInfo + ';"';
+      }
+    }
     return L.divIcon({
       className: "",
-      html: '<div class="marker-badge' + (done ? " done" : "") + '">' + num + "</div>",
+      html: '<div class="marker-badge' + (done ? " done" : "") + '"' + style + '>' + num + "</div>",
       iconSize: [26, 26],
       iconAnchor: [13, 13],
     });
+  }
+
+  // Цвет маркера этой точки для карты — null означает "обычный вид, без
+  // изменений" (флаг выключен, роль не админ, или точка вообще без
+  // назначенного курьера). См. ROUTE_SPLIT_VIEW в config.py.
+  function markerColorFor(point) {
+    if (!state.splitView || state.role !== "admin") return null;
+    var ids = point.courier_tg_ids || [];
+    if (!ids.length) return null;
+    if (ids.length === 1) return courierColor(ids[0]);
+    return ids.map(courierColor);
   }
 
   function depotIcon() {
@@ -308,7 +387,7 @@
 
     withCoords.forEach(function (p, idx) {
       var marker = L.marker(placedLatLngs[cursor], {
-        icon: numberedIcon(idx + 1, p.status === "Сдано"),
+        icon: numberedIcon(idx + 1, p.status === "Сдано", markerColorFor(p)),
       }).addTo(state.map);
       marker.bindPopup(p.address || p.point);
       state.markers.push(marker);
@@ -638,8 +717,9 @@
   function renderCards() {
     var container = document.getElementById("cards");
     container.innerHTML = "";
-    var active = state.role === "courier" ? activePointName(state.points) : null;
-    state.points.forEach(function (p, idx) {
+    var list = visiblePoints();
+    var active = state.role === "courier" ? activePointName(list) : null;
+    list.forEach(function (p, idx) {
       container.appendChild(buildCard(p, idx, p.point === active));
     });
 
@@ -680,17 +760,25 @@
       return;
     }
 
+    renderCourierTabs();
+    var visible = visiblePoints();
+
     // "На сегодня" только если реально смотрим на активную дату — на любой
     // другой выбранной дате пустой список означает просто "на эту дату
-    // заказов пока нет", а не что-то сломалось.
+    // заказов пока нет", а не что-то сломалось. На вкладке конкретного
+    // курьера (см. ROUTE_SPLIT_VIEW) отдельное сообщение, если у ЭТОГО
+    // курьера точек нет, а у маршрута в целом — есть, иначе "нет точек" на
+    // самом деле означало бы "нет заказов", хотя они есть.
     document.getElementById("empty-state-text").textContent =
-      state.date === state.activeDate
-        ? "На сегодня точек с заказами пока нет 🌿"
-        : "На эту дату заказов пока нет 🌿";
+      visible.length === 0 && state.points.length > 0 && state.courierTab !== "all"
+        ? "У этого курьера нет точек на эту дату 🌿"
+        : state.date === state.activeDate
+          ? "На сегодня точек с заказами пока нет 🌿"
+          : "На эту дату заказов пока нет 🌿";
 
-    document.getElementById("empty-state").hidden = state.points.length > 0;
-    document.getElementById("cards").hidden = state.points.length === 0;
-    renderMap(state.points);
+    document.getElementById("empty-state").hidden = visible.length > 0;
+    document.getElementById("cards").hidden = visible.length === 0;
+    renderMap(visible);
     renderCards();
     renderDatePicker();
   }
@@ -757,6 +845,52 @@
     });
   }
 
+  // Вкладки курьеров над картой (см. ROUTE_SPLIT_VIEW) — только у админа,
+  // и только когда флаг включён и есть хотя бы один курьер в справочнике.
+  // При выключенном флаге/роли курьера контейнер просто остаётся скрытым —
+  // остальной экран не отличается от того, что было до этой функции.
+  function renderCourierTabs() {
+    var container = document.getElementById("courier-tabs");
+    if (!state.splitView || state.role !== "admin" || !state.couriers.length) {
+      container.hidden = true;
+      return;
+    }
+    // Курьер, на чью вкладку админ переключился, мог с тех пор пропасть из
+    // справочника — откатываемся на "Все", а не оставляем пустую вкладку.
+    if (state.courierTab !== "all" && !state.couriers.some(function (c) { return c.tg_id === state.courierTab; })) {
+      state.courierTab = "all";
+    }
+
+    container.hidden = false;
+    container.innerHTML = "";
+
+    var allBtn = document.createElement("button");
+    allBtn.className = "date-pill courier-tab" + (state.courierTab === "all" ? " active" : "");
+    allBtn.textContent = "Все";
+    allBtn.addEventListener("click", function () {
+      if (state.courierTab === "all") return;
+      state.courierTab = "all";
+      render();
+    });
+    container.appendChild(allBtn);
+
+    state.couriers.forEach(function (c) {
+      var btn = document.createElement("button");
+      btn.className = "date-pill courier-tab" + (state.courierTab === c.tg_id ? " active" : "");
+      var dot = document.createElement("span");
+      dot.className = "courier-tab-dot";
+      dot.style.background = courierColor(c.tg_id);
+      btn.appendChild(dot);
+      btn.appendChild(document.createTextNode(c.name || c.tg_id));
+      btn.addEventListener("click", function () {
+        if (state.courierTab === c.tg_id) return;
+        state.courierTab = c.tg_id;
+        render();
+      });
+      container.appendChild(btn);
+    });
+  }
+
   function showLoadError(message) {
     document.getElementById("cards").innerHTML = "";
     document.getElementById("empty-state").hidden = false;
@@ -817,10 +951,14 @@
     // на ту же ОТНОСИТЕЛЬНУЮ позицию в списке, где она была до этого
     // перетаскивания, а все обычные точки — в новом порядке, в котором их
     // расставил админ, просто "перетекая" мимо зафиксированных мест.
-    var pinnedPoints = state.points.filter(function (p) { return p.pinned; }).map(function (p) { return p.point; });
+    // "Список" здесь — то, что реально сейчас показано (см. visiblePoints):
+    // на вкладке курьера это только его точки, закреплённые точки ДРУГИХ
+    // курьеров тут вообще не участвуют, их не видно и не переставляли.
+    var visible = visiblePoints();
+    var pinnedPoints = visible.filter(function (p) { return p.pinned; }).map(function (p) { return p.point; });
     if (pinnedPoints.length) {
       var movedWithoutPinned = domOrder.filter(function (name) { return pinnedPoints.indexOf(name) === -1; });
-      var originalOrder = state.points.map(function (p) { return p.point; });
+      var originalOrder = visible.map(function (p) { return p.point; });
       var fixed = [];
       var wi = 0;
       originalOrder.forEach(function (name) {
@@ -833,10 +971,11 @@
       domOrder = fixed;
     }
 
-    var order = {};
-    domOrder.forEach(function (point, idx) {
-      order[point] = idx + 1;
-    });
+    // Переносим этот новый относительный порядок в полный список — на
+    // вкладке "Все" (или при выключенном флаге) domOrder и так содержит
+    // все точки, поэтому результат ничем не отличается от прежнего
+    // поведения "пронумеровать DOM-порядок подряд" (см. mergeSubsetOrder).
+    var order = mergeSubsetOrder(state.points, domOrder);
 
     // Если админ перетаскивает вторую карточку, пока сохранение первой ещё
     // не вернулось — это создаёт гонку двух параллельных запросов, где более
@@ -898,6 +1037,10 @@
   function loadCouriers() {
     return api("/api/couriers").then(function (data) {
       state.couriers = data.couriers || [];
+      // loadCouriers() и loadRoute() идут параллельно (см. startApp) — если
+      // маршрут уже успел отрисоваться без списка курьеров, вкладки нужно
+      // дорисовать отдельно, а не ждать следующего полного render().
+      renderCourierTabs();
     }).catch(function () {
       // Не критично — просто кнопка назначения курьера покажет ID вместо
       // имени, пока список не подгрузится (или останется пустым при ошибке).
@@ -1238,6 +1381,7 @@
     api("/api/me").then(function (me) {
       state.role = me.role;
       state.tgId = me.tg_id;
+      state.splitView = !!me.route_split_view;
       showScreen("orders");
       loadRouteDates();
       if (state.role === "admin") loadCouriers();

@@ -206,7 +206,11 @@ def _today() -> str:
 # ---------------------------------------------------------------------------
 
 async def api_me(request: web.Request):
-    return web.json_response({"role": request["role"], "tg_id": request["tg_id"]})
+    return web.json_response({
+        "role": request["role"],
+        "tg_id": request["tg_id"],
+        "route_split_view": config.ROUTE_SPLIT_VIEW,
+    })
 
 
 async def api_route_get(request: web.Request):

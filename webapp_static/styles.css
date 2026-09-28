@@ -113,6 +113,18 @@ header h1 {
   color: var(--on-accent);
 }
 
+/* Вкладки курьеров на экране "Маршрут" (см. app.js: renderCourierTabs,
+   ROUTE_SPLIT_VIEW) — та же пилюля, что и переключатель дат, плюс цветная
+   точка курьера перед именем. */
+.courier-tab { display: inline-flex; align-items: center; }
+.courier-tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex: 0 0 auto;
+}
+
 #map {
   width: 100%;
   height: 230px;
