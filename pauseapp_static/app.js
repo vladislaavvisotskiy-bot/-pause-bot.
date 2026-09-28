@@ -1029,6 +1029,13 @@
     } catch (e) { return null; }
   }
 
+  function tgUsername() {
+    try {
+      var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      return u && u.username ? u.username : null;
+    } catch (e) { return null; }
+  }
+
   function renderProfileScreen() {
     var root = document.getElementById("profile-root");
     root.innerHTML = "";
@@ -1038,6 +1045,11 @@
       root.appendChild(el("div", "empty-note", "Вы ещё не зарегистрированы. Наберите /start в чате с ботом, чтобы завести профиль."));
       return;
     }
+
+    var hero = el("div", "screen-hero");
+    hero.appendChild(el("h2", null, "Твоё пространство"));
+    hero.appendChild(el("p", null, "всё, что связано с тобой в PAUSE"));
+    root.appendChild(hero);
 
     var head = el("div", "profile-head");
     var photo = tgPhotoUrl();
@@ -1049,9 +1061,12 @@
       head.appendChild(el("div", "avatar", initials(p.name)));
     }
     head.appendChild(el("div", "profile-name", p.name || "Без имени"));
+    var username = tgUsername();
+    if (username) head.appendChild(el("div", "profile-username", "@" + username));
     head.appendChild(el("div", "profile-contact", p.phone || "Телефон не указан"));
     root.appendChild(head);
 
+    root.appendChild(el("div", "profile-section-title", "PAUSE CLUB"));
     var statRow = el("div", "profile-stat-row");
     var s1 = el("div", "profile-stat");
     s1.innerHTML = '<div class="profile-stat-value">' + p.order_count + '</div><div class="profile-stat-label">заказов</div>';
@@ -1070,8 +1085,8 @@
       root.appendChild(prog);
     }
 
+    root.appendChild(el("div", "profile-section-title", "Настройки"));
     var pointCard = el("div", "card");
-    pointCard.style.marginTop = "12px";
     pointCard.innerHTML =
       '<div class="list-row"><span class="list-row-label">Точка доставки</span><span class="list-row-value">' +
       escapeHtml((p.zone && p.point) ? (p.zone + ", " + p.point) : "не указана") + '</span></div>';

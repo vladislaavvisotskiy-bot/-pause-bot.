@@ -262,9 +262,10 @@ hr.thin-gold {
 /* PAUSE Club — лента                                                  */
 /* ------------------------------------------------------------------ */
 
-.club-header { text-align: center; padding: 6px 10px 4px; }
-.club-header h2 { font-size: 28px; letter-spacing: 0.01em; }
-.club-header p { font-style: italic; font-family: var(--font-serif); font-size: 15px; }
+.club-header, .screen-hero { text-align: center; padding: 6px 10px 4px; }
+.club-header h2, .screen-hero h2 { font-size: 28px; letter-spacing: 0.01em; }
+.club-header p, .screen-hero p { font-style: italic; font-family: var(--font-serif); font-size: 15px; }
+.screen-hero { margin-bottom: 8px; }
 
 .feed-compose-btn { margin: 16px 0 14px; }
 
@@ -418,6 +419,7 @@ hr.thin-gold {
 }
 .profile-head { text-align: center; margin-bottom: 18px; }
 .profile-name { font-family: var(--font-serif); font-size: 21px; font-weight: 600; color: var(--forest); }
+.profile-username { color: var(--gold); font-size: 13px; font-weight: 600; margin-top: 2px; }
 .profile-contact { color: var(--ink-soft); font-size: 13.5px; margin-top: 2px; }
 
 .profile-stat-row { display: flex; gap: 10px; margin: 16px 0; }
