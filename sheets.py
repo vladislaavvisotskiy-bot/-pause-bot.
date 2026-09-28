@@ -789,6 +789,26 @@ def get_sets_with_garnish() -> set:
     }
 
 
+def get_set_extra() -> dict:
+    """Категория и фото-ссылка каждого сета, по точному (регистрозависимому)
+    имени сета — колонки K/L той же строки, что цена/гарнир (см.
+    config.REF_SET_TABLE_RANGE). Один запрос на весь каталог сразу, а не
+    поячейково — тот же принцип, что и в остальных get_* здесь, чтобы не
+    плодить лишние обращения к Sheets API на каждую загрузку /api/menu."""
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_TABLE_RANGE)
+    out = {}
+    for row in rows:
+        if not row or not row[0]:
+            continue
+        cat_i, photo_i = config.REF_SET_CATEGORY_COL_IDX, config.REF_SET_PHOTO_COL_IDX
+        out[row[0]] = {
+            "category": row[cat_i].strip() if len(row) > cat_i and row[cat_i] else "",
+            "photo_url": row[photo_i].strip() if len(row) > photo_i and row[photo_i] else "",
+        }
+    return out
+
+
 def get_garnishes() -> list:
     """Полный список всех возможных гарниров — справочник на будущее."""
     ws = _ws(config.SHEET_REFERENCE)

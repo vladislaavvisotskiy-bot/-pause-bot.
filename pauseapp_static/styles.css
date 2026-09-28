@@ -348,7 +348,7 @@ hr.thin-gold {
 .type-picker-chip.selected { background: var(--forest); border-color: var(--forest); color: var(--ivory); }
 
 /* ------------------------------------------------------------------ */
-/* Меню — сегодняшний текст + кнопка заказа                            */
+/* Меню — сегодняшний постер + витрина сетов                           */
 /* ------------------------------------------------------------------ */
 
 .menu-caption {
@@ -364,7 +364,37 @@ hr.thin-gold {
   color: var(--ink-soft);
 }
 .menu-state svg { color: var(--ink-soft); margin-bottom: 14px; }
-.menu-cta { margin-top: 20px; }
+
+.menu-hero { text-align: center; padding: 8px 6px 18px; }
+.menu-hero h2 {
+  font-size: 25px;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+.menu-category-chips { margin-bottom: 18px; }
+
+.menu-set-grid { display: flex; flex-direction: column; gap: 16px; }
+.menu-set-card {
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+.menu-set-photo {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  background: var(--ivory-deep);
+}
+.menu-set-card-body {
+  padding: 16px 18px;
+  border-top: 1px solid var(--line);
+}
+.menu-set-card.has-photo .menu-set-card-body { border-top: none; }
+.menu-set-card-name { font-family: var(--font-serif); font-weight: 600; font-size: 19px; color: var(--forest); }
+.menu-set-card-price { color: var(--gold); font-weight: 600; font-size: 14px; margin-top: 4px; }
+.menu-set-card-note { color: var(--ink-soft); font-size: 12px; margin-top: 3px; }
 
 /* ------------------------------------------------------------------ */
 /* Профиль                                                             */

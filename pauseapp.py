@@ -93,12 +93,18 @@ async def api_me(request: web.Request):
 # для того же самого шага в чат-боте (см. комментарии у каждого поля).
 # ---------------------------------------------------------------------------
 
-def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set) -> list:
+def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extra: dict = None) -> list:
     """Тот же порядок веток, что и в keyboards.set_kb/handlers/order.py:
     _proceed_after_set_choice — группа переменной цены (config.SET_VARIANTS)
     одной карточкой с вариантами, обычный сет — карточкой с ценой и (если
     есть) списком гарниров РОВНО этого сета на сегодня (см.
-    sheets.get_today_garnishes_for_set)."""
+    sheets.get_today_garnishes_for_set).
+
+    extra — sheets.get_set_extra(): категория/фото на карточку (см. экран
+    Меню в PAUSE App). Оба поля необязательны — пустая строка, если админ
+    их ещё не заполнил в таблице, фронт тогда просто не рисует фото-блок
+    и не добавляет карточку ни в один чип категории, кроме "Все"."""
+    extra = extra or {}
     items = []
     seen_groups = set()
     for name in sets_today:
@@ -125,6 +131,9 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set) -> l
                     "technical": technical, "label": label, "price": prices.get(technical, 0),
                     "has_garnish": bool(v_garnish_options), "garnish_options": v_garnish_options,
                 })
+            # Категория/фото группы берём с ПЕРВОГО технического варианта —
+            # клиент видит группу одной карточкой, второй набор полей ей не нужен.
+            first_extra = extra.get(config.SET_VARIANTS[group][0][0], {})
             items.append({
                 "key": f"__variant__:{group}",
                 "is_variant_group": True,
@@ -133,6 +142,8 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set) -> l
                 "price": None,
                 "has_garnish": False,
                 "garnish_options": [],
+                "category": first_extra.get("category", ""),
+                "photo_url": first_extra.get("photo_url", ""),
             })
         else:
             has_garnish = clean.lower() in sets_with_garnish
@@ -140,6 +151,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set) -> l
             if has_garnish:
                 raw = sheets.get_today_garnishes_for_set(clean)
                 garnish_options = [{"value": g, "display": texts.display_garnish(g)} for g in raw]
+            clean_extra = extra.get(clean, {})
             items.append({
                 "key": clean,
                 "is_variant_group": False,
@@ -148,6 +160,8 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set) -> l
                 "price": prices.get(clean, 0),
                 "has_garnish": bool(garnish_options),
                 "garnish_options": garnish_options,
+                "category": clean_extra.get("category", ""),
+                "photo_url": clean_extra.get("photo_url", ""),
             })
     return items
 
@@ -166,6 +180,7 @@ async def api_menu(request: web.Request):
     sets_today = await _retry_sheets(sheets.get_today_sets)
     prices = await _retry_sheets(sheets.get_set_prices)
     sets_with_garnish = await _retry_sheets(sheets.get_sets_with_garnish)
+    sets_extra = await _retry_sheets(sheets.get_set_extra)
     payment_options = [
         o for o in await _retry_sheets(sheets.get_payment_options)
         if "долг" not in o.lower() and "проверке" not in o.lower()
@@ -178,7 +193,7 @@ async def api_menu(request: web.Request):
         "can_order": published and not cutoff_passed,
         "cutoff_passed": cutoff_passed,
         "cutoff_time": config.ORDER_CUTOFF_TIME,
-        "sets": _serialize_sets(sets_today, prices, sets_with_garnish),
+        "sets": _serialize_sets(sets_today, prices, sets_with_garnish, sets_extra),
         "payment_options": payment_options,
         "card_requisites": texts.REQUISITES_TEXT,
     })

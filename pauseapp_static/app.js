@@ -13,6 +13,7 @@
     screen: "menu",
     profile: null,     // {registered, name, phone, zone, point, order_count, club, ...}
     menu: null,         // ответ /api/menu
+    menuCategory: "all", // выбранный чип категории на экране Меню
     feed: null,         // список постов ленты PAUSE Club (ответ /api/feed)
     feedFilter: "all",  // "all" | один из config.FEED_POST_TYPES
   };
@@ -232,6 +233,7 @@
 
   function loadMenu() {
     var root = document.getElementById("menu-root");
+    state.menuCategory = "all";
     api("/api/menu").then(function (data) {
       state.menu = data;
       renderMenuScreen();
@@ -276,9 +278,103 @@
       root.appendChild(el("div", "card menu-caption", escapeHtml(data.caption)));
     }
 
-    var cta = el("button", "btn-gold menu-cta", "Собрать заказ");
-    cta.addEventListener("click", function () { startOrderWizard(); });
-    root.appendChild(cta);
+    var hero = el("div", "menu-hero");
+    hero.appendChild(el("h2", null, "Выбери свою паузу на сегодня"));
+    root.appendChild(hero);
+
+    renderMenuCategoryChips(root);
+    renderMenuSetCards(root);
+  }
+
+  function menuCategoriesInUse() {
+    var seen = {};
+    var result = [];
+    (state.menu.sets || []).forEach(function (s) {
+      var c = (s.category || "").trim();
+      if (c && !seen[c]) { seen[c] = true; result.push(c); }
+    });
+    return result;
+  }
+
+  function renderMenuCategoryChips(root) {
+    var categories = menuCategoriesInUse();
+    // Если ни у одного сета категория ещё не проставлена в таблице —
+    // чипы не показываем вовсе (см. отчёт: "фото/категории — загружу
+    // позже"), чтобы не рисовать один бессмысленный чип "Все".
+    if (!categories.length) return;
+    var row = el("div", "feed-filters menu-category-chips");
+    var allChip = el("button", "filter-chip" + (state.menuCategory === "all" ? " active" : ""), "Все");
+    allChip.addEventListener("click", function () { state.menuCategory = "all"; renderMenuScreen(); });
+    row.appendChild(allChip);
+    categories.forEach(function (c) {
+      var chip = el("button", "filter-chip" + (state.menuCategory === c ? " active" : ""), escapeHtml(c));
+      chip.addEventListener("click", function () { state.menuCategory = c; renderMenuScreen(); });
+      row.appendChild(chip);
+    });
+    root.appendChild(row);
+  }
+
+  function renderMenuSetCards(root) {
+    var sets = (state.menu.sets || []).filter(function (s) {
+      return state.menuCategory === "all" || (s.category || "") === state.menuCategory;
+    });
+    if (!sets.length) {
+      root.appendChild(el("div", "menu-state", "<p>В этой категории пока пусто.</p>"));
+      return;
+    }
+    var grid = el("div", "menu-set-grid");
+    sets.forEach(function (s) { grid.appendChild(buildMenuSetCard(s)); });
+    root.appendChild(grid);
+  }
+
+  function buildMenuSetCard(s) {
+    var card = el("div", "card menu-set-card");
+    if (s.photo_url) {
+      card.classList.add("has-photo");
+      var img = el("img", "menu-set-photo");
+      img.src = s.photo_url;
+      img.alt = "";
+      img.loading = "lazy";
+      // Если ссылка окажется битой (например, админ ещё вставляет фото и
+      // вставил не то) — просто скрываем блок, а не показываем "битую
+      // картинку" на премиальном экране.
+      img.addEventListener("error", function () { img.remove(); card.classList.remove("has-photo"); });
+      card.appendChild(img);
+    }
+    var body = el("div", "menu-set-card-body");
+    body.appendChild(el("div", "menu-set-card-name", escapeHtml(s.display_name)));
+    if (s.is_variant_group) {
+      var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
+      body.appendChild(el("div", "menu-set-card-price", "от " + fmtSum(minP)));
+    } else {
+      body.appendChild(el("div", "menu-set-card-price", fmtSum(s.price)));
+      if (s.has_garnish) body.appendChild(el("div", "menu-set-card-note", "с выбором гарнира"));
+    }
+    card.appendChild(body);
+    card.addEventListener("click", function () { startOrderFromCard(s); });
+    return card;
+  }
+
+  function startOrderFromCard(s) {
+    if (!state.profile || !state.profile.registered) {
+      toast("Сначала зарегистрируйтесь в боте: наберите /start");
+      return;
+    }
+    haptic("select");
+    resetOrder();
+    if (s.is_variant_group) {
+      openWizard(function (body) { stepVariant(body, s); });
+    } else {
+      openWizard(function (body) {
+        order.curSet = s;
+        if (s.has_garnish && s.garnish_options.length) {
+          stepGarnish(body, s);
+        } else {
+          order.curGarnish = "";
+          stepQty(body);
+        }
+      });
+    }
   }
 
   function escapeHtml(s) {
@@ -495,16 +591,9 @@
     order = { cart: [], zone: "", point: "", isNewPoint: false, comment: "", payment: "", screenshotFileId: null };
   }
 
-  function startOrderWizard() {
-    if (!state.profile || !state.profile.registered) {
-      toast("Сначала зарегистрируйтесь в боте: наберите /start");
-      return;
-    }
-    resetOrder();
-    openWizard(stepSets);
-  }
-
-  // --- Шаг: выбор сета -------------------------------------------------
+  // --- Шаг: выбор сета (вторичный, изнутри визарда — см. "+ Ещё сет" в
+  // stepCart; первичный вход теперь с самого экрана Меню, см.
+  // startOrderFromCard) -------------------------------------------------
 
   function stepSets(body) {
     setWizardPhase(0, 4);
