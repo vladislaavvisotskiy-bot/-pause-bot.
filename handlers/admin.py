@@ -54,6 +54,21 @@ async def cmd_webapp_debug(message: Message):
     await message.answer("\n".join(lines))
 
 
+@router.message(Command("chatid"))
+@router.channel_post(Command("chatid"))
+async def cmd_chatid(message: Message):
+    """Разовая диагностика для настройки PAUSE Club (хранение фото ленты в
+    закрытом канале, см. FEED_CHAT_ID в config.py) — печатает числовой ID
+    текущего чата, чтобы не гадать/не звать сторонних ботов. Специально
+    без проверки _is_admin: канал для хранения фото приватный сам по себе
+    (в него и так никто чужой не попадёт), а /chatid нужно набрать именно
+    ИЗ этого канала, где бот — админ; команда не в /admin и не в списке
+    команд бота — набирается вручную. В канале сообщения приходят отдельным
+    типом обновления (channel_post), не обычным message — отсюда два
+    декоратора на одну функцию."""
+    await message.answer(f"ID этого чата: {message.chat.id}")
+
+
 async def _show_admin_panel(send):
     """send — bound answer-метод (message.answer или callback.message.answer),
     общий вход в панель и для текстовой команды /admin, и для кнопки
