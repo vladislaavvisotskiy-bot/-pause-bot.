@@ -25,6 +25,13 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* .modal/.wizard ниже задают display:flex напрямую — без этого правила
+   атрибут hidden на них ничего не значил бы (правило автора с тем же
+   свойством display перебивает дефолтное [hidden]{display:none} из
+   стилей браузера), и оба на самом деле показывались бы поверх всего
+   сразу при открытии, даже без единого вызова openWizard()/showConfirm(). */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
