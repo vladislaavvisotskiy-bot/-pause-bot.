@@ -2251,18 +2251,3 @@ def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
     return total
 
 
-# ---------------------------------------------------------------------------
-# Разовый опрос про меню (/menu_survey) — свободный текст, три вопроса
-# ---------------------------------------------------------------------------
-
-def save_menu_survey_answer(tg_id, name: str, answer1: str, answer2: str, answer3: str):
-    """Каждое прохождение опроса — отдельная строка. Если один и тот же
-    клиент проходит опрос ещё раз в будущем (после нового /menu_survey) —
-    это просто ещё одна строка с более поздней датой, старая не трогается."""
-    ws = _ws(config.SHEET_MENU_SURVEY)
-    ws.append_row(
-        [str(tg_id), name, answer1, answer2, answer3, today_date_str()],
-        value_input_option="RAW",
-    )
-
-

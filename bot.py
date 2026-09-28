@@ -13,7 +13,7 @@ import sheets
 import texts
 import keyboards as kb
 import webapp
-from handlers import start, order, profile, club, admin, survey
+from handlers import start, order, profile, club, admin
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pause_bot")
@@ -99,8 +99,8 @@ async def setup_commands(bot: Bot):
     if config.ADMIN_IDS:
         # Всё, кроме /start и /admin, теперь доступно кнопками внутри самой
         # панели /admin — остальные команды (kitchen, courier, payments,
-        # broadcasts_*, giveaway_today, menu_survey) по-прежнему работают,
-        # если набрать их текстом, просто больше не загромождают меню "/".
+        # broadcasts_*, giveaway_today) по-прежнему работают, если набрать
+        # их текстом, просто больше не загромождают меню "/".
         admin_commands = [
             BotCommand(command="start", description="Начать / открыть главное меню"),
             BotCommand(command="admin", description="Панель администратора"),
@@ -127,7 +127,6 @@ async def main():
     dp.include_router(profile.router)
     dp.include_router(club.router)
     dp.include_router(admin.router)
-    dp.include_router(survey.router)
 
     await setup_commands(bot)
 

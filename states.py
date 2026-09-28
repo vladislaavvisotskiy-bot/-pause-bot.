@@ -51,9 +51,3 @@ class AdminMenu(StatesGroup):
     preview = State()
     waiting_date = State()
     confirming_publish = State()
-
-
-class MenuSurvey(StatesGroup):
-    waiting_answer1 = State()
-    waiting_answer2 = State()
-    waiting_answer3 = State()

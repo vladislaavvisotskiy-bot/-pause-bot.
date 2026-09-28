@@ -14,7 +14,6 @@ import texts
 import keyboards as kb
 import config
 import pdf_report
-from admin_notify import notify_admins
 from states import AdminClub, AdminMenu
 
 router = Router()
@@ -1021,75 +1020,3 @@ async def cmd_broadcasts_status(message: Message):
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_OFF)
     else:
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_ON)
-
-
-# ---------------------------------------------------------------------------
-# Разовый опрос про меню — /menu_survey рассылает всем клиентам кнопку
-# "Пройти опрос →", ответы (см. handlers/survey.py) уходят в лист
-# "Опрос меню"; /menu_survey_results показывает, что клиенты ответили.
-# ---------------------------------------------------------------------------
-
-async def _broadcast_menu_survey(bot: Bot) -> tuple:
-    """Та же защита от флуда (BROADCAST_DELAY_SECONDS) и пропуск ошибок
-    отправки, что и в остальных рассылках (см. bot.py: send_warm_broadcast,
-    _broadcast_new_menu) — один недоступный клиент не должен обрывать
-    рассылку остальным."""
-    if sheets.is_broadcasts_disabled():
-        return 0, 0
-    clients = sheets.get_broadcast_clients()
-    sent = 0
-    for c in clients:
-        try:
-            await bot.send_message(
-                int(c["tg_id"]), texts.MENU_SURVEY_INTRO, reply_markup=kb.menu_survey_start_kb(),
-            )
-            sent += 1
-        except Exception:
-            logger.exception("Не удалось отправить опрос о меню клиенту ID %s", c.get("id"))
-        await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
-    return sent, len(clients)
-
-
-@router.message(Command("menu_survey"))
-async def cmd_menu_survey(message: Message):
-    if not _is_admin(message.from_user.id):
-        await message.answer(texts.ADMIN_ONLY)
-        return
-    if sheets.is_broadcasts_disabled():
-        await message.answer(texts.ADMIN_SURVEY_BROADCASTS_OFF)
-        return
-    # Разослать разом всем клиентам — необратимо (не отозвать уже
-    # прочитанные уведомления), поэтому обязательное подтверждение прежде
-    # чем что-то реально уйдёт.
-    await message.answer(texts.ADMIN_SURVEY_CONFIRM_PROMPT, reply_markup=kb.admin_survey_confirm_kb())
-
-
-@router.callback_query(F.data == "survey_broadcast_no")
-async def survey_broadcast_cancel(callback: CallbackQuery):
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
-        return
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.message.answer(texts.ADMIN_SURVEY_CANCELED)
-    await callback.answer()
-
-
-@router.callback_query(F.data == "survey_broadcast_yes")
-async def survey_broadcast_confirmed(callback: CallbackQuery, bot: Bot):
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
-        return
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.answer()
-    await callback.message.answer(texts.ADMIN_SURVEY_SENDING)
-    sent, total = await _broadcast_menu_survey(bot)
-    # Итог рассылки — всем админам разом, а не только тому, кто запустил
-    # (см. admin_notify.notify_admins) — остальные тоже должны знать, что
-    # рассылка ушла и скольким клиентам.
-    await notify_admins(bot, texts.ADMIN_SURVEY_SENT.format(sent=sent, total=total))

@@ -321,14 +321,3 @@ RV_HEADER_ROW = 1
 RV_DATA_START_ROW = 2
 RV_DATE = 1     # A
 RV_VISIBLE = 2  # B  "Да" — курьер видит маршрут на эту дату
-
-# --- Разовый опрос про меню (/menu_survey) — свободный текст, три вопроса ---
-SHEET_MENU_SURVEY = "Опрос меню"
-SURVEY_HEADER_ROW = 1
-SURVEY_DATA_START_ROW = 2
-SURVEY_TG_ID = 1    # A
-SURVEY_NAME = 2     # B
-SURVEY_ANSWER1 = 3  # C
-SURVEY_ANSWER2 = 4  # D
-SURVEY_ANSWER3 = 5  # E
-SURVEY_DATE = 6     # F
