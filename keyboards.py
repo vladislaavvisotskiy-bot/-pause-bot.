@@ -381,6 +381,39 @@ def admin_menu_date_kb(today_str: str, tomorrow_str: str) -> InlineKeyboardMarku
     return b.as_markup()
 
 
+def admin_preview_kb(sets: list) -> InlineKeyboardMarkup:
+    """Предпросмотр меню (шаг 4 публикации, см. handlers/admin.py:
+    _show_preview) — те же кнопки сетов, что увидит клиент (см. set_kb),
+    но с другим префиксом callback_data ("pvset:"), чтобы не пересекаться
+    с реальным заказом: нажатие только показывает всплывающую подсказку с
+    ценой и гарниром этого сета (см. admin_preview_set_info), ничего никуда
+    не записывая."""
+    b = InlineKeyboardBuilder()
+    shown_variant_groups = set()
+    for opt in sets:
+        group = config.SET_VARIANT_GROUP.get(opt.strip())
+        if group:
+            if group in shown_variant_groups:
+                continue
+            shown_variant_groups.add(group)
+            b.button(text=texts.display_set_name(group), callback_data=f"pvset:__variant__:{group}")
+        else:
+            b.button(text=texts.display_set_name(opt), callback_data=f"pvset:{opt}")
+    b.button(text=texts.ADMIN_PREVIEW_EDIT_SETS_BTN, callback_data="pveditsets")
+    b.button(text=texts.ADMIN_PREVIEW_EDIT_GARNISH_BTN, callback_data="pveditgarnish")
+    b.button(text=texts.ADMIN_PREVIEW_NEXT_BTN, callback_data="pvnext")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_publish_confirm_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_PUBLISH_CONFIRM_BTN, callback_data="pubconfirm")
+    b.button(text=texts.ADMIN_PUBLISH_BACK_BTN, callback_data="pubback")
+    b.adjust(1)
+    return b.as_markup()
+
+
 def reminder_screenshot_kb(rows_str: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ATTACH_SCREENSHOT_BTN, callback_data=f"sendscreen:{rows_str}")
