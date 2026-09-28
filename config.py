@@ -305,3 +305,29 @@ SURVEY_ANSWER1 = 3  # C
 SURVEY_ANSWER2 = 4  # D
 SURVEY_ANSWER3 = 5  # E
 SURVEY_DATE = 6     # F
+
+# --- PAUSE Club: лента (PAUSE App) ---
+# Фото ленты хранятся не на сервере и не в самой таблице — только в
+# закрытом Telegram-канале, куда их отправляет бот (см. pauseapp.py:
+# api_feed_publish/api_feed_image): Telegram возвращает file_id, именно
+# он и пишется в лист "Лента"; клиенту картинка отдаётся через свой же
+# прокси-эндпоинт (сервер сам скачивает байты у Telegram по file_id и
+# отдаёт клиенту напрямую — токен бота наружу нигде не уходит).
+# ID канала — из переменной окружения, не зашит в код.
+MEDIA_CHAT_ID = os.getenv("MEDIA_CHAT_ID", "")
+
+SHEET_FEED = "Лента"
+FEED_HEADER_ROW = 1
+FEED_DATA_START_ROW = 2
+FEED_ID = 1          # A
+FEED_DATE = 2        # B  ДД.ММ.ГГГГ
+FEED_TYPE = 3        # C  photo/message/announcement/giveaway/news
+FEED_CAPTION = 4     # D
+FEED_FILE_IDS = 5    # E  file_id (через запятую — альбом из нескольких фото)
+FEED_AUTHOR = 6      # F  имя/ID админа, опубликовавшего пост
+FEED_STATUS = 7      # G  "" (опубликован) / "удалён" — мягкое удаление, та
+                     #    же логика, что и ROUTE_STATUS_REMOVED: строка не
+                     #    стирается физически, просто не попадает в выдачу.
+FEED_STATUS_DELETED = "удалён"
+
+FEED_POST_TYPES = ("photo", "message", "announcement", "giveaway", "news")

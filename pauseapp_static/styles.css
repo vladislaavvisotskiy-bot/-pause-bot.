@@ -1,19 +1,19 @@
+/* Единственная палитра PAUSE App — больше нигде в файле других цветов
+   быть не должно (кроме --card, он и есть "белый для карточек", и
+   служебных rgba() от этих же шести цветов). */
 :root {
-  --ivory: #f2ebdd;
-  --ivory-deep: #e9dfc9;
-  --forest: #102f27;
-  --forest-soft: #1c4238;
-  --emerald: #185844;
-  --emerald-soft: rgba(24, 88, 68, 0.12);
-  --sage: #78947f;
-  --gold: #b08a4f;
-  --gold-soft: rgba(176, 138, 79, 0.16);
-  --on-gold: #23210f;
-  --ink: #23281f;
-  --ink-soft: #5c6459;
-  --card: #ffffff;
-  --line: rgba(16, 47, 39, 0.12);
-  --danger: #a8583f;
+  --ivory: #f4ebdd;        /* основной фон */
+  --ivory-deep: #eae0cc;   /* тон темнее ivory — только для скелетонов загрузки */
+  --forest: #0d332b;       /* тёмно-зелёный — навигация, крупные элементы, акценты */
+  --emerald: #17483d;      /* дополнительный зелёный */
+  --emerald-soft: rgba(23, 72, 61, 0.12);
+  --gold: #c39a52;         /* золото-шампань — аккуратно, только акценты */
+  --gold-soft: rgba(195, 154, 82, 0.16);
+  --on-gold: #28251f;      /* текст на золотых кнопках — тёмный */
+  --ink: #28251f;          /* текст основной */
+  --ink-soft: #777268;     /* текст вторичный */
+  --card: #fffdf8;         /* белый для карточек */
+  --line: rgba(13, 51, 43, 0.12);
   --radius-lg: 20px;
   --radius-md: 14px;
   --radius-sm: 10px;
@@ -82,7 +82,7 @@ header#header #header-title {
   font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(242, 235, 221, 0.7);
+  color: rgba(244, 235, 221, 0.7);
 }
 
 /* ------------------------------------------------------------------ */
@@ -116,7 +116,7 @@ p { margin: 0; color: var(--ink-soft); }
   display: flex;
   background: var(--forest);
   padding: 8px 10px calc(10px + var(--safe-bottom));
-  box-shadow: 0 -6px 24px rgba(16, 47, 39, 0.25);
+  box-shadow: 0 -6px 24px rgba(13, 51, 43, 0.25);
 }
 .nav-item {
   flex: 1 1 0;
@@ -127,7 +127,7 @@ p { margin: 0; color: var(--ink-soft); }
   padding: 6px 4px;
   background: none;
   border: none;
-  color: rgba(242, 235, 221, 0.55);
+  color: rgba(244, 235, 221, 0.55);
 }
 .nav-item svg { width: 23px; height: 23px; }
 .nav-item span { font-size: 11px; font-weight: 500; letter-spacing: 0.02em; }
@@ -142,7 +142,7 @@ p { margin: 0; color: var(--ink-soft); }
   height: 84px;
   border-radius: var(--radius-md);
   margin-bottom: 12px;
-  background: linear-gradient(100deg, var(--ivory-deep) 30%, #f6f1e6 50%, var(--ivory-deep) 70%);
+  background: linear-gradient(100deg, var(--ivory-deep) 30%, #faf3e4 50%, var(--ivory-deep) 70%);
   background-size: 200% 100%;
   animation: shimmer 1.3s ease-in-out infinite;
 }
@@ -157,7 +157,7 @@ p { margin: 0; color: var(--ink-soft); }
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   padding: 16px 18px;
-  box-shadow: 0 3px 14px rgba(16, 47, 39, 0.06);
+  box-shadow: 0 3px 14px rgba(13, 51, 43, 0.06);
 }
 .card + .card { margin-top: 12px; }
 
@@ -211,7 +211,7 @@ p { margin: 0; color: var(--ink-soft); }
   font-weight: 600;
 }
 .pill.gold { background: var(--gold-soft); color: var(--gold); }
-.pill.muted { background: rgba(92, 100, 89, 0.1); color: var(--ink-soft); }
+.pill.muted { background: rgba(119, 114, 104, 0.1); color: var(--ink-soft); }
 
 hr.thin-gold {
   border: none;
@@ -238,14 +238,14 @@ hr.thin-gold {
   z-index: 90;
   max-width: 86%;
   text-align: center;
-  box-shadow: 0 8px 20px rgba(16, 47, 39, 0.3);
+  box-shadow: 0 8px 20px rgba(13, 51, 43, 0.3);
 }
 
 .modal {
   position: fixed;
   inset: 0;
   z-index: 95;
-  background: rgba(16, 47, 39, 0.45);
+  background: rgba(13, 51, 43, 0.45);
   display: flex;
   align-items: flex-end;
 }
@@ -259,17 +259,93 @@ hr.thin-gold {
 .modal-actions { display: flex; flex-direction: column; gap: 10px; }
 
 /* ------------------------------------------------------------------ */
-/* PAUSE Club — заглушка                                               */
+/* PAUSE Club — лента                                                  */
 /* ------------------------------------------------------------------ */
 
-.club-placeholder {
-  text-align: center;
-  padding: 70px 18px 20px;
-  color: var(--ink-soft);
+.club-header { text-align: center; padding: 6px 10px 4px; }
+.club-header h2 { font-size: 28px; letter-spacing: 0.01em; }
+.club-header p { font-style: italic; font-family: var(--font-serif); font-size: 15px; }
+
+.feed-compose-btn { margin: 16px 0 14px; }
+
+.feed-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
 }
-.club-placeholder-icon { color: var(--sage); margin-bottom: 18px; }
-.club-placeholder h2 { margin-bottom: 10px; }
-.club-placeholder p { max-width: 280px; margin: 0 auto; line-height: 1.6; }
+.filter-chip {
+  flex: 0 0 auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 15px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.filter-chip.active { background: var(--forest); border-color: var(--forest); color: var(--ivory); }
+
+.feed-post { margin-bottom: 16px; padding: 0; overflow: hidden; position: relative; }
+.feed-post-photo {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  background: var(--ivory-deep);
+}
+.feed-post-photo + .feed-post-photo { margin-top: 2px; }
+.feed-post-body { padding: 14px 16px 16px; }
+.feed-post-type-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.feed-type-pill { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.feed-type-pill.giveaway { background: var(--gold-soft); color: var(--gold); }
+.feed-post-caption { color: var(--ink); font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; }
+.feed-post-message .feed-post-body { text-align: center; padding: 26px 22px; }
+.feed-post-message .feed-post-caption {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 19px;
+  color: var(--forest);
+  line-height: 1.5;
+}
+.feed-post-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+.feed-post-date { font-size: 12px; color: var(--ink-soft); }
+.feed-post-author { font-size: 12px; color: var(--ink-soft); }
+.feed-post-delete {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(244, 235, 221, 0.9);
+  border: none;
+  color: var(--forest);
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.feed-empty { text-align: center; color: var(--ink-soft); padding: 50px 16px; }
+.feed-empty svg { color: var(--ink-soft); margin-bottom: 14px; }
+
+.photo-picker-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.photo-picker-thumb { width: 72px; height: 72px; border-radius: var(--radius-sm); object-fit: cover; }
+.type-picker-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.type-picker-chip {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.type-picker-chip.selected { background: var(--forest); border-color: var(--forest); color: var(--ivory); }
 
 /* ------------------------------------------------------------------ */
 /* Меню — сегодняшний текст + кнопка заказа                            */
@@ -287,7 +363,7 @@ hr.thin-gold {
   padding: 60px 16px 10px;
   color: var(--ink-soft);
 }
-.menu-state svg { color: var(--sage); margin-bottom: 14px; }
+.menu-state svg { color: var(--ink-soft); margin-bottom: 14px; }
 .menu-cta { margin-top: 20px; }
 
 /* ------------------------------------------------------------------ */
@@ -356,7 +432,7 @@ hr.thin-gold {
 .order-card-actions .btn-ghost, .order-card-actions .btn-text { width: auto; flex: 1; }
 
 .message-card { border-left: 3px solid var(--gold); }
-.message-card-num { font-size: 11px; color: var(--sage); font-weight: 600; margin-bottom: 4px; }
+.message-card-num { font-size: 11px; color: var(--ink-soft); font-weight: 600; margin-bottom: 4px; }
 .message-card-text { font-style: italic; font-family: var(--font-serif); font-size: 17px; color: var(--forest); }
 .message-card-date { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
 
@@ -402,8 +478,8 @@ hr.thin-gold {
 .set-card-main { flex: 1; min-width: 0; }
 .set-card-name { font-family: var(--font-serif); font-weight: 600; font-size: 18px; color: var(--forest); }
 .set-card-price { color: var(--gold); font-weight: 600; font-size: 14px; margin-top: 3px; }
-.set-card-garnish-note { color: var(--sage); font-size: 12px; margin-top: 3px; }
-.set-card-chevron { color: var(--sage); flex: 0 0 auto; }
+.set-card-garnish-note { color: var(--ink-soft); font-size: 12px; margin-top: 3px; }
+.set-card-chevron { color: var(--ink-soft); flex: 0 0 auto; }
 
 .option-row {
   display: flex;
@@ -460,7 +536,7 @@ hr.thin-gold {
 .cart-row-name { font-weight: 500; color: var(--ink); font-size: 14px; }
 .cart-row-sub { color: var(--ink-soft); font-size: 12.5px; margin-top: 2px; }
 .cart-row-sum { color: var(--forest); font-weight: 600; font-size: 14px; }
-.cart-row-remove { color: var(--danger); background: none; border: none; font-size: 18px; padding: 4px 8px; }
+.cart-row-remove { color: var(--ink-soft); background: none; border: none; font-size: 18px; padding: 4px 8px; }
 
 .summary-total {
   display: flex;
@@ -485,7 +561,7 @@ hr.thin-gold {
   margin: 10px 0;
 }
 .upload-zone {
-  border: 1.5px dashed var(--sage);
+  border: 1.5px dashed var(--ink-soft);
   border-radius: var(--radius-md);
   text-align: center;
   padding: 28px 16px;
@@ -523,7 +599,7 @@ hr.thin-gold {
 .wizard-steps { flex: 1; display: flex; gap: 5px; justify-content: center; }
 .wizard-step-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
 .wizard-step-dot.active { background: var(--gold); width: 18px; border-radius: 4px; }
-.wizard-step-dot.done { background: var(--sage); }
+.wizard-step-dot.done { background: var(--ink-soft); }
 .wizard-body {
   flex: 1 1 auto;
   overflow-y: auto;

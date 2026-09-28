@@ -533,6 +533,109 @@ async def api_messages(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# PAUSE Club — лента. Фото НЕ хранятся ни на сервере, ни в самой таблице —
+# только в закрытом Telegram-канале config.MEDIA_CHAT_ID: бот отправляет
+# туда фото (api_feed_publish), Telegram возвращает настоящий file_id, это
+# он и пишется в лист "Лента" (см. sheets.create_feed_post). Клиенту
+# картинка отдаётся через api_feed_image — сервер сам скачивает байты у
+# Telegram и отдаёт их с НАШЕГО домена, токен бота наружу не уходит
+# никогда. Публикация/удаление — только с этого экрана приложения, в
+# /admin бота ничего не переносилось (см. договорённость в чате).
+# ---------------------------------------------------------------------------
+
+def _feed_post_out(p: dict) -> dict:
+    # Абсолютный путь (с /pauseapp) — картинки идут прямо в <img src>, а не
+    # через api()/API_BASE в app.js, поэтому префикс нужно дописать здесь,
+    # а не полагаться на относительное разрешение URL в браузере.
+    return {
+        "id": p["id"], "date": p["date"], "type": p["type"],
+        "caption": p["caption"], "author": p["author"],
+        "image_urls": ["/pauseapp/api/feed/image/" + fid for fid in p["file_ids"]],
+    }
+
+
+async def api_feed_list(request: web.Request):
+    posts = await _retry_sheets(sheets.get_feed_posts, 50)
+    return web.json_response({"posts": [_feed_post_out(p) for p in posts]})
+
+
+async def api_feed_publish(request: web.Request):
+    """multipart: type, caption (опционально для type=photo), author не
+    принимается от клиента — берём из его же профиля на сервере (см.
+    ниже), чтобы имя автора нельзя было подделать через запрос. photos —
+    0 и более полей "photo" (альбом)."""
+    if not config.MEDIA_CHAT_ID:
+        return web.json_response({"error": "media_chat_not_configured"}, status=503)
+    bot = request.app.get("bot")
+    if not bot:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+
+    post_type = "message"
+    caption = ""
+    photos = []
+    reader = await request.multipart()
+    async for field in reader:
+        if field.name == "type":
+            post_type = (await field.text()).strip() or "message"
+        elif field.name == "caption":
+            caption = (await field.text()).strip()
+        elif field.name == "photo":
+            data = await field.read(decode=False)
+            if data:
+                photos.append((data, field.filename or "photo.jpg"))
+
+    if post_type not in config.FEED_POST_TYPES:
+        return web.json_response({"error": "bad_type"}, status=400)
+    if post_type == "photo" and not photos:
+        return web.json_response({"error": "photo_required"}, status=400)
+    if not caption and post_type != "photo":
+        return web.json_response({"error": "caption_required"}, status=400)
+
+    file_ids = []
+    try:
+        for data, filename in photos:
+            msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=filename))
+            file_ids.append(msg.photo[-1].file_id)
+    except Exception:
+        logger.exception("PAUSE App: не удалось загрузить фото ленты в канал")
+        return web.json_response({"error": "upload_failed"}, status=502)
+
+    client = await _retry_sheets(sheets.find_client_by_tg_id, request["tg_id"])
+    author = (client or {}).get("name") or str(request["tg_id"])
+    post_id = await _retry_sheets(sheets.create_feed_post, post_type, caption, file_ids, author)
+    return web.json_response({"ok": True, "id": post_id})
+
+
+async def api_feed_delete(request: web.Request):
+    body = await request.json()
+    post_id = (body.get("id") or "").strip()
+    if not post_id:
+        return web.json_response({"error": "id_required"}, status=400)
+    await _retry_sheets(sheets.delete_feed_post, post_id)
+    return web.json_response({"ok": True})
+
+
+async def api_feed_image(request: web.Request):
+    """Сама картинка — см. докстринг раздела выше. bot.download() в
+    aiogram сам делает getFile + скачивание, отдаёт готовый BytesIO."""
+    file_id = request.match_info.get("file_id", "")
+    bot = request.app.get("bot")
+    if not bot or not file_id:
+        return web.Response(status=404)
+    try:
+        buf = await bot.download(file_id)
+    except Exception:
+        logger.exception("PAUSE App: не удалось скачать фото ленты (file_id=%s)", file_id)
+        return web.Response(status=502)
+    if buf is None:
+        return web.Response(status=404)
+    return web.Response(
+        body=buf.read(), content_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
+# ---------------------------------------------------------------------------
 
 def create_app(bot=None) -> web.Application:
     app = web.Application(middlewares=[error_middleware, admin_auth_middleware])
@@ -552,4 +655,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/orders/cancel", api_orders_cancel)
     app.router.add_post("/api/feedback", api_feedback)
     app.router.add_get("/api/messages", api_messages)
+    app.router.add_get("/api/feed", api_feed_list)
+    app.router.add_post("/api/feed", api_feed_publish)
+    app.router.add_post("/api/feed/delete", api_feed_delete)
+    app.router.add_get("/api/feed/image/{file_id}", api_feed_image)
     return app

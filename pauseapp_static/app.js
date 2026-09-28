@@ -5,14 +5,16 @@
   if (tg) {
     tg.ready();
     tg.expand();
-    try { tg.setHeaderColor("#102F27"); } catch (e) {}
-    try { tg.setBackgroundColor("#F2EBDD"); } catch (e) {}
+    try { tg.setHeaderColor("#0D332B"); } catch (e) {}
+    try { tg.setBackgroundColor("#F4EBDD"); } catch (e) {}
   }
 
   var state = {
     screen: "menu",
     profile: null,     // {registered, name, phone, zone, point, order_count, club, ...}
     menu: null,         // ответ /api/menu
+    feed: null,         // список постов ленты PAUSE Club (ответ /api/feed)
+    feedFilter: "all",  // "all" | один из config.FEED_POST_TYPES
   };
 
   // -------------------------------------------------------------------
@@ -21,12 +23,18 @@
 
   function initData() { return tg ? tg.initData : ""; }
 
+  // PAUSE App примонтирован под /pauseapp (см. bot.py: extra_subapps) — без
+  // этого префикса fetch("/api/...") ушёл бы на корень сайта (там живёт
+  // Mini App "Маршрут", с частично похожими, но другими путями), а не в
+  // подприложение, из которого реально загружена эта страница.
+  var API_BASE = "/pauseapp";
+
   function api(path, options) {
     options = options || {};
     var headers = options.headers || {};
     headers["X-Telegram-Init-Data"] = initData();
     if (options.body) headers["Content-Type"] = "application/json";
-    return fetch(path, {
+    return fetch(API_BASE + path, {
       method: options.method || "GET",
       headers: headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
@@ -47,7 +55,7 @@
   function apiUpload(path, blob, filename) {
     var fd = new FormData();
     fd.append("photo", blob, filename || "screenshot.jpg");
-    return fetch(path, {
+    return fetch(API_BASE + path, {
       method: "POST",
       headers: { "X-Telegram-Init-Data": initData() },
       body: fd,
@@ -130,6 +138,7 @@
     });
     if (name === "profile" && !state.profile) loadProfile();
     if (name === "menu" && !state.menu) loadMenu();
+    if (name === "club" && !state.feed) loadFeed();
   }
 
   function initNav() {
@@ -276,6 +285,205 @@
     var d = document.createElement("div");
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  // -------------------------------------------------------------------
+  // PAUSE CLUB — лента
+  // -------------------------------------------------------------------
+
+  var FEED_TYPE_LABELS = {
+    photo: "Фото", message: "Послание", announcement: "Анонс",
+    giveaway: "Розыгрыш", news: "Новость",
+  };
+  var FEED_TYPES_ORDER = ["photo", "message", "announcement", "giveaway", "news"];
+
+  function apiUploadFeed(type, caption, files) {
+    var fd = new FormData();
+    fd.append("type", type);
+    fd.append("caption", caption || "");
+    files.forEach(function (f) { fd.append("photo", f, f.name); });
+    return fetch(API_BASE + "/api/feed", {
+      method: "POST",
+      headers: { "X-Telegram-Init-Data": initData() },
+      body: fd,
+    }).then(function (resp) {
+      if (!resp.ok) {
+        return resp.json().catch(function () { return {}; }).then(function (data) {
+          throw new Error(data.error || ("HTTP " + resp.status));
+        });
+      }
+      return resp.json();
+    });
+  }
+
+  // Картинки ленты идут через свой прокси-эндпоинт, который требует ту же
+  // подпись initData, что и остальные запросы (см. pauseapp.py:
+  // admin_auth_middleware — гейт на КАЖДЫЙ /api/*, без исключений). Обычный
+  // <img src="..."> заголовков не шлёт, поэтому картинку сначала тянем
+  // сами через fetch() с заголовком и превращаем в blob-URL — простое
+  // кэширование в памяти, чтобы при повторном рендере ленты не качать те
+  // же файлы заново.
+  var _feedImageCache = {};
+  function loadFeedImage(url, imgEl) {
+    if (_feedImageCache[url]) {
+      _feedImageCache[url].then(function (blobUrl) { imgEl.src = blobUrl; });
+      return;
+    }
+    var p = fetch(url, { headers: { "X-Telegram-Init-Data": initData() } })
+      .then(function (resp) { if (!resp.ok) throw new Error("HTTP " + resp.status); return resp.blob(); })
+      .then(function (blob) { return URL.createObjectURL(blob); });
+    _feedImageCache[url] = p;
+    p.then(function (blobUrl) { imgEl.src = blobUrl; }).catch(function () { imgEl.style.display = "none"; });
+  }
+
+  function loadFeed() {
+    var root = document.getElementById("feed-root");
+    api("/api/feed").then(function (data) {
+      state.feed = data.posts;
+      renderFeedScreen();
+    }).catch(function () {
+      root.innerHTML = "";
+      root.appendChild(el("div", "feed-empty", "Не удалось загрузить ленту — потяните вниз, чтобы попробовать снова."));
+    });
+  }
+
+  function renderFeedFilters() {
+    var root = document.getElementById("feed-filters");
+    root.innerHTML = "";
+    var counts = {};
+    (state.feed || []).forEach(function (p) { counts[p.type] = (counts[p.type] || 0) + 1; });
+
+    var allChip = el("button", "filter-chip" + (state.feedFilter === "all" ? " active" : ""), "Все");
+    allChip.addEventListener("click", function () { state.feedFilter = "all"; renderFeedScreen(); });
+    root.appendChild(allChip);
+
+    FEED_TYPES_ORDER.forEach(function (t) {
+      if (!counts[t]) return;
+      var chip = el("button", "filter-chip" + (state.feedFilter === t ? " active" : ""), FEED_TYPE_LABELS[t]);
+      chip.addEventListener("click", function () { state.feedFilter = t; renderFeedScreen(); });
+      root.appendChild(chip);
+    });
+  }
+
+  function renderFeedScreen() {
+    renderFeedFilters();
+    var root = document.getElementById("feed-root");
+    root.innerHTML = "";
+    var posts = (state.feed || []).filter(function (p) { return state.feedFilter === "all" || p.type === state.feedFilter; });
+
+    if (!posts.length) {
+      root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>Пока здесь тихо — самое время опубликовать первый пост.</p>"));
+      return;
+    }
+    posts.forEach(function (post) { root.appendChild(buildFeedPostCard(post)); });
+  }
+
+  function buildFeedPostCard(post) {
+    var card = el("div", "card feed-post feed-post-" + post.type);
+
+    var delBtn = el("button", "feed-post-delete", "×");
+    delBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      showConfirm("Удалить этот пост из ленты?", "Да, удалить", function () { deleteFeedPost(post.id); });
+    });
+    card.appendChild(delBtn);
+
+    (post.image_urls || []).forEach(function (url) {
+      var img = el("img", "feed-post-photo");
+      img.alt = "";
+      card.appendChild(img);
+      loadFeedImage(url, img);
+    });
+
+    var body = el("div", "feed-post-body");
+    if (post.type !== "message") {
+      var typeRow = el("div", "feed-post-type-row");
+      typeRow.appendChild(el("span", "pill" + (post.type === "giveaway" ? " gold" : " muted") + " feed-type-pill", FEED_TYPE_LABELS[post.type] || post.type));
+      body.appendChild(typeRow);
+    }
+    if (post.caption) body.appendChild(el("div", "feed-post-caption", escapeHtml(post.caption)));
+    var meta = el("div", "feed-post-meta");
+    meta.innerHTML = '<span class="feed-post-date">' + escapeHtml(post.date) + '</span><span class="feed-post-author">' + escapeHtml(post.author) + '</span>';
+    body.appendChild(meta);
+    card.appendChild(body);
+
+    return card;
+  }
+
+  function deleteFeedPost(id) {
+    api("/api/feed/delete", { method: "POST", body: { id: id } }).then(function () {
+      haptic("success");
+      toast("Пост удалён");
+      state.feed = (state.feed || []).filter(function (p) { return p.id !== id; });
+      renderFeedScreen();
+    }).catch(function (err) { toast("Не удалось удалить: " + err.message); });
+  }
+
+  document.getElementById("feed-compose-btn").addEventListener("click", openComposeFeed);
+
+  function openComposeFeed() {
+    var compose = { type: "photo", caption: "", files: [] };
+
+    function renderComposeStep(body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", "Новый пост"));
+
+      var typeRow = el("div", "type-picker-row");
+      FEED_TYPES_ORDER.forEach(function (t) {
+        var chip = el("button", "type-picker-chip" + (compose.type === t ? " selected" : ""), FEED_TYPE_LABELS[t]);
+        chip.addEventListener("click", function () { compose.type = t; wizardReplace(renderComposeStep); });
+        typeRow.appendChild(chip);
+      });
+      body.appendChild(typeRow);
+
+      var captionField = el("div", "field");
+      captionField.innerHTML = '<label>' + (compose.type === "photo" ? "Подпись (необязательно)" : "Текст поста") + '</label><textarea id="feed-caption" rows="4"></textarea>';
+      body.appendChild(captionField);
+      body.querySelector("#feed-caption").value = compose.caption;
+      body.querySelector("#feed-caption").addEventListener("input", function (e) { compose.caption = e.target.value; });
+
+      if (compose.type === "photo") {
+        var uploadZone = el("div", "upload-zone", "Нажмите, чтобы выбрать фото (можно несколько)");
+        var input = el("input");
+        input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
+        uploadZone.appendChild(input);
+        body.appendChild(uploadZone);
+        var grid = el("div", "photo-picker-grid");
+        body.appendChild(grid);
+        uploadZone.addEventListener("click", function () { input.click(); });
+        input.addEventListener("change", function () {
+          compose.files = Array.prototype.slice.call(input.files);
+          grid.innerHTML = "";
+          compose.files.forEach(function (f) {
+            var thumb = el("img", "photo-picker-thumb");
+            thumb.src = URL.createObjectURL(f);
+            grid.appendChild(thumb);
+          });
+        });
+      }
+
+      var submit = el("button", "btn-gold wizard-footer-btn", "Опубликовать");
+      submit.addEventListener("click", function () {
+        if (compose.type === "photo" && !compose.files.length) { toast("Выберите хотя бы одно фото"); return; }
+        if (compose.type !== "photo" && !compose.caption.trim()) { toast("Напишите текст поста"); return; }
+        submit.disabled = true;
+        submit.textContent = "Публикую…";
+        apiUploadFeed(compose.type, compose.caption, compose.files).then(function () {
+          haptic("success");
+          toast("Опубликовано");
+          closeWizard();
+          state.feed = null;
+          loadFeed();
+        }).catch(function (err) {
+          submit.disabled = false;
+          submit.textContent = "Опубликовать";
+          toast("Не удалось опубликовать: " + err.message);
+        });
+      });
+      body.appendChild(submit);
+    }
+
+    openWizard(renderComposeStep);
   }
 
   // -------------------------------------------------------------------
