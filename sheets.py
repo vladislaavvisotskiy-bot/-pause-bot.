@@ -791,7 +791,7 @@ def get_sets_with_garnish() -> set:
 
 def get_set_extra() -> dict:
     """Категория и фото-ссылка каждого сета, по точному (регистрозависимому)
-    имени сета — колонки K/L той же строки, что цена/гарнир (см.
+    имени сета — колонки M/N той же строки, что цена/гарнир (см.
     config.REF_SET_TABLE_RANGE). Один запрос на весь каталог сразу, а не
     поячейково — тот же принцип, что и в остальных get_* здесь, чтобы не
     плодить лишние обращения к Sheets API на каждую загрузку /api/menu."""
@@ -821,14 +821,14 @@ def get_today_garnishes_for_set(set_name: str) -> list:
     список на каждый сет (столбец I той же строки, что цена/признак гарнира
     этого сета — см. config.REF_SET_TODAY_GARNISH_COL/REF_SET_GARNISH_RANGE):
     у "Сет стандарт" и, например, "Chiken bowl" могут быть РАЗНЫЕ гарниры на
-    один и тот же день. Задаёт админ после публикации меню, отдельным
-    вопросом на каждый сет с Гарнир=Да (см. handlers/admin.py:
-    _start_garnish_queue — reset_all_set_garnishes сбрасывает это в пустой
-    список СРАЗУ при публикации, ещё до вопросов — так админ, который
-    ничего не ответит на какой-то из вопросов, никогда не унаследует
-    гарниры этого сета от предыдущего дня). Пустой список — это не
-    "используй общий справочник", а "гарнира на выбор сегодня для ЭТОГО
-    сета нет вообще" (см. handlers/order.py: _proceed_after_set_choice)."""
+    один и тот же день. Задаёт админ в ЧЕРНОВИКЕ, отдельным вопросом на
+    каждый сет с Гарнир=Да, ещё до публикации (см. handlers/admin.py:
+    _start_garnish_queue/admin_today_garnish_save — пишут в столбец
+    черновика, публикация переносит его в этот столбец разом для ВСЕХ
+    строк, включая пустые, — см. sheets.publish_draft_menu). Пустой
+    список — это не "используй общий справочник", а "гарнира на выбор
+    сегодня для ЭТОГО сета нет вообще" (см. handlers/order.py:
+    _proceed_after_set_choice)."""
     ws = _ws(config.SHEET_REFERENCE)
     rows = ws.get(config.REF_SET_GARNISH_RANGE)
     name = set_name.strip().lower()
@@ -858,20 +858,6 @@ def set_today_garnishes_for_set(set_name: str, garnishes: list):
         ws.update_cells(cells)
 
 
-def reset_all_set_garnishes():
-    """Сбрасывает гарниры на сегодня для ВСЕХ сетов каталога разом —
-    вызывается при каждой публикации меню, ещё ДО вопросов про сеты/гарнир
-    (см. handlers/admin.py: _finish_menu_date), тем же приёмом, что раньше
-    был для одной общей ячейки: безопасный дефолт "гарнира нет", а не
-    наследование вчерашних данных для сета, про который админ забудет
-    ответить (или который сегодня вообще не в меню)."""
-    ws = _ws(config.SHEET_REFERENCE)
-    rows = ws.get(config.REF_SET_GARNISH_RANGE)
-    cells = [gspread.Cell(2 + i, config.REF_SET_TODAY_GARNISH_COL, "") for i in range(len(rows))]
-    if cells:
-        ws.update_cells(cells)
-
-
 def get_today_sets() -> list:
     """Сеты, реально доступные сегодня для заказа — задаёт админ после
     публикации меню, кнопками-чекбоксами (см. handlers/admin.py:
@@ -887,10 +873,12 @@ def get_today_sets() -> list:
     сегодня нет" (это увело бы клиента в меню вовсе без единой кнопки
     заказа — несравнимо хуже, чем лишняя кнопка), а "явного сужения нет,
     показываем весь каталог целиком" — ровно то поведение, что и было
-    единственно возможным до появления этой функции. Поэтому
-    _finish_menu_date сбрасывает это в пустой список при каждой публикации
-    (см. set_today_sets([])), но это безопасный откат к "показываем всё",
-    а не отказ в обслуживании, если админ не ответит на вопрос.
+    единственно возможным до появления этой функции. Черновик (см.
+    start_new_menu_draft) сбрасывает свою копию этого значения в пустой
+    список при каждом новом черновике, а публикация (см. publish_draft_menu)
+    переносит её сюда как есть — если админ так и не отметил ни одного сета
+    в черновике, это безопасный откат к "показываем всё", а не отказ в
+    обслуживании.
 
     Сет с переменной ценой (см. config.SET_VARIANTS) технически заведён
     как НЕСКОЛЬКО имён — если админ впишет сюда только одно из них (или
@@ -916,6 +904,159 @@ def get_today_sets() -> list:
 def set_today_sets(sets: list):
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_TODAY_SETS_CELL, ", ".join(sets))
+
+
+# ---------------------------------------------------------------------------
+# Черновик меню — готовится ДО публикации (см. handlers/admin.py: шаги 1-5
+# нового флоу публикации), полностью отдельно от активных ячеек выше — см.
+# config.py комментарий у REF_DRAFT_MENU_CELL. Пока админ не нажал "✅
+# Опубликовать" (см. publish_draft_menu), ни одна из этих функций не
+# трогает то, что видят клиенты.
+# ---------------------------------------------------------------------------
+
+def get_draft_menu() -> tuple:
+    """Возвращает (список file_id фотографий, подпись поста) черновика —
+    как get_today_menu_photos(), но для ещё не опубликованного меню."""
+    ws = _ws(config.SHEET_REFERENCE)
+    ids_raw = ws.acell(config.REF_DRAFT_MENU_CELL).value or ""
+    caption = ws.acell(config.REF_DRAFT_MENU2_CELL).value or ""
+    photo_ids = [p.strip() for p in ids_raw.split(",") if p.strip()]
+    return photo_ids, caption
+
+
+def set_draft_menu(photo_ids: list, caption: str):
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_DRAFT_MENU_CELL, ",".join(photo_ids))
+    ws.update_acell(config.REF_DRAFT_MENU2_CELL, caption or "")
+
+
+def get_draft_sets_raw() -> list:
+    """Сырой список черновика "сегодняшних сетов" — БЕЗ отката к полному
+    каталогу при пустом значении и БЕЗ разворачивания группы переменной
+    цены в оба технических варианта (см. get_draft_sets() — та версия для
+    клиентского показа/сбора очереди гарниров). Эта версия — для того,
+    чтобы повторно открыть клавиатуру-чекбокс с уже отмеченными сетами
+    (см. handlers/admin.py: admin_preview_edit_sets), и для самой
+    публикации (см. publish_draft_menu) — там нужен именно тот список,
+    что реально отмечал админ, один в один как раньше писался в
+    set_today_sets."""
+    ws = _ws(config.SHEET_REFERENCE)
+    raw = ws.acell(config.REF_DRAFT_SETS_CELL).value or ""
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+def get_draft_sets() -> list:
+    """Как get_today_sets(), но для черновика — та же семантика "пусто =
+    не сужено, весь каталог" и то же разворачивание группы переменной
+    цены (config.SET_VARIANTS) в оба технических варианта."""
+    sets = get_draft_sets_raw()
+    if not sets:
+        return get_sets()
+    out = []
+    for s in sets:
+        group = config.SET_VARIANT_GROUP.get(s)
+        if group:
+            for technical, _ in config.SET_VARIANTS[group]:
+                if technical not in out:
+                    out.append(technical)
+        elif s not in out:
+            out.append(s)
+    return out
+
+
+def set_draft_sets(sets: list):
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_DRAFT_SETS_CELL, ", ".join(sets))
+
+
+def get_draft_garnishes_for_set(set_name: str) -> list:
+    """Как get_today_garnishes_for_set(), но читает столбец черновика
+    (REF_SET_DRAFT_GARNISH_COL) вместо активного."""
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    name = set_name.strip().lower()
+    for i, row in enumerate(rows):
+        if row and row[0].strip().lower() == name:
+            r = 2 + i
+            val = ws.cell(r, config.REF_SET_DRAFT_GARNISH_COL).value or ""
+            return [g.strip() for g in val.split(",") if g.strip()]
+    return []
+
+
+def set_draft_garnishes_for_set(set_name: str, garnishes: list):
+    """Как set_today_garnishes_for_set(), но пишет в столбец черновика —
+    группа переменной цены (config.SET_VARIANTS) тем же приёмом пишется во
+    ВСЕ технические варианты группы разом."""
+    names = [t for t, _ in config.SET_VARIANTS[set_name]] if set_name in config.SET_VARIANTS else [set_name]
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    value = ", ".join(garnishes)
+    cells = [
+        gspread.Cell(2 + i, config.REF_SET_DRAFT_GARNISH_COL, value)
+        for i, row in enumerate(rows)
+        if row and row[0].strip() in names
+    ]
+    if cells:
+        ws.update_cells(cells)
+
+
+def reset_draft_set_garnishes():
+    """Сбрасывает гарниры черновика для ВСЕХ сетов каталога разом —
+    вызывается при начале КАЖДОГО нового черновика (см. start_new_menu_draft),
+    чтобы брошенный на середине предыдущий черновик не протёк гарнирами в
+    новый."""
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    cells = [gspread.Cell(2 + i, config.REF_SET_DRAFT_GARNISH_COL, "") for i in range(len(rows))]
+    if cells:
+        ws.update_cells(cells)
+
+
+def start_new_menu_draft(photo_ids: list, caption: str):
+    """Начинает НОВЫЙ черновик меню (координатор прислал фото/текст) —
+    сохраняет фото/подпись и сбрасывает сеты/гарниры черновика на "не
+    заданы" СРАЗУ, ещё до вопросов (тот же приём безопасного дефолта, что
+    и раньше был у активных ячеек при публикации) — на случай, если
+    предыдущий черновик был брошен на середине с какими-то отметками.
+    Активное меню (то, что видят клиенты) не трогает вообще — см.
+    publish_draft_menu, единственное место, которое переносит черновик в
+    активные ячейки."""
+    set_draft_menu(photo_ids, caption)
+    set_draft_sets([])
+    reset_draft_set_garnishes()
+
+
+def clear_menu_draft():
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_DRAFT_MENU_CELL, "")
+    ws.update_acell(config.REF_DRAFT_MENU2_CELL, "")
+    ws.update_acell(config.REF_DRAFT_SETS_CELL, "")
+    reset_draft_set_garnishes()
+
+
+def publish_draft_menu(date_str: str):
+    """Публикует черновик — ОДНА операция, переносящая фото/подпись/сеты/
+    гарниры черновика в активные ячейки (см. set_today_menu_photos/
+    set_active_menu_date/set_today_sets), затем сразу же чистит черновик.
+    До этого вызова клиенты продолжают видеть предыдущее активное меню как
+    ни в чём не бывало, сколько бы шагов подготовки черновика ни прошло и
+    сколько раз админ ни возвращался бы что-то поправить."""
+    photo_ids, caption = get_draft_menu()
+    set_today_menu_photos(photo_ids, caption)
+    set_active_menu_date(date_str)
+    set_today_sets(get_draft_sets_raw())
+
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    cells = []
+    for i, row in enumerate(rows):
+        r = 2 + i
+        draft_val = ws.cell(r, config.REF_SET_DRAFT_GARNISH_COL).value or ""
+        cells.append(gspread.Cell(r, config.REF_SET_TODAY_GARNISH_COL, draft_val))
+    if cells:
+        ws.update_cells(cells)
+
+    clear_menu_draft()
 
 
 def get_payment_options() -> list:
@@ -2128,21 +2269,6 @@ def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
         point = row[config.ROUTE_POINT - 1].strip()
         total += dp_index.get(point, {}).get("rate", 0)
     return total
-
-
-# ---------------------------------------------------------------------------
-# Разовый опрос про меню (/menu_survey) — свободный текст, три вопроса
-# ---------------------------------------------------------------------------
-
-def save_menu_survey_answer(tg_id, name: str, answer1: str, answer2: str, answer3: str):
-    """Каждое прохождение опроса — отдельная строка. Если один и тот же
-    клиент проходит опрос ещё раз в будущем (после нового /menu_survey) —
-    это просто ещё одна строка с более поздней датой, старая не трогается."""
-    ws = _ws(config.SHEET_MENU_SURVEY)
-    ws.append_row(
-        [str(tg_id), name, answer1, answer2, answer3, today_date_str()],
-        value_input_option="RAW",
-    )
 
 
 # ---------------------------------------------------------------------------

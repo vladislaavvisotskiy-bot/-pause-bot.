@@ -6,7 +6,7 @@ import uuid
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandObject
-from aiogram.types import Message, CallbackQuery, BufferedInputFile
+from aiogram.types import Message, CallbackQuery, BufferedInputFile, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
 
 import sheets
@@ -14,7 +14,6 @@ import texts
 import keyboards as kb
 import config
 import pdf_report
-from admin_notify import notify_admins
 from states import AdminClub, AdminMenu
 
 router = Router()
@@ -165,38 +164,12 @@ async def _flush_album(bot: Bot, media_group_id: str):
 
 
 async def _save_menu_and_notify(bot: Bot, chat_id: int, photo_ids: list, caption: str, state: FSMContext):
-    sheets.set_today_menu_photos(photo_ids, caption)
+    # Сохраняем как ЧЕРНОВИК (см. sheets.start_new_menu_draft) — клиенты его
+    # пока не видят вообще. Активное меню (то, что видят клиенты) тронет
+    # только publish_draft_menu, после шагов сеты -> гарниры -> предпросмотр
+    # -> дата -> "✅ Опубликовать" (см. admin_publish_confirmed).
+    sheets.start_new_menu_draft(photo_ids, caption)
     await bot.send_message(chat_id, texts.ADMIN_MENU_SAVED)
-    today = sheets.today_date_str()
-    tomorrow = sheets.get_tomorrow_date_str()
-    await bot.send_message(chat_id, texts.ADMIN_ASK_MENU_DATE, reply_markup=kb.admin_menu_date_kb(today, tomorrow))
-    await state.set_state(AdminMenu.waiting_date)
-
-
-async def _finish_menu_date(bot: Bot, chat_id: int, date_str: str, state: FSMContext):
-    sheets.set_active_menu_date(date_str)
-    # Сбрасываем гарниры на сегодня (для ВСЕХ сетов каталога разом — см.
-    # reset_all_set_garnishes) И сеты на сегодня — оба СРАЗУ, ещё до
-    # вопросов. Раньше, если админ игнорировал шаг (не ответил вообще),
-    # ячейка так и оставалась с данными от предыдущей публикации, и клиенты
-    # продолжали видеть вчерашний список как будто он всё ещё актуален.
-    # Безопасное значение по умолчанию — "гарниров/сужения нет", а не "что
-    # бы там ни было записано раньше".
-    #
-    # Сначала спрашиваем СЕТЫ, а не гарниры — гарнир теперь отдельным
-    # вопросом на КАЖДЫЙ сет с Гарнир=Да (см. _start_garnish_queue), и
-    # чтобы понять, про какие сеты вообще спрашивать гарнир, нужно сперва
-    # знать, какие сеты реально в сегодняшнем меню. Раньше этого шага
-    # (сужения сетов) не было вовсе — набор кнопок сета клиенту всегда
-    # брался напрямую из каталога "Справочники", независимо от того, что
-    # реально было в сегодняшнем меню, и вчерашний сет (например, "Боул")
-    # молча "переживал" публикацию сегодняшнего меню без него —
-    # воспроизведено и подтверждено на реальных данных.
-    sheets.reset_all_set_garnishes()
-    sheets.set_today_sets([])
-    await bot.send_message(chat_id, texts.ADMIN_MENU_DATE_SAVED.format(date=date_str))
-    if not sheets.is_broadcasts_disabled():
-        await _broadcast_new_menu(bot)
     await state.update_data(sets_selected=[])
     await bot.send_message(
         chat_id, texts.ADMIN_ASK_TODAY_SETS,
@@ -205,23 +178,169 @@ async def _finish_menu_date(bot: Bot, chat_id: int, date_str: str, state: FSMCon
     await state.set_state(AdminMenu.waiting_sets)
 
 
+async def _show_preview(message: Message, state: FSMContext):
+    """Шаг 4 публикации — показывает черновик РОВНО так, как его увидят
+    клиенты (фото/подпись + кнопки сетов), и переводит в состояние preview.
+    Кнопки сетов идут с отдельным префиксом "pvset:" (см.
+    keyboards.admin_preview_kb) — нажатие только показывает всплывающую
+    подсказку с ценой и гарниром (см. admin_preview_set_info), никакого
+    заказа при этом никуда не пишется. message — либо message.answer, либо
+    callback.message (для возврата "‹ Назад к предпросмотру"/"Изменить
+    гарниры")."""
+    photo_ids, caption = sheets.get_draft_menu()
+    if not photo_ids and not caption:
+        await message.answer(texts.ADMIN_PREVIEW_NO_PHOTO)
+        await state.clear()
+        return
+
+    if photo_ids:
+        if len(photo_ids) == 1:
+            await message.answer_photo(photo_ids[0], caption=caption or None)
+        else:
+            media = [InputMediaPhoto(media=p) for p in photo_ids]
+            if caption:
+                media[0].caption = caption
+            await message.bot.send_media_group(message.chat.id, media)
+    elif caption:
+        await message.answer(caption)
+
+    sets = sheets.get_draft_sets()
+    await message.answer(texts.ADMIN_PREVIEW_HEADER, reply_markup=kb.admin_preview_kb(sets))
+    await state.set_state(AdminMenu.preview)
+
+
+@router.callback_query(AdminMenu.preview, F.data.startswith("pvset:"))
+async def admin_preview_set_info(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    value = callback.data.split(":", 1)[1]
+    prices = sheets.get_set_prices()
+
+    if value.startswith("__variant__:"):
+        group = value.split(":", 1)[1]
+        garnishes = sheets.get_draft_garnishes_for_set(group)
+        lines = [texts.display_set_name(group)]
+        for technical, label in config.SET_VARIANTS[group]:
+            price_text = f"{prices.get(technical, 0):,}".replace(",", " ")
+            lines.append(f"{label}: {price_text} сум")
+        lines.append("Гарнир: " + (", ".join(garnishes) if garnishes else "нет"))
+        await callback.answer("\n".join(lines), show_alert=True)
+        return
+
+    price_text = f"{prices.get(value, 0):,}".replace(",", " ")
+    garnishes = sheets.get_draft_garnishes_for_set(value)
+    lines = [texts.display_set_name(value), f"Цена: {price_text} сум"]
+    lines.append("Гарнир: " + (", ".join(garnishes) if garnishes else "нет"))
+    await callback.answer("\n".join(lines), show_alert=True)
+
+
+@router.callback_query(AdminMenu.preview, F.data == "pveditsets")
+async def admin_preview_edit_sets(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    selected = sheets.get_draft_sets_raw()
+    await state.update_data(sets_selected=selected)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(
+        texts.ADMIN_ASK_TODAY_SETS,
+        reply_markup=kb.admin_sets_toggle_kb(sheets.get_sets(), selected),
+    )
+    await state.set_state(AdminMenu.waiting_sets)
+    await callback.answer()
+
+
+@router.callback_query(AdminMenu.preview, F.data == "pveditgarnish")
+async def admin_preview_edit_garnish(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await _start_garnish_queue(callback.message, state)
+    await callback.answer()
+
+
+@router.callback_query(AdminMenu.preview, F.data == "pvnext")
+async def admin_preview_next(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    today = sheets.today_date_str()
+    tomorrow = sheets.get_tomorrow_date_str()
+    await callback.message.answer(texts.ADMIN_ASK_MENU_DATE, reply_markup=kb.admin_menu_date_kb(today, tomorrow))
+    await state.set_state(AdminMenu.waiting_date)
+    await callback.answer()
+
+
+async def _show_publish_confirm(message: Message, date_str: str, state: FSMContext):
+    await state.update_data(publish_date=date_str)
+    await message.answer(texts.ADMIN_CONFIRM_PUBLISH.format(date=date_str), reply_markup=kb.admin_publish_confirm_kb())
+    await state.set_state(AdminMenu.confirming_publish)
+
+
 @router.callback_query(AdminMenu.waiting_date, F.data.startswith("menudate:"))
-async def admin_menu_date_chosen(callback: CallbackQuery, state: FSMContext, bot: Bot):
+async def admin_menu_date_chosen(callback: CallbackQuery, state: FSMContext):
     if not _is_admin(callback.from_user.id):
         await callback.answer(texts.ADMIN_ONLY, show_alert=True)
         return
     date_str = callback.data.split(":", 1)[1]
-    await _finish_menu_date(bot, callback.message.chat.id, date_str, state)
+    await _show_publish_confirm(callback.message, date_str, state)
     await callback.answer()
 
 
 @router.message(AdminMenu.waiting_date)
-async def admin_menu_date_manual(message: Message, state: FSMContext, bot: Bot):
+async def admin_menu_date_manual(message: Message, state: FSMContext):
     date_str = _parse_date_arg(message.text or "")
     if not date_str:
         await message.answer(texts.ADMIN_BAD_DATE_FORMAT)
         return
-    await _finish_menu_date(bot, message.chat.id, date_str, state)
+    await _show_publish_confirm(message, date_str, state)
+
+
+@router.callback_query(AdminMenu.confirming_publish, F.data == "pubconfirm")
+async def admin_publish_confirmed(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    data = await state.get_data()
+    date_str = data.get("publish_date") or sheets.today_date_str()
+    # Единственное место, которое переносит черновик в активные ячейки
+    # (см. sheets.publish_draft_menu) — до этого момента клиенты видели
+    # предыдущее активное меню как ни в чём не бывало.
+    sheets.publish_draft_menu(date_str)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(texts.ADMIN_MENU_PUBLISHED.format(date=date_str))
+    if not sheets.is_broadcasts_disabled():
+        await _broadcast_new_menu(bot)
+    await state.clear()
+    await callback.answer()
+
+
+@router.callback_query(AdminMenu.confirming_publish, F.data == "pubback")
+async def admin_publish_back(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await _show_preview(callback.message, state)
+    await callback.answer()
 
 
 async def _broadcast_new_menu(bot: Bot):
@@ -295,7 +414,7 @@ async def admin_sets_done(callback: CallbackQuery, state: FSMContext):
         return
     data = await state.get_data()
     selected = data.get("sets_selected", [])
-    sheets.set_today_sets(selected)
+    sheets.set_draft_sets(selected)
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
@@ -309,15 +428,15 @@ async def admin_sets_done(callback: CallbackQuery, state: FSMContext):
 
 
 async def _start_garnish_queue(message: Message, state: FSMContext):
-    """После того как известны сегодняшние сеты — строим очередь вопросов
-    про гарнир, по одному на КАЖДЫЙ сет с Гарнир=Да, реально входящий в
-    сегодняшнее меню (см. sheets.get_sets_with_garnish/get_today_sets).
+    """После того как известны сегодняшние сеты черновика — строим очередь
+    вопросов про гарнир, по одному на КАЖДЫЙ сет с Гарнир=Да, реально
+    входящий в черновик (см. sheets.get_sets_with_garnish/get_draft_sets).
     Сет с переменной ценой (config.SET_VARIANTS, например "Самса") — один
     вопрос на всю группу, а не на каждый технический вариант отдельно
-    (гарнир у них общий, в отличие от цены). Если ни у одного сегодняшнего
-    сета нет гарнира — вопросов не будет вовсе, публикация меню на этом
-    закончена."""
-    today_sets = sheets.get_today_sets()
+    (гарнир у них общий, в отличие от цены). Если ни у одного сета
+    черновика нет гарнира — вопросов не будет вовсе, сразу переходим к
+    предпросмотру (шаг 4)."""
+    today_sets = sheets.get_draft_sets()
     sets_with_garnish = sheets.get_sets_with_garnish()
     queue = []
     seen = set()
@@ -331,7 +450,7 @@ async def _start_garnish_queue(message: Message, state: FSMContext):
         queue.append(key)
 
     if not queue:
-        await state.clear()
+        await _show_preview(message, state)
         return
     await _ask_next_garnish(message, state, queue)
 
@@ -358,7 +477,7 @@ async def admin_today_garnish_save(message: Message, state: FSMContext):
     garnishes = [g.strip() for g in text.split(",") if g.strip()]
     data = await state.get_data()
     cur_set = data.get("cur_garnish_set", "")
-    sheets.set_today_garnishes_for_set(cur_set, garnishes)
+    sheets.set_draft_garnishes_for_set(cur_set, garnishes)
     if garnishes:
         await message.answer(texts.ADMIN_GARNISH_SAVED.format(set=cur_set, list=", ".join(garnishes)))
     else:
@@ -367,7 +486,7 @@ async def admin_today_garnish_save(message: Message, state: FSMContext):
     if queue:
         await _ask_next_garnish(message, state, queue)
     else:
-        await state.clear()
+        await _show_preview(message, state)
 
 
 @router.callback_query(AdminMenu.waiting_garnishes, F.data == "garnish_none")
@@ -377,7 +496,7 @@ async def admin_garnish_none(callback: CallbackQuery, state: FSMContext):
         return
     data = await state.get_data()
     cur_set = data.get("cur_garnish_set", "")
-    sheets.set_today_garnishes_for_set(cur_set, [])
+    sheets.set_draft_garnishes_for_set(cur_set, [])
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
@@ -387,7 +506,7 @@ async def admin_garnish_none(callback: CallbackQuery, state: FSMContext):
     if queue:
         await _ask_next_garnish(callback.message, state, queue)
     else:
-        await state.clear()
+        await _show_preview(callback.message, state)
     await callback.answer()
 
 
@@ -916,75 +1035,3 @@ async def cmd_broadcasts_status(message: Message):
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_OFF)
     else:
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_ON)
-
-
-# ---------------------------------------------------------------------------
-# Разовый опрос про меню — /menu_survey рассылает всем клиентам кнопку
-# "Пройти опрос →", ответы (см. handlers/survey.py) уходят в лист
-# "Опрос меню"; /menu_survey_results показывает, что клиенты ответили.
-# ---------------------------------------------------------------------------
-
-async def _broadcast_menu_survey(bot: Bot) -> tuple:
-    """Та же защита от флуда (BROADCAST_DELAY_SECONDS) и пропуск ошибок
-    отправки, что и в остальных рассылках (см. bot.py: send_warm_broadcast,
-    _broadcast_new_menu) — один недоступный клиент не должен обрывать
-    рассылку остальным."""
-    if sheets.is_broadcasts_disabled():
-        return 0, 0
-    clients = sheets.get_broadcast_clients()
-    sent = 0
-    for c in clients:
-        try:
-            await bot.send_message(
-                int(c["tg_id"]), texts.MENU_SURVEY_INTRO, reply_markup=kb.menu_survey_start_kb(),
-            )
-            sent += 1
-        except Exception:
-            logger.exception("Не удалось отправить опрос о меню клиенту ID %s", c.get("id"))
-        await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
-    return sent, len(clients)
-
-
-@router.message(Command("menu_survey"))
-async def cmd_menu_survey(message: Message):
-    if not _is_admin(message.from_user.id):
-        await message.answer(texts.ADMIN_ONLY)
-        return
-    if sheets.is_broadcasts_disabled():
-        await message.answer(texts.ADMIN_SURVEY_BROADCASTS_OFF)
-        return
-    # Разослать разом всем клиентам — необратимо (не отозвать уже
-    # прочитанные уведомления), поэтому обязательное подтверждение прежде
-    # чем что-то реально уйдёт.
-    await message.answer(texts.ADMIN_SURVEY_CONFIRM_PROMPT, reply_markup=kb.admin_survey_confirm_kb())
-
-
-@router.callback_query(F.data == "survey_broadcast_no")
-async def survey_broadcast_cancel(callback: CallbackQuery):
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
-        return
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.message.answer(texts.ADMIN_SURVEY_CANCELED)
-    await callback.answer()
-
-
-@router.callback_query(F.data == "survey_broadcast_yes")
-async def survey_broadcast_confirmed(callback: CallbackQuery, bot: Bot):
-    if not _is_admin(callback.from_user.id):
-        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
-        return
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.answer()
-    await callback.message.answer(texts.ADMIN_SURVEY_SENDING)
-    sent, total = await _broadcast_menu_survey(bot)
-    # Итог рассылки — всем админам разом, а не только тому, кто запустил
-    # (см. admin_notify.notify_admins) — остальные тоже должны знать, что
-    # рассылка ушла и скольким клиентам.
-    await notify_admins(bot, texts.ADMIN_SURVEY_SENT.format(sent=sent, total=total))

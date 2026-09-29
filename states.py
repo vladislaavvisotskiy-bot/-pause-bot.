@@ -46,12 +46,8 @@ class AdminClub(StatesGroup):
 
 
 class AdminMenu(StatesGroup):
-    waiting_date = State()
-    waiting_garnishes = State()
     waiting_sets = State()
-
-
-class MenuSurvey(StatesGroup):
-    waiting_answer1 = State()
-    waiting_answer2 = State()
-    waiting_answer3 = State()
+    waiting_garnishes = State()
+    preview = State()
+    waiting_date = State()
+    confirming_publish = State()
