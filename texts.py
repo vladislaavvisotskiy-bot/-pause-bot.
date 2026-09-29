@@ -92,7 +92,7 @@ ADMIN_ROUTE_BTN = "🗺 Маршрут (админ)"
 ADMIN_PANEL_BTN = "⚙️ Администратор"
 ADMIN_PAUSEAPP_BTN = "🌿 PAUSE App (превью)"
 
-REQUISITES_TEXT = "5614 6829 1396 2496\nXalilov Ayder"
+REQUISITES_TEXT = "5614 6829 1627 0798\nVladislav Visotskiy"
 
 WELCOME_NEW = (
     "☘️ Привет, здесь PAUSE.\n\n"
