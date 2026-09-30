@@ -443,6 +443,59 @@ def get_last_order_rows(client_id) -> list:
     ]
 
 
+def get_favorite_sets(client_id) -> list:
+    """Ключи сетов в избранном у клиента (см. s.key на карточке — для
+    обычного сета его имя, для группы переменной цены —
+    "__variant__:{группа}", см. pauseapp.py:_serialize_sets/_serialize_favorite_sets).
+    Строки со статусом FAV_STATUS_REMOVED (см. toggle_favorite_set) в
+    выдачу не попадают. Порядок — как добавлял клиент, от старых к новым."""
+    ws = _ws(config.SHEET_FAVORITES)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.FAV_DATA_START_ROW:
+            continue
+        if len(row) < config.FAV_SET_KEY:
+            continue
+        if row[config.FAV_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        status = row[config.FAV_STATUS - 1].strip() if len(row) >= config.FAV_STATUS else ""
+        if status == config.FAV_STATUS_REMOVED:
+            continue
+        key = row[config.FAV_SET_KEY - 1].strip()
+        if key:
+            out.append(key)
+    return out
+
+
+def toggle_favorite_set(client_id, set_key: str) -> bool:
+    """Добавляет/убирает сет из избранного клиента — мягко (см. комментарий
+    у config.SHEET_FAVORITES), находит существующую строку по (client_id,
+    set_key) и переключает статус, а не плодит дубликаты при повторном
+    добавлении того же сета. Возвращает новое состояние: True — теперь в
+    избранном, False — убран."""
+    ws = _ws(config.SHEET_FAVORITES)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.FAV_DATA_START_ROW:
+            continue
+        if len(row) < config.FAV_SET_KEY:
+            continue
+        if row[config.FAV_CLIENT_ID - 1].strip() != str(client_id) or row[config.FAV_SET_KEY - 1].strip() != set_key:
+            continue
+        status = row[config.FAV_STATUS - 1].strip() if len(row) >= config.FAV_STATUS else ""
+        new_status = "" if status == config.FAV_STATUS_REMOVED else config.FAV_STATUS_REMOVED
+        ws.update_cell(r, config.FAV_STATUS, new_status)
+        return new_status == ""
+    ws.append_row(
+        [str(client_id), set_key, _now().strftime("%d.%m.%Y %H:%M"), ""],
+        value_input_option="RAW",
+    )
+    return True
+
+
 def cancel_order_rows(row_nums: list):
     """Помечает строки заказа как отменённые клиентом — не удаляет их из таблицы."""
     ws = _ws(config.SHEET_ORDERS)

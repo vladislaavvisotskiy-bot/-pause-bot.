@@ -504,6 +504,7 @@ p { margin: 0; color: var(--ink-soft); }
   align-items: center;
   justify-content: center;
 }
+.set-detail-fav.active { color: var(--accent-warm); }
 .set-detail-body { margin-bottom: 20px; }
 .set-detail-price { color: var(--ink); font-weight: 700; font-size: 18px; margin-top: 4px; }
 .set-detail-note { color: var(--ink-soft); font-size: 13px; margin-top: 6px; }
@@ -769,6 +770,12 @@ p { margin: 0; color: var(--ink-soft); }
   flex: 1 1 auto;
   overflow-y: auto;
   padding: 20px 18px calc(30px + var(--safe-bottom));
+  position: relative;
+  /* Точка отсчёта для .set-detail-fav ниже — без этого он позиционировался
+     бы от #wizard (fixed, во весь экран), а не от самого тела визарда, и
+     всегда перекрывал бы кнопку "Закрыть" в шапке независимо от прокрутки
+     (нашёл при добавлении реального тапа на сердечко — раньше кнопка
+     ничего не делала, поэтому совпадение областей клика было незаметно). */
 }
 .wizard-title { margin-bottom: 16px; }
 .wizard-footer-btn { margin-top: 22px; }

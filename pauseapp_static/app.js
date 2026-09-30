@@ -44,6 +44,7 @@
     feed: null,           // список постов ленты PAUSE Club (ответ /api/feed) — общий и для CLUB, и для Послания
     feedFilter: "all",    // "all" | один из config.FEED_POST_TYPES — фильтр экрана CLUB
     messagesFilter: "all", // тот же принцип, отдельный фильтр экрана Послания
+    favoriteKeys: null,    // null — ещё не грузили; иначе Set(s.key) избранных блюд клиента
   };
 
   // -------------------------------------------------------------------
@@ -97,7 +98,9 @@
       "menu.emptyCategory": "В этой категории пока пусто.",
       "menu.from": "от {sum}",
       "menu.withGarnish": "с выбором гарнира",
-      "menu.favSoon": "Избранное — скоро добавим",
+      "menu.favAdded": "Добавлено в избранное",
+      "menu.favRemoved": "Убрано из избранного",
+      "menu.favFailed": "Не удалось сохранить: {msg}",
       "menu.garnishNextStep": "Гарнир выбирается на следующем шаге",
       "menu.order": "Заказать",
       "menu.orderUnavailable": "Сейчас недоступно для заказа",
@@ -137,9 +140,11 @@
       "profile.statOrders": "заказов", "profile.statPromo": "акции", "profile.statPosts": "постов",
       "profile.myOrders": "Мои заказы", "profile.favorites": "Избранное", "profile.notifications": "Уведомления",
       "profile.bonuses": "Бонусы и промокоды", "profile.support": "Поддержка",
-      "profile.favSoon": "Избранное — скоро добавим",
       "profile.bonusesSoon": "Бонусы и промокоды — скоро добавим",
       "profile.logout": "Выйти",
+      "favorites.title": "Избранное",
+      "favorites.empty": "Пока пусто — добавляйте блюда через ♡ на карточке в Меню.",
+      "favorites.loadFailed": "Не удалось загрузить избранное.",
 
       "settings.title": "Настройки",
       "settings.editProfile": "Редактировать профиль",
@@ -246,7 +251,9 @@
       "menu.emptyCategory": "Bu toifada hozircha bo'sh.",
       "menu.from": "{sum} dan",
       "menu.withGarnish": "garnir tanlovi bilan",
-      "menu.favSoon": "Sevimlilar — tez orada qo'shamiz",
+      "menu.favAdded": "Sevimlilarga qo'shildi",
+      "menu.favRemoved": "Sevimlilardan olib tashlandi",
+      "menu.favFailed": "Saqlab bo'lmadi: {msg}",
       "menu.garnishNextStep": "Garnir keyingi bosqichda tanlanadi",
       "menu.order": "Buyurtma berish",
       "menu.orderUnavailable": "Hozircha buyurtma qabul qilinmayapti",
@@ -286,8 +293,10 @@
       "profile.statOrders": "buyurtma", "profile.statPromo": "aksiya", "profile.statPosts": "post",
       "profile.myOrders": "Buyurtmalarim", "profile.favorites": "Sevimlilar", "profile.notifications": "Bildirishnomalar",
       "profile.bonuses": "Bonus va promokodlar", "profile.support": "Yordam",
-      "profile.favSoon": "Sevimlilar — tez orada qo'shamiz",
       "profile.bonusesSoon": "Bonus va promokodlar — tez orada qo'shamiz",
+      "favorites.title": "Sevimlilar",
+      "favorites.empty": "Hozircha bo'sh — Menyudagi kartochkada ♡ orqali qo'shing.",
+      "favorites.loadFailed": "Sevimlilarni yuklab bo'lmadi.",
       "profile.logout": "Chiqish",
 
       "settings.title": "Sozlamalar",
@@ -395,7 +404,9 @@
       "menu.emptyCategory": "Nothing in this category yet.",
       "menu.from": "from {sum}",
       "menu.withGarnish": "with a side choice",
-      "menu.favSoon": "Favorites — coming soon",
+      "menu.favAdded": "Added to favorites",
+      "menu.favRemoved": "Removed from favorites",
+      "menu.favFailed": "Couldn't save: {msg}",
       "menu.garnishNextStep": "The side is chosen on the next step",
       "menu.order": "Order",
       "menu.orderUnavailable": "Ordering isn't available right now",
@@ -435,8 +446,10 @@
       "profile.statOrders": "orders", "profile.statPromo": "promos", "profile.statPosts": "posts",
       "profile.myOrders": "My orders", "profile.favorites": "Favorites", "profile.notifications": "Notifications",
       "profile.bonuses": "Bonuses & promo codes", "profile.support": "Support",
-      "profile.favSoon": "Favorites — coming soon",
       "profile.bonusesSoon": "Bonuses & promo codes — coming soon",
+      "favorites.title": "Favorites",
+      "favorites.empty": "Nothing here yet — add dishes with ♡ on the card in Menu.",
+      "favorites.loadFailed": "Couldn't load favorites.",
       "profile.logout": "Log out",
 
       "settings.title": "Settings",
@@ -1069,9 +1082,28 @@
         body.appendChild(img);
       }
       var favBtn = el("button", "set-detail-fav", ICON_HEART);
-      // "Избранное" в системе пока нет (см. отчёт) — честная заглушка,
-      // а не притворяющаяся рабочей кнопка.
-      favBtn.addEventListener("click", function (e) { e.stopPropagation(); toast(t("menu.favSoon")); });
+      // Состояние "уже в избранном" подгружается лениво (см.
+      // ensureFavoriteKeys) — кнопка рисуется сразу пустым сердечком, не
+      // дожидаясь ответа сервера, и обновляется, когда он придёт (обычно
+      // мгновенно — Set кэшируется на сессию после первого раза).
+      ensureFavoriteKeys().then(function (keys) {
+        favBtn.classList.toggle("active", keys.has(s.key));
+        favBtn.innerHTML = keys.has(s.key) ? ICON_HEART_FILLED : ICON_HEART;
+      });
+      favBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        favBtn.disabled = true;
+        toggleFavorite(s.key).then(function (favorited) {
+          favBtn.disabled = false;
+          favBtn.classList.toggle("active", favorited);
+          favBtn.innerHTML = favorited ? ICON_HEART_FILLED : ICON_HEART;
+          haptic("success");
+          toast(favorited ? t("menu.favAdded") : t("menu.favRemoved"));
+        }).catch(function (err) {
+          favBtn.disabled = false;
+          toast(t("menu.favFailed", { msg: err.message }));
+        });
+      });
       body.appendChild(favBtn);
 
       var wrap = el("div", "set-detail-body");
@@ -1877,6 +1909,9 @@
   // прошлый путь был кривой ручной работы, левая и правая половины не
   // совпадали.
   var ICON_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+  // Та же самая форма, просто залитая — состояние "уже в избранном"
+  // (см. openSetDetail/.set-detail-fav.active).
+  var ICON_HEART_FILLED = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
   var ICON_ENVELOPE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>';
   var ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>';
   var ICON_TAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M3 12 12 3h7v7l-9 9-7-7Z"/><circle cx="15.5" cy="7.5" r="1.2"/></svg>';
@@ -2208,7 +2243,7 @@
     // нижней навигации (Послания), дублировать её здесь незачем.
     var rows = el("div", "card profile-nav-list");
     rows.appendChild(buildProfileRow(ICON_ORDERS, t("profile.myOrders"), function () { openProfileSubscreen(t("orders.title"), loadOrders); }));
-    rows.appendChild(buildProfileRow(ICON_HEART, t("profile.favorites"), function () { toast(t("profile.favSoon")); }));
+    rows.appendChild(buildProfileRow(ICON_HEART, t("profile.favorites"), function () { openProfileSubscreen(t("favorites.title"), loadFavorites); }));
     rows.appendChild(buildProfileRow(ICON_BELL, t("profile.notifications"), openNotifySubscreen));
     rows.appendChild(buildProfileRow(ICON_TAG, t("profile.bonuses"), function () { toast(t("profile.bonusesSoon")); }));
     rows.appendChild(buildProfileRow(ICON_SUPPORT, t("profile.support"), openSupportSubscreen));
@@ -2383,6 +2418,50 @@
         }).catch(function (err) { send.disabled = false; toast(t("feedback.sendFailed", { msg: err.message })); });
       });
       body.appendChild(send);
+    });
+  }
+
+  // --- Избранное -----------------------------------------------------------
+  // s.key (см. pauseapp.py:_serialize_sets) — то же самое, что хранится в
+  // листе "Избранное": для обычного сета его имя, для группы переменной
+  // цены "__variant__:{группа}". state.favoriteKeys — Set этих ключей,
+  // грузится один раз за сессию (лениво, при первом обращении — либо
+  // открытии карточки блюда, либо самого экрана "Избранное") и дальше
+  // обновляется локально при каждом тапе на сердечко, без повторных
+  // походов на сервер.
+
+  function ensureFavoriteKeys() {
+    if (state.favoriteKeys) return Promise.resolve(state.favoriteKeys);
+    return api("/api/favorites").then(function (data) {
+      state.favoriteKeys = new Set(data.keys || []);
+      return state.favoriteKeys;
+    }).catch(function () {
+      return new Set();
+    });
+  }
+
+  function toggleFavorite(key) {
+    return api("/api/favorites/toggle", { method: "POST", body: { key: key } }).then(function (data) {
+      if (!state.favoriteKeys) state.favoriteKeys = new Set();
+      if (data.favorited) state.favoriteKeys.add(key); else state.favoriteKeys.delete(key);
+      return data.favorited;
+    });
+  }
+
+  function loadFavorites(root) {
+    api("/api/favorites").then(function (data) {
+      state.favoriteKeys = new Set(data.keys || []);
+      root.innerHTML = "";
+      if (!data.favorites.length) {
+        root.appendChild(el("div", "empty-note", t("favorites.empty")));
+        return;
+      }
+      var grid = el("div", "menu-set-grid");
+      data.favorites.forEach(function (s) { grid.appendChild(buildMenuSetCard(s)); });
+      root.appendChild(grid);
+    }).catch(function () {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", t("favorites.loadFailed")));
     });
   }
 

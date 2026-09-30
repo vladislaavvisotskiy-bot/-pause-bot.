@@ -625,6 +625,43 @@ async def api_orders_cancel(request: web.Request):
     return web.json_response({"ok": True})
 
 
+def _serialize_favorite_sets(keys: list, prices: dict, extra: dict) -> list:
+    """Карточки избранных блюд клиента — переиспользует ровно ту же
+    сборку карточки, что и сегодняшнее меню (_serialize_sets: фото,
+    категория, описание, цена, варианты), только без гарнира (сохранённое
+    блюдо — не заказ, гарнир выбирается заново на шаге заказа) и без
+    привязки к тому, что подаётся именно сегодня — сет мог выпасть из
+    сегодняшнего меню, но остаться в избранном. Порядок сохраняется тот
+    же, что и в keys (см. sheets.get_favorite_sets — от старых к новым),
+    т.к. _serialize_sets сам идёт по порядку входного списка."""
+    names = [k.split(":", 1)[1] if k.startswith("__variant__:") else k for k in keys]
+    return _serialize_sets(names, prices, set(), extra)
+
+
+async def api_favorites(request: web.Request):
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    keys = await _retry_sheets(sheets.get_favorite_sets, client["id"])
+    prices = await _retry_sheets(sheets.get_set_prices)
+    extra = await _retry_sheets(sheets.get_set_extra)
+    return web.json_response({"keys": keys, "favorites": _serialize_favorite_sets(keys, prices, extra)})
+
+
+async def api_favorites_toggle(request: web.Request):
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    body = await request.json()
+    key = (body.get("key") or "").strip()
+    if not key:
+        return web.json_response({"error": "key_required"}, status=400)
+    favorited = await _retry_sheets(sheets.toggle_favorite_set, client["id"], key)
+    return web.json_response({"ok": True, "favorited": favorited})
+
+
 async def api_feedback(request: web.Request):
     """Отзыв к конкретному заказу — та же логика, что
     handlers/profile.py: feedback_start/feedback_save."""
@@ -794,6 +831,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/account/delete-request", api_account_delete_request)
     app.router.add_get("/api/orders", api_orders)
     app.router.add_post("/api/orders/cancel", api_orders_cancel)
+    app.router.add_get("/api/favorites", api_favorites)
+    app.router.add_post("/api/favorites/toggle", api_favorites_toggle)
     app.router.add_post("/api/feedback", api_feedback)
     app.router.add_get("/api/messages", api_messages)
     app.router.add_get("/api/feed", api_feed_list)
