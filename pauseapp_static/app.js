@@ -712,20 +712,16 @@
     Array.prototype.forEach.call(document.querySelectorAll(".nav-item"), function (b) {
       b.classList.toggle("active", b.dataset.screen === name);
     });
-    // ВАЖНО: loadHome() попутно заполняет state.profile/state.menu для
-    // своей промо-карточки (см. loadHome ниже) — если Профиль/Меню после
-    // этого просто проверяют "данные уже есть, повторно не грузим", они
-    // должны сами ОТРИСОВАТЬ то, что уже загружено, а не молча ничего не
-    // делать (иначе первый заход именно в эти две вкладки показывал бы
-    // вечный скелетон-плейсхолдер — так и было до этого исправления, ту
-    // же ошибку, что и Послания уже обходили правильно строкой ниже).
-    if (name === "home" && !state.home) loadHome();
+    // ВАЖНО: каждая вкладка при заходе либо дорисовывает уже загруженные
+    // данные, либо грузит их с нуля — никогда молча ничего не делает
+    // (иначе первый заход в неё показывал бы вечный скелетон-плейсхолдер,
+    // а повторный — старый текст на старом языке после смены языка в
+    // Настройках, см. applyLangToUI ниже).
+    if (name === "home") { if (state.home) renderHomeScreen(); else loadHome(); }
     if (name === "profile") { if (state.profile) renderProfileScreen(); else loadProfile(); }
     if (name === "menu") { if (state.menu) renderMenuScreen(); else loadMenu(); }
-    if (name === "club" && !state.feed) loadFeed();
-    if (name === "club" && state.feed) renderFeedScreen();
-    if (name === "messages" && !state.feed) loadFeed();
-    if (name === "messages" && state.feed) renderMessagesFeedScreen();
+    if (name === "club") { if (state.feed) renderFeedScreen(); else loadFeed(); }
+    if (name === "messages") { if (state.feed) renderMessagesFeedScreen(); else loadFeed(); }
   }
 
   // Нижняя панель прячется при прокрутке вниз и появляется обратно при
@@ -2526,9 +2522,15 @@
   // увидеть эффект.
   function applyLangToUI() {
     applyStaticI18n();
-    var renderers = { home: renderHomeScreen, menu: renderMenuScreen, club: renderFeedScreen, messages: renderMessagesFeedScreen, profile: renderProfileScreen };
-    var fn = renderers[state.screen];
-    if (fn) fn();
+    // Перерисовываем не только видимый сейчас экран, а все вкладки, для
+    // которых уже есть загруженные данные — иначе смена языка в
+    // Настройках (открываются только из Профиля) была бы видна сразу
+    // лишь там, а остальные вкладки показывали бы старый язык до
+    // следующей полной перезагрузки данных на них.
+    if (state.home) renderHomeScreen();
+    if (state.menu) renderMenuScreen();
+    if (state.feed) { renderFeedScreen(); renderMessagesFeedScreen(); }
+    if (state.profile) renderProfileScreen();
   }
 
   function init() {
