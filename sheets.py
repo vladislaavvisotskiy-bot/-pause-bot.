@@ -1610,6 +1610,75 @@ def build_courier_report(date_str: str) -> str:
     return "\n".join(out).strip()
 
 
+def build_courier_distribution(date_str: str) -> dict:
+    """Готовый для личной пересылки курьеру текст — не "куда ехать" (это
+    уже есть в самом Mini App "Маршрут"), а "какие сеты кому грузить в
+    машину": по каждой точке курьера — имена клиентов, у каждого набор
+    сетов с гарниром (см. get_kitchen_line_items:"piece", тот же формат,
+    что и в /kitchen, "Nшт Сет (Гарнир)"). Курьера у точки берём из
+    get_route_for_date (столбец "Курьер" листа "Маршрут", см.
+    ROUTE_COURIER_TG_ID) — если точка ещё назначена НЕСКОЛЬКИМ курьерам
+    разом (новая точка по умолчанию ставится на всех, пока кто-то не
+    сузит через Mini App), она попадёт в текст КАЖДОГО из них — так же,
+    как они сейчас оба видят её в самом Mini App.
+
+    Группировка внутри точки — по client_id (не по имени, в отличие от
+    build_kitchen_report: там просто исторически не разводили тёзок, на
+    кухне это не критично, а тут результат уходит конкретному человеку "к
+    точным именам" — лучше не рисковать).
+
+    Возвращает {courier_tg_id: {"name", "text", "points", "people"}} —
+    только курьеры, у которых на эту дату есть хоть одна точка; "text" уже
+    полностью готов для отправки как есть, без правки администратором."""
+    items = get_kitchen_line_items(date_str)
+    route = get_route_for_date(date_str)
+    point_couriers = {p["point"]: p["courier_tg_ids"] for p in route}
+    courier_names = {c["tg_id"]: c["name"] for c in get_couriers()}
+    clients = _clients_index()
+
+    # courier_tg_id -> точка -> client_id -> {"name","tg","pieces":[...]}
+    by_courier = {}
+    point_order = {}
+
+    for item in items:
+        point = item["point"]
+        courier_ids = point_couriers.get(point, [])
+        if not courier_ids:
+            continue
+        client_id = item["client_id"]
+        client = clients.get(client_id) or {}
+        telegram = client.get("telegram") or ""
+        tg = (telegram if telegram.startswith("@") else f"@{telegram}") if telegram else ""
+
+        for cid in courier_ids:
+            points = by_courier.setdefault(cid, {})
+            if point not in points:
+                points[point] = {}
+                point_order.setdefault(cid, []).append(point)
+            person = points[point].setdefault(client_id, {"name": item["name"], "tg": tg, "pieces": []})
+            person["pieces"].append(item["piece"])
+
+    out = {}
+    for cid, points in by_courier.items():
+        lines = [f"📦 Распределение на {date_str}", ""]
+        people_total = 0
+        for point in point_order[cid]:
+            lines.append(f"📍 {point}")
+            for person in points[point].values():
+                people_total += 1
+                tg_part = f" ({person['tg']})" if person["tg"] else ""
+                lines.append(f"• {person['name']}{tg_part} — {', '.join(person['pieces'])}")
+            lines.append("")
+        lines.append(f"Итого: {len(point_order[cid])} точек, {people_total} человек")
+        out[cid] = {
+            "name": courier_names.get(cid, cid),
+            "text": "\n".join(lines).strip(),
+            "points": len(point_order[cid]),
+            "people": people_total,
+        }
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Заказы на новую точку доставки — держим до подтверждения координатором,
 # в лист «Заказы» (и, соответственно, в отчёты кухни/курьера) не попадают,

@@ -473,9 +473,15 @@ ADMIN_BROADCAST_TOGGLE_OFF_BTN = "🔕 Выключить"
 # --- Панель администратора (/admin) ---
 ADMIN_KITCHEN_REPORT_BTN = "📋 Отчёт для кухни"
 ADMIN_COURIER_REPORT_BTN = "🚚 Отчёт для курьера"
+ADMIN_COURIER_DISTRIBUTION_BTN = "📦 Распределение по курьерам"
 ADMIN_PAYMENTS_BTN = "💳 Подтверждение оплаты"
 ADMIN_BROADCAST_BTN = "📢 Рассылка"
 ADMIN_INSTRUCTIONS_BTN = "📖 Инструкция"
+
+ADMIN_COURIER_DISTRIBUTION_HEADER = "📦 Распределение по курьерам — {date}"
+ADMIN_COURIER_DISTRIBUTION_SUMMARY_LINE = "{name} — {points} точек, {people} человек"
+ADMIN_COURIER_DISTRIBUTION_NONE = "На {date} нет ни одной точки, назначенной курьеру."
+ADMIN_COURIER_DISTRIBUTION_COURIER_LABEL = "— {name} —"
 
 ADMIN_KITCHEN_FORMAT_PROMPT = "В каком виде прислать отчёт для кухни на {date}?"
 ADMIN_KITCHEN_FORMAT_PDF_BTN = "📄 PDF"

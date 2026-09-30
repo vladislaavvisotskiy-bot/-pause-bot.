@@ -856,6 +856,35 @@ async def _send_report_by_type(bot: Bot, chat_id: int, report_type: str, date_st
             chat_id, texts.ADMIN_KITCHEN_FORMAT_PROMPT.format(date=date_str),
             reply_markup=kb.admin_kitchen_format_kb(date_str),
         )
+    elif report_type == "courier_dist":
+        await _send_courier_distribution(bot, chat_id, date_str)
+
+
+async def _send_courier_distribution(bot: Bot, chat_id: int, date_str: str):
+    """"📦 Распределение по курьерам" — сначала админу короткая сводка
+    (кто сколько точек/человек везёт), затем на каждого курьера с хотя бы
+    одной точкой на эту дату — подпись с именем и следом отдельным
+    сообщением готовый текст (см. sheets.build_courier_distribution),
+    который администратор копирует как есть в личку этому курьеру. Два
+    отдельных сообщения на курьера (подпись + текст), а не одно — чтобы
+    текст для пересылки не приходилось редактировать перед отправкой,
+    вырезая из него лишнюю шапку с именем."""
+    dist = sheets.build_courier_distribution(date_str)
+    if not dist:
+        await bot.send_message(
+            chat_id, texts.ADMIN_COURIER_DISTRIBUTION_NONE.format(date=date_str),
+            reply_markup=kb.admin_back_kb(),
+        )
+        return
+    summary_lines = [texts.ADMIN_COURIER_DISTRIBUTION_HEADER.format(date=date_str), ""]
+    for data in dist.values():
+        summary_lines.append(texts.ADMIN_COURIER_DISTRIBUTION_SUMMARY_LINE.format(
+            name=data["name"], points=data["points"], people=data["people"],
+        ))
+    await bot.send_message(chat_id, "\n".join(summary_lines), reply_markup=kb.admin_back_kb())
+    for data in dist.values():
+        await bot.send_message(chat_id, texts.ADMIN_COURIER_DISTRIBUTION_COURIER_LABEL.format(name=data["name"]))
+        await bot.send_message(chat_id, data["text"])
 
 
 @router.callback_query(F.data.startswith("adminrep:"))
@@ -899,6 +928,15 @@ async def admin_panel_courier(callback: CallbackQuery):
         await callback.answer(texts.ADMIN_ONLY, show_alert=True)
         return
     await _ask_report_date(callback.message, "courier")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_courier_distribution")
+async def admin_panel_courier_distribution(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await _ask_report_date(callback.message, "courier_dist")
     await callback.answer()
 
 
