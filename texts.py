@@ -90,6 +90,7 @@ SUPPORT_BTN = "🤍 Поддержка"
 COURIER_ROUTE_BTN = "🚚 Мой маршрут"
 ADMIN_ROUTE_BTN = "🗺 Маршрут (админ)"
 ADMIN_PANEL_BTN = "⚙️ Администратор"
+ADMIN_PAUSEAPP_BTN = "🌿 PAUSE App (превью)"
 
 REQUISITES_TEXT = "5614 6829 1627 0798\nVladislav Visotskiy"
 

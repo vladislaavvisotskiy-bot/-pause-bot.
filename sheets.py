@@ -789,6 +789,26 @@ def get_sets_with_garnish() -> set:
     }
 
 
+def get_set_extra() -> dict:
+    """Категория и фото-ссылка каждого сета, по точному (регистрозависимому)
+    имени сета — колонки M/N той же строки, что цена/гарнир (см.
+    config.REF_SET_TABLE_RANGE). Один запрос на весь каталог сразу, а не
+    поячейково — тот же принцип, что и в остальных get_* здесь, чтобы не
+    плодить лишние обращения к Sheets API на каждую загрузку /api/menu."""
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_TABLE_RANGE)
+    out = {}
+    for row in rows:
+        if not row or not row[0]:
+            continue
+        cat_i, photo_i = config.REF_SET_CATEGORY_COL_IDX, config.REF_SET_PHOTO_COL_IDX
+        out[row[0]] = {
+            "category": row[cat_i].strip() if len(row) > cat_i and row[cat_i] else "",
+            "photo_url": row[photo_i].strip() if len(row) > photo_i and row[photo_i] else "",
+        }
+    return out
+
+
 def get_garnishes() -> list:
     """Полный список всех возможных гарниров — справочник на будущее."""
     ws = _ws(config.SHEET_REFERENCE)
@@ -2249,5 +2269,74 @@ def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
         point = row[config.ROUTE_POINT - 1].strip()
         total += dp_index.get(point, {}).get("rate", 0)
     return total
+
+
+# ---------------------------------------------------------------------------
+# PAUSE Club — лента (PAUSE App, см. pauseapp.py). Публикация/удаление —
+# только из самого приложения, отдельным экраном админа; в /admin бота
+# ничего не переносилось.
+# ---------------------------------------------------------------------------
+
+def create_feed_post(post_type: str, caption: str, file_ids: list, author: str) -> str:
+    """Создаёт пост ленты, возвращает его ID. file_ids — уже настоящие
+    Telegram file_id (получены заранее в pauseapp.py отправкой фото в
+    закрытый канал MEDIA_CHAT_ID), сюда просто пишутся через запятую —
+    та же схема, что и у фото меню (см. set_today_menu_photos)."""
+    ws = _ws(config.SHEET_FEED)
+    post_id = f"FD{int(time.time() * 1000)}"
+    row = [
+        post_id, today_date_str(), post_type, caption or "",
+        ",".join(file_ids), author or "", "",
+    ]
+    ws.append_row(row, value_input_option="RAW")
+    return post_id
+
+
+def get_feed_posts(limit: int = 50) -> list:
+    """Опубликованные посты, от новых к старым — удалённые (см.
+    delete_feed_post) в выдачу не попадают, но строки остаются в таблице
+    (мягкое удаление, тот же приём, что и ROUTE_STATUS_REMOVED)."""
+    ws = _ws(config.SHEET_FEED)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.FEED_DATA_START_ROW:
+            continue
+        if len(row) < config.FEED_ID or not row[config.FEED_ID - 1].strip():
+            continue
+
+        def cell(col, row=row):
+            idx = col - 1
+            return row[idx] if idx < len(row) else ""
+
+        if cell(config.FEED_STATUS).strip() == config.FEED_STATUS_DELETED:
+            continue
+        file_ids_raw = cell(config.FEED_FILE_IDS)
+        out.append({
+            "row": r,
+            "id": cell(config.FEED_ID),
+            "date": cell(config.FEED_DATE),
+            "type": cell(config.FEED_TYPE),
+            "caption": cell(config.FEED_CAPTION),
+            "file_ids": [f.strip() for f in file_ids_raw.split(",") if f.strip()],
+            "author": cell(config.FEED_AUTHOR),
+        })
+    out.reverse()
+    return out[:limit]
+
+
+def delete_feed_post(post_id: str):
+    """Мягкое удаление — строка остаётся в таблице со статусом "удалён",
+    просто больше не отдаётся get_feed_posts."""
+    ws = _ws(config.SHEET_FEED)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.FEED_DATA_START_ROW:
+            continue
+        if len(row) >= config.FEED_ID and row[config.FEED_ID - 1] == post_id:
+            ws.update_cell(r, config.FEED_STATUS, config.FEED_STATUS_DELETED)
+            return
 
 
