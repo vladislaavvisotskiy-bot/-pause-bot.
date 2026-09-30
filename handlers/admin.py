@@ -84,22 +84,6 @@ async def admin_panel(message: Message):
     await _show_admin_panel(message.answer)
 
 
-@router.message(Command("app"))
-async def cmd_open_pauseapp(message: Message):
-    """Отдельная явная точка входа в PAUSE Mini App (UI-прототип), помимо
-    кнопки в /admin — оба места admin-only на уровне бота (кнопка/команда
-    не показываются кому попало), но настоящая защита всё равно на
-    сервере (см. pauseapp.py:api_verify — проверка initData+ADMIN_IDS),
-    т.к. URL Mini App технически можно переслать кому угодно."""
-    if not _is_admin(message.from_user.id):
-        await message.answer(texts.ADMIN_APP_ONLY)
-        return
-    if not config.WEBAPP_URL:
-        await message.answer("WEBAPP_URL не задан на сервере — открыть Mini App нельзя.")
-        return
-    await message.answer("PAUSE Mini App:", reply_markup=kb.pauseapp_open_kb())
-
-
 @router.callback_query(F.data == "admin_panel_open")
 async def admin_panel_open(callback: CallbackQuery):
     if not _is_admin(callback.from_user.id):

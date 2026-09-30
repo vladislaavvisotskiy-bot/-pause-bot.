@@ -140,11 +140,11 @@ async def main():
     scheduler.add_job(send_payment_reminders, "cron", hour=prh, minute=prm, args=[bot])
     scheduler.start()
 
-    # PAUSE Mini App (клиентский UI-прототип, только для админов) — тот же
-    # процесс/порт, что и курьерский /miniapp, отдельным поддомоном
-    # /pauseapp; маршруты курьерского приложения этим не затрагиваются
-    # (см. webapp.run_webapp/pauseapp.py).
-    await webapp.run_webapp(bot, extra_subapps={"/pauseapp": pauseapp.create_app()})
+    # PAUSE App (новый клиентский Mini App, пока только для админов) живёт
+    # в том же aiohttp-процессе, что и Mini App "Маршрут" — подмонтирован
+    # отдельным subapp'ом под /pauseapp, маршруты курьерского приложения
+    # этим не затрагиваются (см. webapp.run_webapp/pauseapp.py).
+    await webapp.run_webapp(bot, extra_subapps={"/pauseapp": pauseapp.create_app(bot)})
 
     logger.info("PAUSE бот запущен.")
     await dp.start_polling(bot)
