@@ -664,7 +664,7 @@
   // -------------------------------------------------------------------
   // Шапка экрана — своя на каждой вкладке, как на макете (единой сплошной
   // шапки на всё приложение больше нет, см. index.html). opts:
-  //   logo   — true на Главной: "🌿 PAUSE." слева вместо кнопки "назад"
+  //   logo   — true на Главной: веточка + "PAUSE." слева вместо кнопки "назад"
   //   back   — функция клика по стрелке "назад" слева (если есть)
   //   title  — текст заголовка
   //   center — true, если заголовок по центру (Меню/Профиль), иначе слева
@@ -683,7 +683,9 @@
       backBtn.addEventListener("click", function () { haptic("select"); opts.back(); });
       left.appendChild(backBtn);
     } else if (opts.logo) {
-      left.appendChild(el("div", "screen-header-logo", "🌿 PAUSE."));
+      var logo = el("div", "screen-header-logo");
+      logo.innerHTML = ICON_SPRIG + '<span>PAUSE.</span>';
+      left.appendChild(logo);
     }
     bar.appendChild(left);
     bar.appendChild(el("div", "screen-header-title", escapeHtml(opts.title || "")));
@@ -700,6 +702,11 @@
 
   var ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22"><path d="M15 5l-7 7 7 7"/></svg>';
   var ICON_BELL_HDR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="21" height="21"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>';
+  // Веточка с листьями рядом с "PAUSE." на Главной — по присланному
+  // макету (тонкая линия-стебель + несколько листьев вдоль неё), вместо
+  // эмодзи "🌿". Координаты листьев посчитаны (не нарисованы на глаз) —
+  // предыдущие попытки руками привели к нечитаемой кляксе, см. отчёт.
+  var ICON_SPRIG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M12.5 21 Q11.85 12.75 10 4.5"/><path d="M11.90 15.22 Q13.86 14.89 14.85 13.16 Q12.88 13.50 11.90 15.22 Z"/><path d="M11.55 12.75 Q10.42 11.11 8.43 10.95 Q9.57 12.59 11.55 12.75 Z"/><path d="M11.06 9.78 Q12.82 9.63 13.83 8.18 Q12.07 8.33 11.06 9.78 Z"/><path d="M10.53 6.97 Q9.95 5.64 8.54 5.30 Q9.11 6.64 10.53 6.97 Z"/></svg>';
   // Стандартная, многократно проверенная иконка "шестерёнка" (Feather
   // Icons, settings) — прошлая версия была нарисована вручную и рендерилась
   // неровно (зубцы разного размера/шага), заменена на готовый, точный путь.
@@ -846,7 +853,7 @@
 
   var QUICK_NAV = [
     { screen: "menu", labelKey: "home.qnMenu", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 10h8M8 14h5"/></svg>' },
-    { screen: "club", labelKey: "home.qnClub", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3c-2 2.5-3 4.7-3 6.6A3 3 0 0 0 12 12a3 3 0 0 0 3-3.4C15 7.7 14 5.5 12 3Z"/><path d="M12 12v9"/></svg>' },
+    { screen: "club", labelKey: "home.qnClub", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5.5" cy="9.3" r="1.9"/><path d="M2.3 17 C2.3 13.8 3.6 12 5.5 12 C6.5 12 7.3 12.5 7.8 13.4"/><circle cx="18.5" cy="9.3" r="1.9"/><path d="M21.7 17 C21.7 13.8 20.4 12 18.5 12 C17.5 12 16.7 12.5 16.2 13.4"/><circle cx="12" cy="7.8" r="2.6"/><path d="M7.7 18 C7.7 14 9.4 11.6 12 11.6 C14.6 11.6 16.3 14 16.3 18"/></svg>' },
     { screen: "messages", labelKey: "home.qnMessages", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>' },
     { screen: "profile", labelKey: "home.qnProfile", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.8 4-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>' },
   ];

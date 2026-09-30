@@ -80,11 +80,16 @@ input, textarea, select { font-family: inherit; font-size: 15px; }
 .screen-header:not(.screen-header-center) .screen-header-title { text-align: left; }
 .screen-header.screen-header-center .screen-header-title { text-align: center; }
 .screen-header-logo {
-  font-weight: 700;
-  font-size: 17px;
-  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--ink);
   white-space: nowrap;
+}
+.screen-header-logo span {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.14em;
 }
 .header-icon-btn {
   background: none;
