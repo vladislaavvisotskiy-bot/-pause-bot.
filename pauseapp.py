@@ -489,6 +489,28 @@ async def api_profile_edit(request: web.Request):
     return web.json_response({"ok": True})
 
 
+async def api_account_delete_request(request: web.Request):
+    """Заявка на удаление аккаунта — сам бот НИЧЕГО не удаляет и не
+    трогает данные клиента, только уведомляет админов в Telegram; сам
+    аккаунт/заказы разбираются вручную (та же осторожная логика, что и у
+    "новой точки"/pending-заказов — необратимые вещи админ подтверждает
+    сам, не бот в одно касание)."""
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    bot = request.app.get("bot")
+    if bot and config.ADMIN_IDS:
+        try:
+            await notify_admins(bot, texts.ADMIN_DELETE_ACCOUNT_ALERT.format(
+                name=client.get("name", ""), client_id=client.get("id", ""),
+                contact=client.get("contact", ""),
+            ))
+        except Exception:
+            logger.exception("PAUSE App: не удалось уведомить админов о заявке на удаление аккаунта")
+    return web.json_response({"ok": True})
+
+
 # ---------------------------------------------------------------------------
 # Мои заказы / отмена — та же логика, что handlers/profile.py
 # (my_orders, cancel_order_start/cancel_order_yes).
@@ -743,6 +765,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/profile", api_profile_edit)
     app.router.add_get("/api/notify", api_notify)
     app.router.add_post("/api/notify", api_notify_set)
+    app.router.add_post("/api/account/delete-request", api_account_delete_request)
     app.router.add_get("/api/orders", api_orders)
     app.router.add_post("/api/orders/cancel", api_orders_cancel)
     app.router.add_post("/api/feedback", api_feedback)

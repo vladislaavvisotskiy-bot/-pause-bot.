@@ -561,6 +561,9 @@ p { margin: 0; color: var(--ink-soft); }
 .profile-nav-row-icon { color: var(--ink); flex: 0 0 auto; display: flex; }
 .profile-nav-row-label { flex: 1; font-size: 14.5px; color: var(--ink); }
 .profile-nav-row-chevron { color: var(--ink-soft); flex: 0 0 auto; display: flex; }
+.profile-nav-row-danger .profile-nav-row-icon,
+.profile-nav-row-danger .profile-nav-row-label { color: var(--accent-warm); }
+.lang-row-check { color: var(--accent-warm); flex: 0 0 auto; display: flex; margin-left: auto; }
 .profile-exit-btn { margin-top: 18px; }
 
 .list-row {

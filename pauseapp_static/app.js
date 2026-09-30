@@ -14,8 +14,29 @@
     try { tg.setBackgroundColor("#F4EBDD"); } catch (e) {}
   }
 
+  // -------------------------------------------------------------------
+  // Язык интерфейса — три языка, хранится на устройстве (localStorage,
+  // тот же приём, что и SPLASH_KEY ниже): Mini App открывается в новом
+  // WebView-контексте каждый раз, серверу выбор языка не нужен, только
+  // самому устройству. I18N-словарь и t() — см. ниже, перед первым
+  // экраном, который их использует.
+  // -------------------------------------------------------------------
+  var LANG_KEY = "pauseapp_lang_v1";
+  function getLang() {
+    try {
+      var saved = localStorage.getItem(LANG_KEY);
+      if (saved) return saved;
+    } catch (e) {}
+    return "ru";
+  }
+  function setLang(code) {
+    try { localStorage.setItem(LANG_KEY, code); } catch (e) {}
+    state.lang = code;
+  }
+
   var state = {
     screen: "home",
+    lang: getLang(),
     home: null,          // отметка, что главная уже загружалась (использует profile+menu)
     profile: null,       // {registered, name, phone, zone, point, order_count, club, ...}
     menu: null,           // ответ /api/menu
@@ -24,6 +45,483 @@
     feedFilter: "all",    // "all" | один из config.FEED_POST_TYPES — фильтр экрана CLUB
     messagesFilter: "all", // тот же принцип, отдельный фильтр экрана Послания
   };
+
+  // -------------------------------------------------------------------
+  // Словарь интерфейса — три языка. Переведён только сам интерфейс
+  // (кнопки/заголовки/подсказки/пустые состояния) — реальный контент,
+  // который печатает админ (подпись к меню, посты ленты, послания,
+  // названия сетов вроде "Пауза дня.") НЕ переводится автоматически, это
+  // чужой текст, а не элемент интерфейса. Шаги самого визарда заказа
+  // (корзина/точка/гарнир и т.д.) тоже пока не переведены — сейчас кнопка
+  // "Заказать" никуда не ведёт (см. openSetDetail), переводить сейчас
+  // недоступный клиенту флоу нет смысла — сделаем вместе с включением
+  // самого заказа. Узбекский и английский — мой перевод, стоит проверить
+  // носителем перед тем, как считать финальным.
+  // -------------------------------------------------------------------
+  var I18N = {
+    ru: {
+      "common.currency": "сум", "common.back": "Назад",
+      "nav.home": "Главная", "nav.menu": "Меню", "nav.club": "Pause Club",
+      "nav.messages": "Послания", "nav.profile": "Профиль",
+
+      "splash.tagline1": "more than lunch,", "splash.tagline2": "packed with care",
+      "splash.start": "Начать",
+
+      "access.deniedTitle": "Доступ ограничен",
+      "access.deniedText": "PAUSE App пока открыт только для команды PAUSE.",
+      "access.errorTitle": "Небольшая заминка",
+      "access.errorText": "Не получилось связаться с сервером — потяните экран вниз или откройте приложение заново.",
+      "home.loadError": "Не удалось загрузить данные: {msg}",
+      "home.welcomeName": "Добро пожаловать, {name}",
+      "home.welcome": "Добро пожаловать",
+      "home.tagline": "Вкусные обеды. Забота о тебе.",
+      "home.notify": "Уведомления",
+      "home.notifySoon": "Уведомления — скоро добавим",
+      "home.todayMenu": "Сегодняшнее меню",
+      "home.todayMenuOpen": "На {date} — открыт приём заказов",
+      "home.menuToday": "Меню сегодня",
+      "home.cutoffClosed": "Приём заказов на сегодня закрыт",
+      "home.cominSoon": "Готовим, скоро опубликуем",
+      "home.inMenuToday": "Сегодня в меню",
+      "home.qnMenu": "Меню", "home.qnClub": "Pause Club", "home.qnMessages": "Послания", "home.qnProfile": "Профиль",
+
+      "menu.title": "Меню", "menu.sort": "Сортировка", "menu.sortSoon": "Сортировка — скоро добавим",
+      "menu.loadErr": "Не получилось загрузить меню — временная проблема связи.",
+      "menu.retry": "Повторить",
+      "menu.soonTitle": "Меню скоро будет",
+      "menu.soonText": "Мы ещё готовим сегодняшнее меню — загляните чуть позже 🌿",
+      "menu.closedTitle": "Приём на сегодня закрыт",
+      "menu.closedText": "Прием заказов на сегодня закрылся в {time}. Загляните завтра — мы уже готовим следующее меню.",
+      "menu.hero": "Выбери свою паузу на сегодня",
+      "menu.onDate": "На {date}",
+      "menu.all": "Все",
+      "menu.emptyCategory": "В этой категории пока пусто.",
+      "menu.from": "от {sum}",
+      "menu.withGarnish": "с выбором гарнира",
+      "menu.favSoon": "Избранное — скоро добавим",
+      "menu.garnishNextStep": "Гарнир выбирается на следующем шаге",
+      "menu.order": "Заказать",
+      "menu.orderUnavailable": "Сейчас недоступно для заказа",
+
+      "club.title": "Pause Club", "club.more": "Ещё", "club.moreSoon": "Скоро добавим",
+      "club.empty": "Пока здесь тихо — самое время опубликовать первый пост.",
+      "club.deleteConfirm": "Удалить этот пост из ленты?",
+      "club.deleteYes": "Да, удалить",
+      "club.deleted": "Пост удалён",
+      "club.deleteFailed": "Не удалось удалить: {msg}",
+      "club.compose": "Опубликовать",
+      "club.newPost": "Новый пост",
+      "club.captionOptional": "Подпись (необязательно)",
+      "club.postText": "Текст поста",
+      "club.uploadHint": "Нажмите, чтобы выбрать фото (можно несколько)",
+      "club.publish": "Опубликовать",
+      "club.publishing": "Публикую…",
+      "club.needPhoto": "Выберите хотя бы одно фото",
+      "club.needText": "Напишите текст поста",
+      "club.published": "Опубликовано",
+      "club.publishFailed": "Не удалось опубликовать: {msg}",
+      "club.loadFailed": "Не удалось загрузить ленту — потяните вниз, чтобы попробовать снова.",
+      "feed.type.photo": "Фото", "feed.type.message": "Послание", "feed.type.announcement": "Анонс",
+      "feed.type.giveaway": "Розыгрыш", "feed.type.news": "Новость",
+
+      "messages.title": "Послания",
+      "messages.empty": "Пока никаких посланий нет.",
+      "messages.loadFailed": "Не удалось загрузить послания — потяните вниз, чтобы попробовать снова.",
+
+      "profile.title": "Профиль", "profile.settings": "Настройки",
+      "profile.loadFailed": "Не удалось загрузить профиль: {msg}",
+      "profile.notRegistered": "Вы ещё не зарегистрированы. Наберите /start в чате с ботом, чтобы завести профиль.",
+      "profile.noName": "Без имени",
+      "profile.member": "Участник",
+      "profile.toNextLevel": "До статуса «{emoji} {label}» осталось заказов: {left}",
+      "profile.topLevel": "Вы уже на высшем уровне PAUSE Club 🎉",
+      "profile.statOrders": "заказов", "profile.statPromo": "акции", "profile.statPosts": "постов",
+      "profile.myOrders": "Мои заказы", "profile.favorites": "Избранное", "profile.notifications": "Уведомления",
+      "profile.bonuses": "Бонусы и промокоды", "profile.support": "Поддержка",
+      "profile.favSoon": "Избранное — скоро добавим",
+      "profile.bonusesSoon": "Бонусы и промокоды — скоро добавим",
+      "profile.logout": "Выйти",
+
+      "settings.title": "Настройки",
+      "settings.editProfile": "Редактировать профиль",
+      "settings.deliveryAddress": "Адрес доставки",
+      "settings.language": "Язык",
+      "settings.deleteProfile": "Удалить профиль",
+      "settings.deleteConfirm": "Удалить профиль в PAUSE App? Заявка уйдёт администратору — сам аккаунт бот не удаляет автоматически.",
+      "settings.deleteYes": "Да, удалить",
+      "settings.deleteSubmitted": "Заявка передана на обработку",
+      "settings.deleteFailed": "Не удалось отправить заявку: {msg}",
+
+      "editProfile.title": "Редактировать профиль",
+      "editProfile.name": "Имя", "editProfile.phone": "Телефон",
+      "editProfile.save": "Сохранить", "editProfile.saved": "Сохранено",
+      "editProfile.saveFailed": "Не удалось сохранить: {msg}",
+
+      "address.title": "Адрес доставки",
+      "address.point": "Точка доставки", "address.setPoint": "Указать точку",
+      "address.save": "Сохранить", "address.saved": "Сохранено",
+      "address.pickFirst": "Сначала выберите точку",
+      "address.saveFailed": "Не удалось сохранить: {msg}",
+      "address.zone": "Район", "address.otherZone": "Другой район", "address.otherPoint": "Другая точка",
+      "address.newPoint": "Новая точка", "address.newPointField": "Адрес / название точки",
+      "address.newZoneField": "Район", "address.done": "Готово", "address.fillBoth": "Заполните район и точку",
+
+      "lang.title": "Язык",
+
+      "orders.title": "Мои заказы",
+      "orders.empty": "Заказов пока не было.",
+      "orders.allPaid": "Ты умничка, у тебя всё оплачено 🤍",
+      "orders.reviewing": "На проверке",
+      "orders.canceled": "Отменён", "orders.complete": "Завершён", "orders.preparing": "Готовится",
+      "orders.paid": "Оплачено", "orders.unpaid": "Не оплачено", "orders.all": "Все",
+      "orders.debtTag": " (в долг)",
+      "orders.cancel": "Отменить",
+      "orders.cancelConfirm": "Отменить заказ на {date}?",
+      "orders.cancelYes": "Да, отменить",
+      "orders.canceledToast": "Заказ отменён",
+      "orders.cancelFailed": "Не удалось отменить заказ",
+      "orders.cancelTooLate": "Уже поздно для самостоятельной отмены — напишите в поддержку.",
+      "orders.cancelCardPending": "Оплата картой уже в обработке — отмена через поддержку.",
+      "orders.review": "★ Отзыв",
+      "orders.debtLine": "Текущий долг: {sum}",
+      "orders.loadFailed": "Не удалось загрузить заказы.",
+
+      "feedback.title": "Отзыв о заказе",
+      "feedback.commentPlaceholder": "Комментарий — необязательно",
+      "feedback.send": "Отправить",
+      "feedback.needSomething": "Поставьте оценку или напишите пару слов",
+      "feedback.thanks": "Спасибо, что рассказали 🤎",
+      "feedback.sendFailed": "Не получилось отправить: {msg}",
+
+      "notify.title": "Уведомления",
+      "notify.morningTitle": "Утреннее напоминание",
+      "notify.morningSub": "Тёплое сообщение утром с напоминанием заказать",
+      "notify.menuTitle": "О публикации меню",
+      "notify.menuSub": "Сообщение, когда на сегодня опубликовано новое меню",
+      "notify.on": "Включено", "notify.off": "Отключено",
+      "notify.saveFailed": "Не удалось сохранить",
+      "notify.loadFailed": "Не удалось загрузить настройки уведомлений.",
+      "notify.footnote": "Время рассылок пока общее для всех — своё время для каждого добавим отдельно, если понадобится.",
+
+      "support.title": "Поддержка",
+      "support.intro": "С любыми предложениями или проблемами обращайтесь сюда — мы всегда на связи и рады помочь.",
+      "support.social": "Соцсети", "support.contacts": "Контакты",
+      "support.telegram": "Telegram", "support.instagram": "Instagram", "support.phone": "Телефон",
+    },
+
+    uz: {
+      "common.currency": "so'm", "common.back": "Orqaga",
+      "nav.home": "Bosh sahifa", "nav.menu": "Menyu", "nav.club": "Pause Club",
+      "nav.messages": "Xabarlar", "nav.profile": "Profil",
+
+      "splash.tagline1": "more than lunch,", "splash.tagline2": "packed with care",
+      "splash.start": "Boshlash",
+
+      "access.deniedTitle": "Kirish cheklangan",
+      "access.deniedText": "PAUSE App hozircha faqat PAUSE jamoasi uchun ochiq.",
+      "access.errorTitle": "Kichik uzilish",
+      "access.errorText": "Server bilan bog'lanib bo'lmadi — ekranni pastga torting yoki ilovani qayta oching.",
+      "home.loadError": "Ma'lumotlarni yuklab bo'lmadi: {msg}",
+      "home.welcomeName": "Xush kelibsiz, {name}",
+      "home.welcome": "Xush kelibsiz",
+      "home.tagline": "Mazali tushliklar. Sizga g'amxo'rlik.",
+      "home.notify": "Bildirishnomalar",
+      "home.notifySoon": "Bildirishnomalar — tez orada qo'shamiz",
+      "home.todayMenu": "Bugungi menyu",
+      "home.todayMenuOpen": "{date} uchun — buyurtmalar qabul qilinmoqda",
+      "home.menuToday": "Bugungi menyu",
+      "home.cutoffClosed": "Bugungi buyurtmalar qabul qilish yopildi",
+      "home.cominSoon": "Tayyorlanmoqda, tez orada e'lon qilamiz",
+      "home.inMenuToday": "Bugungi menyuda",
+      "home.qnMenu": "Menyu", "home.qnClub": "Pause Club", "home.qnMessages": "Xabarlar", "home.qnProfile": "Profil",
+
+      "menu.title": "Menyu", "menu.sort": "Saralash", "menu.sortSoon": "Saralash — tez orada qo'shamiz",
+      "menu.loadErr": "Menyuni yuklab bo'lmadi — vaqtinchalik aloqa muammosi.",
+      "menu.retry": "Qayta urinish",
+      "menu.soonTitle": "Menyu tez orada",
+      "menu.soonText": "Bugungi menyuni hali tayyorlamoqdamiz — birozdan keyin qarang 🌿",
+      "menu.closedTitle": "Bugungi qabul yopiq",
+      "menu.closedText": "Bugungi buyurtmalar qabul qilish {time} da yopildi. Ertaga kiring — biz allaqachon keyingi menyuni tayyorlaymiz.",
+      "menu.hero": "Bugungi pauzangizni tanlang",
+      "menu.onDate": "{date} uchun",
+      "menu.all": "Barchasi",
+      "menu.emptyCategory": "Bu toifada hozircha bo'sh.",
+      "menu.from": "{sum} dan",
+      "menu.withGarnish": "garnir tanlovi bilan",
+      "menu.favSoon": "Sevimlilar — tez orada qo'shamiz",
+      "menu.garnishNextStep": "Garnir keyingi bosqichda tanlanadi",
+      "menu.order": "Buyurtma berish",
+      "menu.orderUnavailable": "Hozircha buyurtma qabul qilinmayapti",
+
+      "club.title": "Pause Club", "club.more": "Yana", "club.moreSoon": "Tez orada qo'shamiz",
+      "club.empty": "Hozircha bu yerda jimjit — birinchi postni joylash uchun ayni payt.",
+      "club.deleteConfirm": "Bu postni lentadan o'chirasizmi?",
+      "club.deleteYes": "Ha, o'chirish",
+      "club.deleted": "Post o'chirildi",
+      "club.deleteFailed": "O'chirib bo'lmadi: {msg}",
+      "club.compose": "Joylash",
+      "club.newPost": "Yangi post",
+      "club.captionOptional": "Izoh (ixtiyoriy)",
+      "club.postText": "Post matni",
+      "club.uploadHint": "Rasm tanlash uchun bosing (bir nechta bo'lishi mumkin)",
+      "club.publish": "Joylash",
+      "club.publishing": "Joylanmoqda…",
+      "club.needPhoto": "Kamida bitta rasm tanlang",
+      "club.needText": "Post matnini yozing",
+      "club.published": "Joylandi",
+      "club.publishFailed": "Joylab bo'lmadi: {msg}",
+      "club.loadFailed": "Lentani yuklab bo'lmadi — qayta urinish uchun pastga torting.",
+      "feed.type.photo": "Rasm", "feed.type.message": "Xabar", "feed.type.announcement": "E'lon",
+      "feed.type.giveaway": "Sovg'a o'yini", "feed.type.news": "Yangilik",
+
+      "messages.title": "Xabarlar",
+      "messages.empty": "Hozircha xabarlar yo'q.",
+      "messages.loadFailed": "Xabarlarni yuklab bo'lmadi — qayta urinish uchun pastga torting.",
+
+      "profile.title": "Profil", "profile.settings": "Sozlamalar",
+      "profile.loadFailed": "Profilni yuklab bo'lmadi: {msg}",
+      "profile.notRegistered": "Siz hali ro'yxatdan o'tmagansiz. Profil ochish uchun botga /start yozing.",
+      "profile.noName": "Ismsiz",
+      "profile.member": "A'zo",
+      "profile.toNextLevel": "«{emoji} {label}» darajasigacha qolgan buyurtmalar: {left}",
+      "profile.topLevel": "Siz allaqachon PAUSE Club eng yuqori darajasidasiz 🎉",
+      "profile.statOrders": "buyurtma", "profile.statPromo": "aksiya", "profile.statPosts": "post",
+      "profile.myOrders": "Buyurtmalarim", "profile.favorites": "Sevimlilar", "profile.notifications": "Bildirishnomalar",
+      "profile.bonuses": "Bonus va promokodlar", "profile.support": "Yordam",
+      "profile.favSoon": "Sevimlilar — tez orada qo'shamiz",
+      "profile.bonusesSoon": "Bonus va promokodlar — tez orada qo'shamiz",
+      "profile.logout": "Chiqish",
+
+      "settings.title": "Sozlamalar",
+      "settings.editProfile": "Profilni tahrirlash",
+      "settings.deliveryAddress": "Yetkazib berish manzili",
+      "settings.language": "Til",
+      "settings.deleteProfile": "Profilni o'chirish",
+      "settings.deleteConfirm": "PAUSE App'dagi profilingizni o'chirasizmi? So'rov administratorga yuboriladi — bot hisobni avtomatik o'chirmaydi.",
+      "settings.deleteYes": "Ha, o'chirish",
+      "settings.deleteSubmitted": "So'rov ko'rib chiqish uchun yuborildi",
+      "settings.deleteFailed": "So'rovni yuborib bo'lmadi: {msg}",
+
+      "editProfile.title": "Profilni tahrirlash",
+      "editProfile.name": "Ism", "editProfile.phone": "Telefon",
+      "editProfile.save": "Saqlash", "editProfile.saved": "Saqlandi",
+      "editProfile.saveFailed": "Saqlab bo'lmadi: {msg}",
+
+      "address.title": "Yetkazib berish manzili",
+      "address.point": "Yetkazib berish nuqtasi", "address.setPoint": "Nuqtani belgilash",
+      "address.save": "Saqlash", "address.saved": "Saqlandi",
+      "address.pickFirst": "Avval nuqtani tanlang",
+      "address.saveFailed": "Saqlab bo'lmadi: {msg}",
+      "address.zone": "Tuman", "address.otherZone": "Boshqa tuman", "address.otherPoint": "Boshqa nuqta",
+      "address.newPoint": "Yangi nuqta", "address.newPointField": "Manzil / nuqta nomi",
+      "address.newZoneField": "Tuman", "address.done": "Tayyor", "address.fillBoth": "Tuman va nuqtani to'ldiring",
+
+      "lang.title": "Til",
+
+      "orders.title": "Buyurtmalarim",
+      "orders.empty": "Hozircha buyurtmalar bo'lmagan.",
+      "orders.allPaid": "Ajoyibsiz, hamma narsa to'langan 🤍",
+      "orders.reviewing": "Tekshirilmoqda",
+      "orders.canceled": "Bekor qilindi", "orders.complete": "Yakunlandi", "orders.preparing": "Tayyorlanmoqda",
+      "orders.paid": "To'langan", "orders.unpaid": "To'lanmagan", "orders.all": "Barchasi",
+      "orders.debtTag": " (nasiya)",
+      "orders.cancel": "Bekor qilish",
+      "orders.cancelConfirm": "{date} sanasidagi buyurtmani bekor qilasizmi?",
+      "orders.cancelYes": "Ha, bekor qilish",
+      "orders.canceledToast": "Buyurtma bekor qilindi",
+      "orders.cancelFailed": "Buyurtmani bekor qilib bo'lmadi",
+      "orders.cancelTooLate": "Mustaqil bekor qilish uchun juda kech — yordam xizmatiga yozing.",
+      "orders.cancelCardPending": "Karta orqali to'lov hali ko'rib chiqilmoqda — bekor qilish yordam xizmati orqali.",
+      "orders.review": "★ Sharh",
+      "orders.debtLine": "Joriy qarz: {sum}",
+      "orders.loadFailed": "Buyurtmalarni yuklab bo'lmadi.",
+
+      "feedback.title": "Buyurtma haqida sharh",
+      "feedback.commentPlaceholder": "Izoh — ixtiyoriy",
+      "feedback.send": "Yuborish",
+      "feedback.needSomething": "Baho qo'ying yoki bir necha so'z yozing",
+      "feedback.thanks": "Fikringiz uchun rahmat 🤎",
+      "feedback.sendFailed": "Yuborib bo'lmadi: {msg}",
+
+      "notify.title": "Bildirishnomalar",
+      "notify.morningTitle": "Ertalabki eslatma",
+      "notify.morningSub": "Buyurtma berish haqida ertalabki iliq xabar",
+      "notify.menuTitle": "Menyu e'loni haqida",
+      "notify.menuSub": "Bugungi yangi menyu e'lon qilinganda xabar",
+      "notify.on": "Yoqildi", "notify.off": "O'chirildi",
+      "notify.saveFailed": "Saqlab bo'lmadi",
+      "notify.loadFailed": "Bildirishnoma sozlamalarini yuklab bo'lmadi.",
+      "notify.footnote": "Xabarnomalar vaqti hozircha hamma uchun umumiy — kerak bo'lsa, har bir kishi uchun alohida vaqt qo'shamiz.",
+
+      "support.title": "Yordam",
+      "support.intro": "Har qanday taklif yoki muammo bilan shu yerga murojaat qiling — biz doim aloqadamiz va yordam berishdan xursandmiz.",
+      "support.social": "Ijtimoiy tarmoqlar", "support.contacts": "Aloqa",
+      "support.telegram": "Telegram", "support.instagram": "Instagram", "support.phone": "Telefon",
+    },
+
+    en: {
+      "common.currency": "UZS", "common.back": "Back",
+      "nav.home": "Home", "nav.menu": "Menu", "nav.club": "Pause Club",
+      "nav.messages": "Messages", "nav.profile": "Profile",
+
+      "splash.tagline1": "more than lunch,", "splash.tagline2": "packed with care",
+      "splash.start": "Start",
+
+      "access.deniedTitle": "Access restricted",
+      "access.deniedText": "PAUSE App is currently open only to the PAUSE team.",
+      "access.errorTitle": "Small hiccup",
+      "access.errorText": "Couldn't reach the server — pull down to refresh or reopen the app.",
+      "home.loadError": "Couldn't load data: {msg}",
+      "home.welcomeName": "Welcome, {name}",
+      "home.welcome": "Welcome",
+      "home.tagline": "Tasty lunches. Care for you.",
+      "home.notify": "Notifications",
+      "home.notifySoon": "Notifications — coming soon",
+      "home.todayMenu": "Today's menu",
+      "home.todayMenuOpen": "For {date} — orders are open",
+      "home.menuToday": "Today's menu",
+      "home.cutoffClosed": "Orders for today are closed",
+      "home.cominSoon": "Preparing, publishing soon",
+      "home.inMenuToday": "In today's menu",
+      "home.qnMenu": "Menu", "home.qnClub": "Pause Club", "home.qnMessages": "Messages", "home.qnProfile": "Profile",
+
+      "menu.title": "Menu", "menu.sort": "Sort", "menu.sortSoon": "Sorting — coming soon",
+      "menu.loadErr": "Couldn't load the menu — a temporary connection issue.",
+      "menu.retry": "Retry",
+      "menu.soonTitle": "Menu coming soon",
+      "menu.soonText": "We're still preparing today's menu — check back shortly 🌿",
+      "menu.closedTitle": "Orders closed for today",
+      "menu.closedText": "Orders for today closed at {time}. Come back tomorrow — we're already preparing the next menu.",
+      "menu.hero": "Choose your pause for today",
+      "menu.onDate": "For {date}",
+      "menu.all": "All",
+      "menu.emptyCategory": "Nothing in this category yet.",
+      "menu.from": "from {sum}",
+      "menu.withGarnish": "with a side choice",
+      "menu.favSoon": "Favorites — coming soon",
+      "menu.garnishNextStep": "The side is chosen on the next step",
+      "menu.order": "Order",
+      "menu.orderUnavailable": "Ordering isn't available right now",
+
+      "club.title": "Pause Club", "club.more": "More", "club.moreSoon": "Coming soon",
+      "club.empty": "It's quiet here — a great time to publish the first post.",
+      "club.deleteConfirm": "Delete this post from the feed?",
+      "club.deleteYes": "Yes, delete",
+      "club.deleted": "Post deleted",
+      "club.deleteFailed": "Couldn't delete: {msg}",
+      "club.compose": "Publish",
+      "club.newPost": "New post",
+      "club.captionOptional": "Caption (optional)",
+      "club.postText": "Post text",
+      "club.uploadHint": "Tap to choose photos (multiple allowed)",
+      "club.publish": "Publish",
+      "club.publishing": "Publishing…",
+      "club.needPhoto": "Choose at least one photo",
+      "club.needText": "Write the post text",
+      "club.published": "Published",
+      "club.publishFailed": "Couldn't publish: {msg}",
+      "club.loadFailed": "Couldn't load the feed — pull down to try again.",
+      "feed.type.photo": "Photo", "feed.type.message": "Message", "feed.type.announcement": "Announcement",
+      "feed.type.giveaway": "Giveaway", "feed.type.news": "News",
+
+      "messages.title": "Messages",
+      "messages.empty": "No messages yet.",
+      "messages.loadFailed": "Couldn't load messages — pull down to try again.",
+
+      "profile.title": "Profile", "profile.settings": "Settings",
+      "profile.loadFailed": "Couldn't load profile: {msg}",
+      "profile.notRegistered": "You're not registered yet. Send /start in the bot chat to create a profile.",
+      "profile.noName": "No name",
+      "profile.member": "Member",
+      "profile.toNextLevel": "{left} orders left to «{emoji} {label}»",
+      "profile.topLevel": "You're already at the top PAUSE Club level 🎉",
+      "profile.statOrders": "orders", "profile.statPromo": "promos", "profile.statPosts": "posts",
+      "profile.myOrders": "My orders", "profile.favorites": "Favorites", "profile.notifications": "Notifications",
+      "profile.bonuses": "Bonuses & promo codes", "profile.support": "Support",
+      "profile.favSoon": "Favorites — coming soon",
+      "profile.bonusesSoon": "Bonuses & promo codes — coming soon",
+      "profile.logout": "Log out",
+
+      "settings.title": "Settings",
+      "settings.editProfile": "Edit profile",
+      "settings.deliveryAddress": "Delivery address",
+      "settings.language": "Language",
+      "settings.deleteProfile": "Delete profile",
+      "settings.deleteConfirm": "Delete your PAUSE App profile? The request goes to an admin — the bot doesn't delete the account automatically.",
+      "settings.deleteYes": "Yes, delete",
+      "settings.deleteSubmitted": "Request sent for processing",
+      "settings.deleteFailed": "Couldn't send the request: {msg}",
+
+      "editProfile.title": "Edit profile",
+      "editProfile.name": "Name", "editProfile.phone": "Phone",
+      "editProfile.save": "Save", "editProfile.saved": "Saved",
+      "editProfile.saveFailed": "Couldn't save: {msg}",
+
+      "address.title": "Delivery address",
+      "address.point": "Delivery point", "address.setPoint": "Set a point",
+      "address.save": "Save", "address.saved": "Saved",
+      "address.pickFirst": "Choose a point first",
+      "address.saveFailed": "Couldn't save: {msg}",
+      "address.zone": "Area", "address.otherZone": "Other area", "address.otherPoint": "Other point",
+      "address.newPoint": "New point", "address.newPointField": "Address / point name",
+      "address.newZoneField": "Area", "address.done": "Done", "address.fillBoth": "Fill in the area and the point",
+
+      "lang.title": "Language",
+
+      "orders.title": "My orders",
+      "orders.empty": "No orders yet.",
+      "orders.allPaid": "You're all set — everything's paid 🤍",
+      "orders.reviewing": "Under review",
+      "orders.canceled": "Canceled", "orders.complete": "Completed", "orders.preparing": "Preparing",
+      "orders.paid": "Paid", "orders.unpaid": "Unpaid", "orders.all": "All",
+      "orders.debtTag": " (on credit)",
+      "orders.cancel": "Cancel",
+      "orders.cancelConfirm": "Cancel the order for {date}?",
+      "orders.cancelYes": "Yes, cancel",
+      "orders.canceledToast": "Order canceled",
+      "orders.cancelFailed": "Couldn't cancel the order",
+      "orders.cancelTooLate": "Too late to cancel yourself — please contact support.",
+      "orders.cancelCardPending": "Card payment is already being reviewed — cancel via support.",
+      "orders.review": "★ Review",
+      "orders.debtLine": "Current debt: {sum}",
+      "orders.loadFailed": "Couldn't load orders.",
+
+      "feedback.title": "Order review",
+      "feedback.commentPlaceholder": "Comment — optional",
+      "feedback.send": "Send",
+      "feedback.needSomething": "Give a rating or write a few words",
+      "feedback.thanks": "Thanks for sharing 🤎",
+      "feedback.sendFailed": "Couldn't send: {msg}",
+
+      "notify.title": "Notifications",
+      "notify.morningTitle": "Morning reminder",
+      "notify.morningSub": "A warm morning message reminding you to order",
+      "notify.menuTitle": "Menu published",
+      "notify.menuSub": "A message when today's new menu is published",
+      "notify.on": "Enabled", "notify.off": "Disabled",
+      "notify.saveFailed": "Couldn't save",
+      "notify.loadFailed": "Couldn't load notification settings.",
+      "notify.footnote": "Notification times are still the same for everyone — we'll add per-person timing separately if needed.",
+
+      "support.title": "Support",
+      "support.intro": "For any suggestions or issues, reach out here — we're always around and happy to help.",
+      "support.social": "Social", "support.contacts": "Contacts",
+      "support.telegram": "Telegram", "support.instagram": "Instagram", "support.phone": "Phone",
+    },
+  };
+
+  function t(key, vars) {
+    var dict = I18N[state.lang] || I18N.ru;
+    var str = (key in dict) ? dict[key] : ((key in I18N.ru) ? I18N.ru[key] : key);
+    if (vars) {
+      Object.keys(vars).forEach(function (k) {
+        str = str.split("{" + k + "}").join(vars[k]);
+      });
+    }
+    return str;
+  }
+
+  var ICON_LANG_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 
   // -------------------------------------------------------------------
   // API
@@ -90,7 +588,7 @@
   }
 
   function fmtSum(n) {
-    return (n || 0).toLocaleString("ru-RU") + " сум";
+    return (n || 0).toLocaleString("ru-RU") + " " + t("common.currency");
   }
 
   function initials(name) {
@@ -171,7 +669,7 @@
     var left = el("div", "screen-header-side screen-header-left");
     if (opts.back) {
       var backBtn = el("button", "header-icon-btn", ICON_BACK);
-      backBtn.setAttribute("aria-label", "Назад");
+      backBtn.setAttribute("aria-label", t("common.back"));
       backBtn.addEventListener("click", function () { haptic("select"); opts.back(); });
       left.appendChild(backBtn);
     } else if (opts.logo) {
@@ -341,10 +839,10 @@
   // -------------------------------------------------------------------
 
   var QUICK_NAV = [
-    { screen: "menu", label: "Меню", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 10h8M8 14h5"/></svg>' },
-    { screen: "club", label: "Pause Club", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3c-2 2.5-3 4.7-3 6.6A3 3 0 0 0 12 12a3 3 0 0 0 3-3.4C15 7.7 14 5.5 12 3Z"/><path d="M12 12v9"/></svg>' },
-    { screen: "messages", label: "Послания", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>' },
-    { screen: "profile", label: "Профиль", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.8 4-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>' },
+    { screen: "menu", labelKey: "home.qnMenu", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 10h8M8 14h5"/></svg>' },
+    { screen: "club", labelKey: "home.qnClub", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3c-2 2.5-3 4.7-3 6.6A3 3 0 0 0 12 12a3 3 0 0 0 3-3.4C15 7.7 14 5.5 12 3Z"/><path d="M12 12v9"/></svg>' },
+    { screen: "messages", labelKey: "home.qnMessages", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>' },
+    { screen: "profile", labelKey: "home.qnProfile", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.8 4-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>' },
   ];
 
   function loadHome() {
@@ -359,14 +857,14 @@
       renderHomeScreen();
     }).catch(function (err) {
       root.innerHTML = "";
-      root.appendChild(el("div", "empty-note", "Не удалось загрузить данные: " + err.message));
+      root.appendChild(el("div", "empty-note", t("home.loadError", { msg: err.message })));
     });
   }
 
   function renderHomeScreen() {
     screenHeader("home-header", {
       logo: true,
-      right: { icon: ICON_BELL_HDR, label: "Уведомления", onClick: function () { toast("Уведомления — скоро добавим"); } },
+      right: { icon: ICON_BELL_HDR, label: t("home.notify"), onClick: function () { toast(t("home.notifySoon")); } },
     });
     var root = document.getElementById("home-root");
     root.innerHTML = "";
@@ -376,8 +874,8 @@
     var firstName = (p && p.registered && p.name) ? p.name.trim().split(/\s+/)[0] : "";
     var hero = el("div", "home-hero");
     hero.innerHTML =
-      '<h2>' + (firstName ? "Добро пожаловать, " + escapeHtml(firstName) : "Добро пожаловать") + '</h2>' +
-      '<p>Вкусные обеды. Забота о тебе.</p>';
+      '<h2>' + (firstName ? t("home.welcomeName", { name: escapeHtml(firstName) }) : t("home.welcome")) + '</h2>' +
+      '<p>' + t("home.tagline") + '</p>';
     root.appendChild(hero);
 
     var promo = el("div", "card home-promo");
@@ -385,20 +883,20 @@
     if (m.published && !m.cutoff_passed) {
       promo.innerHTML =
         '<div class="home-promo-icon">' + ICON_LEAF + '</div>' +
-        '<div><div class="home-promo-title">Сегодняшнее меню</div>' +
-        '<div class="home-promo-sub">На ' + escapeHtml(m.date || "") + ' — открыт приём заказов</div></div>' +
+        '<div><div class="home-promo-title">' + t("home.todayMenu") + '</div>' +
+        '<div class="home-promo-sub">' + t("home.todayMenuOpen", { date: escapeHtml(m.date || "") }) + '</div></div>' +
         '<div class="home-promo-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg></div>';
     } else {
       promo.innerHTML =
         '<div class="home-promo-icon">' + ICON_CLOCK + '</div>' +
-        '<div><div class="home-promo-title">Меню сегодня</div>' +
-        '<div class="home-promo-sub">' + (m.published ? "Приём заказов на сегодня закрыт" : "Готовим, скоро опубликуем") + '</div></div>';
+        '<div><div class="home-promo-title">' + t("home.menuToday") + '</div>' +
+        '<div class="home-promo-sub">' + (m.published ? t("home.cutoffClosed") : t("home.cominSoon")) + '</div></div>';
     }
     root.appendChild(promo);
 
     var quickRow = el("div", "home-quick-row");
     QUICK_NAV.forEach(function (item) {
-      var btn = el("button", "home-quick-item", item.icon + "<span>" + item.label + "</span>");
+      var btn = el("button", "home-quick-item", item.icon + "<span>" + t(item.labelKey) + "</span>");
       btn.addEventListener("click", function () { haptic("select"); showScreen(item.screen); });
       quickRow.appendChild(btn);
     });
@@ -410,7 +908,7 @@
     // же самое сегодняшнее меню, что и на вкладке Меню (первые несколько
     // позиций), той же самой карточкой (см. buildMenuSetCard).
     if (m.published && m.sets && m.sets.length) {
-      root.appendChild(el("div", "profile-section-title", "Сегодня в меню"));
+      root.appendChild(el("div", "profile-section-title", t("home.inMenuToday")));
       var list = el("div", "menu-set-grid");
       m.sets.slice(0, 3).forEach(function (s) { list.appendChild(buildMenuSetCard(s)); });
       root.appendChild(list);
@@ -429,8 +927,8 @@
       renderMenuScreen();
     }).catch(function (err) {
       root.innerHTML = "";
-      root.appendChild(el("div", "menu-state", "<p>Не получилось загрузить меню — временная проблема связи.</p>"));
-      var retry = el("button", "btn-ghost", "Повторить");
+      root.appendChild(el("div", "menu-state", "<p>" + t("menu.loadErr") + "</p>"));
+      var retry = el("button", "btn-ghost", t("menu.retry"));
       retry.style.marginTop = "14px";
       retry.addEventListener("click", loadMenu);
       root.appendChild(retry);
@@ -450,32 +948,32 @@
   function renderMenuScreen() {
     screenHeader("menu-header", {
       back: function () { showScreen("home"); },
-      title: "Меню",
+      title: t("menu.title"),
       center: true,
-      right: { icon: ICON_SLIDERS, label: "Сортировка", onClick: function () { toast("Сортировка — скоро добавим"); } },
+      right: { icon: ICON_SLIDERS, label: t("menu.sort"), onClick: function () { toast(t("menu.sortSoon")); } },
     });
     var root = document.getElementById("menu-root");
     root.innerHTML = "";
     var data = state.menu;
 
     if (!data.published) {
-      root.appendChild(menuStateBlock(ICON_LEAF, "Меню скоро будет", "Мы ещё готовим сегодняшнее меню — загляните чуть позже 🌿"));
+      root.appendChild(menuStateBlock(ICON_LEAF, t("menu.soonTitle"), t("menu.soonText")));
       return;
     }
 
     if (data.cutoff_passed) {
-      root.appendChild(menuStateBlock(ICON_CLOCK, "Приём на сегодня закрыт", "Прием заказов на сегодня закрылся в " + data.cutoff_time + ". Загляните завтра — мы уже готовим следующее меню."));
+      root.appendChild(menuStateBlock(ICON_CLOCK, t("menu.closedTitle"), t("menu.closedText", { time: data.cutoff_time })));
       return;
     }
 
     if (data.caption) {
-      var dateP = el("div", "pill gold menu-date-pill", "На " + (data.date || ""));
+      var dateP = el("div", "pill gold menu-date-pill", t("menu.onDate", { date: escapeHtml(data.date || "") }));
       root.appendChild(dateP);
       root.appendChild(el("div", "card menu-caption", escapeHtml(data.caption)));
     }
 
     var hero = el("div", "menu-hero");
-    hero.appendChild(el("h2", null, "Выбери свою паузу на сегодня"));
+    hero.appendChild(el("h2", null, t("menu.hero")));
     root.appendChild(hero);
 
     renderMenuCategoryChips(root);
@@ -499,7 +997,7 @@
     // позже"), чтобы не рисовать один бессмысленный чип "Все".
     if (!categories.length) return;
     var row = el("div", "feed-filters menu-category-chips");
-    var allChip = el("button", "filter-chip" + (state.menuCategory === "all" ? " active" : ""), "Все");
+    var allChip = el("button", "filter-chip" + (state.menuCategory === "all" ? " active" : ""), t("menu.all"));
     allChip.addEventListener("click", function () { state.menuCategory = "all"; renderMenuScreen(); });
     row.appendChild(allChip);
     categories.forEach(function (c) {
@@ -515,7 +1013,7 @@
       return state.menuCategory === "all" || (s.category || "") === state.menuCategory;
     });
     if (!sets.length) {
-      root.appendChild(el("div", "menu-state", "<p>В этой категории пока пусто.</p>"));
+      root.appendChild(el("div", "menu-state", "<p>" + t("menu.emptyCategory") + "</p>"));
       return;
     }
     var grid = el("div", "menu-set-grid");
@@ -542,10 +1040,10 @@
     body.appendChild(el("div", "menu-set-card-name", escapeHtml(s.display_name)));
     if (s.is_variant_group) {
       var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
-      body.appendChild(el("div", "menu-set-card-price", "от " + fmtSum(minP)));
+      body.appendChild(el("div", "menu-set-card-price", t("menu.from", { sum: fmtSum(minP) })));
     } else {
       body.appendChild(el("div", "menu-set-card-price", fmtSum(s.price)));
-      if (s.has_garnish) body.appendChild(el("div", "menu-set-card-note", "с выбором гарнира"));
+      if (s.has_garnish) body.appendChild(el("div", "menu-set-card-note", t("menu.withGarnish")));
     }
     card.appendChild(body);
     card.appendChild(el("div", "menu-set-card-chevron", '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>'));
@@ -572,17 +1070,17 @@
       var favBtn = el("button", "set-detail-fav", ICON_HEART);
       // "Избранное" в системе пока нет (см. отчёт) — честная заглушка,
       // а не притворяющаяся рабочей кнопка.
-      favBtn.addEventListener("click", function (e) { e.stopPropagation(); toast("Избранное — скоро добавим"); });
+      favBtn.addEventListener("click", function (e) { e.stopPropagation(); toast(t("menu.favSoon")); });
       body.appendChild(favBtn);
 
       var wrap = el("div", "set-detail-body");
       wrap.appendChild(el("h2", "wizard-title", s.display_name));
       if (s.is_variant_group) {
         var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
-        wrap.appendChild(el("div", "set-detail-price", "от " + fmtSum(minP)));
+        wrap.appendChild(el("div", "set-detail-price", t("menu.from", { sum: fmtSum(minP) })));
       } else {
         wrap.appendChild(el("div", "set-detail-price", fmtSum(s.price)));
-        if (s.has_garnish) wrap.appendChild(el("div", "set-detail-note", "Гарнир выбирается на следующем шаге"));
+        if (s.has_garnish) wrap.appendChild(el("div", "set-detail-note", t("menu.garnishNextStep")));
       }
       body.appendChild(wrap);
 
@@ -591,8 +1089,8 @@
       // "Заказать" -> уведомление, полноценный визард подключим отдельным
       // шагом). startOrderFromCard ниже уже готов и рабочий — просто не
       // вызывается из этой кнопки, пока владелец не попросит включить.
-      var orderBtn = el("button", "btn-primary wizard-footer-btn", "Заказать");
-      orderBtn.addEventListener("click", function () { toast("Сейчас недоступно для заказа"); });
+      var orderBtn = el("button", "btn-primary wizard-footer-btn", t("menu.order"));
+      orderBtn.addEventListener("click", function () { toast(t("menu.orderUnavailable")); });
       body.appendChild(orderBtn);
     });
   }
@@ -629,10 +1127,7 @@
   // PAUSE CLUB — лента
   // -------------------------------------------------------------------
 
-  var FEED_TYPE_LABELS = {
-    photo: "Фото", message: "Послание", announcement: "Анонс",
-    giveaway: "Розыгрыш", news: "Новость",
-  };
+  function feedTypeLabel(type) { return t("feed.type." + type); }
   var FEED_TYPES_ORDER = ["photo", "message", "announcement", "giveaway", "news"];
 
   function apiUploadFeed(type, caption, files) {
@@ -686,10 +1181,10 @@
       renderMessagesFeedScreen();
     }).catch(function () {
       root.innerHTML = "";
-      root.appendChild(el("div", "feed-empty", "Не удалось загрузить ленту — потяните вниз, чтобы попробовать снова."));
+      root.appendChild(el("div", "feed-empty", t("club.loadFailed")));
       var msgRoot = document.getElementById("messages-feed-root");
       msgRoot.innerHTML = "";
-      msgRoot.appendChild(el("div", "feed-empty", "Не удалось загрузить послания — потяните вниз, чтобы попробовать снова."));
+      msgRoot.appendChild(el("div", "feed-empty", t("messages.loadFailed")));
     });
   }
 
@@ -699,22 +1194,22 @@
     var counts = {};
     (state.feed || []).forEach(function (p) { counts[p.type] = (counts[p.type] || 0) + 1; });
 
-    var allChip = el("button", "filter-chip" + (state.feedFilter === "all" ? " active" : ""), "Все");
+    var allChip = el("button", "filter-chip" + (state.feedFilter === "all" ? " active" : ""), t("menu.all"));
     allChip.addEventListener("click", function () { state.feedFilter = "all"; renderFeedScreen(); });
     root.appendChild(allChip);
 
-    FEED_TYPES_ORDER.forEach(function (t) {
-      if (!counts[t]) return;
-      var chip = el("button", "filter-chip" + (state.feedFilter === t ? " active" : ""), FEED_TYPE_LABELS[t]);
-      chip.addEventListener("click", function () { state.feedFilter = t; renderFeedScreen(); });
+    FEED_TYPES_ORDER.forEach(function (ft) {
+      if (!counts[ft]) return;
+      var chip = el("button", "filter-chip" + (state.feedFilter === ft ? " active" : ""), feedTypeLabel(ft));
+      chip.addEventListener("click", function () { state.feedFilter = ft; renderFeedScreen(); });
       root.appendChild(chip);
     });
   }
 
   function renderFeedScreen() {
     screenHeader("club-header", {
-      title: "Pause Club",
-      right: { icon: ICON_KEBAB, label: "Ещё", onClick: function () { toast("Скоро добавим"); } },
+      title: t("club.title"),
+      right: { icon: ICON_KEBAB, label: t("club.more"), onClick: function () { toast(t("club.moreSoon")); } },
     });
     renderFeedFilters();
     var root = document.getElementById("feed-root");
@@ -722,7 +1217,7 @@
     var posts = (state.feed || []).filter(function (p) { return state.feedFilter === "all" || p.type === state.feedFilter; });
 
     if (!posts.length) {
-      root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>Пока здесь тихо — самое время опубликовать первый пост.</p>"));
+      root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + t("club.empty") + "</p>"));
       return;
     }
 
@@ -778,22 +1273,22 @@
     var counts = {};
     messagesFeedPosts().forEach(function (p) { counts[p.type] = (counts[p.type] || 0) + 1; });
 
-    var allChip = el("button", "filter-chip" + (state.messagesFilter === "all" ? " active" : ""), "Все");
+    var allChip = el("button", "filter-chip" + (state.messagesFilter === "all" ? " active" : ""), t("menu.all"));
     allChip.addEventListener("click", function () { state.messagesFilter = "all"; renderMessagesFeedScreen(); });
     root.appendChild(allChip);
 
-    MESSAGES_TYPES_ORDER.forEach(function (t) {
-      if (!counts[t]) return;
-      var chip = el("button", "filter-chip" + (state.messagesFilter === t ? " active" : ""), FEED_TYPE_LABELS[t]);
-      chip.addEventListener("click", function () { state.messagesFilter = t; renderMessagesFeedScreen(); });
+    MESSAGES_TYPES_ORDER.forEach(function (ft) {
+      if (!counts[ft]) return;
+      var chip = el("button", "filter-chip" + (state.messagesFilter === ft ? " active" : ""), feedTypeLabel(ft));
+      chip.addEventListener("click", function () { state.messagesFilter = ft; renderMessagesFeedScreen(); });
       root.appendChild(chip);
     });
   }
 
   function renderMessagesFeedScreen() {
     screenHeader("messages-header", {
-      title: "Послания",
-      right: { icon: ICON_KEBAB, label: "Ещё", onClick: function () { toast("Скоро добавим"); } },
+      title: t("messages.title"),
+      right: { icon: ICON_KEBAB, label: t("club.more"), onClick: function () { toast(t("club.moreSoon")); } },
     });
     var root = document.getElementById("messages-feed-root");
     renderMessagesFeedFilters();
@@ -802,7 +1297,7 @@
       return state.messagesFilter === "all" || p.type === state.messagesFilter;
     });
     if (!posts.length) {
-      root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>Пока никаких посланий нет.</p>"));
+      root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + t("messages.empty") + "</p>"));
       return;
     }
     posts.forEach(function (post) { root.appendChild(buildFeedPostCard(post)); });
@@ -814,7 +1309,7 @@
     var delBtn = el("button", "feed-post-delete", "×");
     delBtn.addEventListener("click", function (e) {
       e.stopPropagation();
-      showConfirm("Удалить этот пост из ленты?", "Да, удалить", function () { deleteFeedPost(post.id); });
+      showConfirm(t("club.deleteConfirm"), t("club.deleteYes"), function () { deleteFeedPost(post.id); });
     });
     card.appendChild(delBtn);
 
@@ -828,7 +1323,7 @@
     var body = el("div", "feed-post-body");
     if (post.type !== "message") {
       var typeRow = el("div", "feed-post-type-row");
-      typeRow.appendChild(el("span", "pill" + (post.type === "giveaway" ? " gold" : " muted") + " feed-type-pill", FEED_TYPE_LABELS[post.type] || post.type));
+      typeRow.appendChild(el("span", "pill" + (post.type === "giveaway" ? " gold" : " muted") + " feed-type-pill", feedTypeLabel(post.type)));
       body.appendChild(typeRow);
     }
     if (post.caption) body.appendChild(el("div", "feed-post-caption", escapeHtml(post.caption)));
@@ -843,10 +1338,10 @@
   function deleteFeedPost(id) {
     api("/api/feed/delete", { method: "POST", body: { id: id } }).then(function () {
       haptic("success");
-      toast("Пост удалён");
+      toast(t("club.deleted"));
       state.feed = (state.feed || []).filter(function (p) { return p.id !== id; });
       renderFeedScreen();
-    }).catch(function (err) { toast("Не удалось удалить: " + err.message); });
+    }).catch(function (err) { toast(t("club.deleteFailed", { msg: err.message })); });
   }
 
   document.getElementById("feed-compose-btn").addEventListener("click", openComposeFeed);
@@ -856,24 +1351,24 @@
 
     function renderComposeStep(body) {
       wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", "Новый пост"));
+      body.appendChild(el("h2", "wizard-title", t("club.newPost")));
 
       var typeRow = el("div", "type-picker-row");
-      FEED_TYPES_ORDER.forEach(function (t) {
-        var chip = el("button", "type-picker-chip" + (compose.type === t ? " selected" : ""), FEED_TYPE_LABELS[t]);
-        chip.addEventListener("click", function () { compose.type = t; wizardReplace(renderComposeStep); });
+      FEED_TYPES_ORDER.forEach(function (ft) {
+        var chip = el("button", "type-picker-chip" + (compose.type === ft ? " selected" : ""), feedTypeLabel(ft));
+        chip.addEventListener("click", function () { compose.type = ft; wizardReplace(renderComposeStep); });
         typeRow.appendChild(chip);
       });
       body.appendChild(typeRow);
 
       var captionField = el("div", "field");
-      captionField.innerHTML = '<label>' + (compose.type === "photo" ? "Подпись (необязательно)" : "Текст поста") + '</label><textarea id="feed-caption" rows="4"></textarea>';
+      captionField.innerHTML = '<label>' + (compose.type === "photo" ? t("club.captionOptional") : t("club.postText")) + '</label><textarea id="feed-caption" rows="4"></textarea>';
       body.appendChild(captionField);
       body.querySelector("#feed-caption").value = compose.caption;
       body.querySelector("#feed-caption").addEventListener("input", function (e) { compose.caption = e.target.value; });
 
       if (compose.type === "photo") {
-        var uploadZone = el("div", "upload-zone", "Нажмите, чтобы выбрать фото (можно несколько)");
+        var uploadZone = el("div", "upload-zone", t("club.uploadHint"));
         var input = el("input");
         input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
         uploadZone.appendChild(input);
@@ -892,22 +1387,22 @@
         });
       }
 
-      var submit = el("button", "btn-primary wizard-footer-btn", "Опубликовать");
+      var submit = el("button", "btn-primary wizard-footer-btn", t("club.publish"));
       submit.addEventListener("click", function () {
-        if (compose.type === "photo" && !compose.files.length) { toast("Выберите хотя бы одно фото"); return; }
-        if (compose.type !== "photo" && !compose.caption.trim()) { toast("Напишите текст поста"); return; }
+        if (compose.type === "photo" && !compose.files.length) { toast(t("club.needPhoto")); return; }
+        if (compose.type !== "photo" && !compose.caption.trim()) { toast(t("club.needText")); return; }
         submit.disabled = true;
-        submit.textContent = "Публикую…";
+        submit.textContent = t("club.publishing");
         apiUploadFeed(compose.type, compose.caption, compose.files).then(function () {
           haptic("success");
-          toast("Опубликовано");
+          toast(t("club.published"));
           closeWizard();
           state.feed = null;
           loadFeed();
         }).catch(function (err) {
           submit.disabled = false;
-          submit.textContent = "Опубликовать";
-          toast("Не удалось опубликовать: " + err.message);
+          submit.textContent = t("club.publish");
+          toast(t("club.publishFailed", { msg: err.message }));
         });
       });
       body.appendChild(submit);
@@ -1357,7 +1852,7 @@
       renderProfileScreen();
     }).catch(function (err) {
       root.innerHTML = "";
-      root.appendChild(el("div", "empty-note", "Не удалось загрузить профиль: " + err.message));
+      root.appendChild(el("div", "empty-note", t("profile.loadFailed", { msg: err.message })));
     });
   }
 
@@ -1417,20 +1912,138 @@
     });
   }
 
+  var ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+  var ICON_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+  var ICON_GLOBE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a13.7 13.7 0 0 1 3.5 9 13.7 13.7 0 0 1-3.5 9 13.7 13.7 0 0 1-3.5-9A13.7 13.7 0 0 1 12 3z"/></svg>';
+  var ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+
   function openSettingsSubscreen() {
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", t("settings.title")));
+      var rows = el("div", "card profile-nav-list");
+      rows.appendChild(buildProfileRow(ICON_EDIT, t("settings.editProfile"), function () { editState = {}; openEditProfileInfo(); }));
+      rows.appendChild(buildProfileRow(ICON_PIN, t("settings.deliveryAddress"), function () { editState = {}; openEditDeliveryAddress(); }));
+      rows.appendChild(buildProfileRow(ICON_GLOBE, t("settings.language"), openLanguageSubscreen));
+      body.appendChild(rows);
+      var dangerRows = el("div", "card profile-nav-list");
+      var delRow = buildProfileRow(ICON_TRASH, t("settings.deleteProfile"), openDeleteAccountConfirm);
+      delRow.classList.add("profile-nav-row-danger");
+      dangerRows.appendChild(delRow);
+      body.appendChild(dangerRows);
+    });
+  }
+
+  function openEditProfileInfo() {
     var p = state.profile;
     openWizard(function (body) {
       wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", "Настройки"));
-      var pointCard = el("div", "card");
-      pointCard.innerHTML =
-        '<div class="list-row"><span class="list-row-label">Точка доставки</span><span class="list-row-value">' +
-        escapeHtml((p.zone && p.point) ? (p.zone + ", " + p.point) : "не указана") + '</span></div>';
-      body.appendChild(pointCard);
-      var editBtn = el("button", "btn-ghost", "Редактировать профиль");
-      editBtn.style.marginTop = "12px";
-      editBtn.addEventListener("click", function () { editState = {}; openEditProfile(); });
-      body.appendChild(editBtn);
+      body.appendChild(el("h2", "wizard-title", t("editProfile.title")));
+
+      var nameField = el("div", "field");
+      nameField.innerHTML = '<label>' + escapeHtml(t("editProfile.name")) + '</label><input type="text" id="edit-name" value="' + escapeHtml(p.name || "") + '">';
+      body.appendChild(nameField);
+
+      var phoneField = el("div", "field");
+      phoneField.innerHTML = '<label>' + escapeHtml(t("editProfile.phone")) + '</label><input type="tel" id="edit-phone" value="' + escapeHtml(p.phone || "") + '">';
+      body.appendChild(phoneField);
+
+      var save = el("button", "btn-primary wizard-footer-btn", t("editProfile.save"));
+      save.addEventListener("click", function () {
+        save.disabled = true;
+        var reqBody = {
+          name: document.getElementById("edit-name").value.trim(),
+          phone: document.getElementById("edit-phone").value.trim(),
+        };
+        api("/api/profile", { method: "POST", body: reqBody }).then(function () {
+          haptic("success");
+          toast(t("editProfile.saved"));
+          closeWizard();
+          state.profile = null;
+          loadProfile();
+        }).catch(function (err) { save.disabled = false; toast(t("editProfile.saveFailed", { msg: err.message })); });
+      });
+      body.appendChild(save);
+    });
+  }
+
+  function openEditDeliveryAddress() {
+    var p = state.profile;
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", t("address.title")));
+
+      var curZone = editState.zone || p.zone || "";
+      var curPoint = editState.point || p.point || "";
+      var pointField = el("div", "field");
+      pointField.innerHTML = '<label>' + escapeHtml(t("address.point")) + '</label>';
+      var pointBtn = el("div", "card option-row selected");
+      pointBtn.innerHTML = '<div class="option-row-label">' + escapeHtml((curZone && curPoint) ? (curZone + ", " + curPoint) : t("address.setPoint")) + '</div>';
+      pointBtn.addEventListener("click", function () {
+        wizardStep(function (b) { renderZonePickerForEdit(b); });
+      });
+      pointField.appendChild(pointBtn);
+      body.appendChild(pointField);
+
+      var save = el("button", "btn-primary wizard-footer-btn", t("address.save"));
+      save.disabled = !(editState.zone && editState.point);
+      save.addEventListener("click", function () {
+        if (!editState.zone || !editState.point) { toast(t("address.pickFirst")); return; }
+        save.disabled = true;
+        api("/api/profile", { method: "POST", body: {
+          zone: editState.zone, point: editState.point, is_new_point: !!editState.isNewPoint,
+        } }).then(function () {
+          haptic("success");
+          toast(t("address.saved"));
+          closeWizard();
+          state.profile = null;
+          loadProfile();
+        }).catch(function (err) { save.disabled = false; toast(t("address.saveFailed", { msg: err.message })); });
+      });
+      body.appendChild(save);
+    });
+  }
+
+  function openDeleteAccountConfirm() {
+    showConfirm(
+      t("settings.deleteConfirm"),
+      t("settings.deleteYes"),
+      function () {
+        api("/api/account/delete-request", { method: "POST", body: {} }).then(function () {
+          haptic("success");
+          toast(t("settings.deleteSubmitted"));
+        }).catch(function (err) { toast(t("settings.deleteFailed", { msg: err.message })); });
+      }
+    );
+  }
+
+  // Названия языков — всегда на самом этом языке (стандартная практика
+  // языковых переключателей), поэтому не через t().
+  var LANGUAGES = [
+    { code: "ru", label: "Русский" },
+    { code: "uz", label: "O'zbekcha" },
+    { code: "en", label: "English" },
+  ];
+
+  function openLanguageSubscreen() {
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", t("lang.title")));
+      var rows = el("div", "card profile-nav-list");
+      LANGUAGES.forEach(function (lng) {
+        var row = el("div", "profile-nav-row");
+        row.innerHTML =
+          '<span class="profile-nav-row-label">' + escapeHtml(lng.label) + '</span>' +
+          '<span class="lang-row-check">' + (state.lang === lng.code ? ICON_LANG_CHECK : "") + '</span>';
+        row.addEventListener("click", function () {
+          haptic("select");
+          setLang(lng.code);
+          closeWizard();
+          applyLangToUI();
+        });
+        rows.appendChild(row);
+      });
+      body.appendChild(rows);
     });
   }
 
@@ -1467,7 +2080,7 @@
   function openNotifySubscreen() {
     openWizard(function (body) {
       wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", "Уведомления"));
+      body.appendChild(el("h2", "wizard-title", t("notify.title")));
       var listWrap = el("div");
       listWrap.appendChild(el("div", "skeleton-block"));
       body.appendChild(listWrap);
@@ -1476,30 +2089,30 @@
         listWrap.innerHTML = "";
         var card = el("div", "card");
         card.appendChild(buildToggleRow(
-          "Утреннее напоминание",
-          "Тёплое сообщение утром с напоминанием заказать",
+          t("notify.morningTitle"),
+          t("notify.morningSub"),
           data.morning_on,
           function (on) {
             api("/api/notify", { method: "POST", body: { morning_on: on } })
-              .then(function () { toast(on ? "Включено" : "Отключено"); })
-              .catch(function () { toast("Не удалось сохранить"); });
+              .then(function () { toast(on ? t("notify.on") : t("notify.off")); })
+              .catch(function () { toast(t("notify.saveFailed")); });
           }
         ));
         card.appendChild(buildToggleRow(
-          "О публикации меню",
-          "Сообщение, когда на сегодня опубликовано новое меню",
+          t("notify.menuTitle"),
+          t("notify.menuSub"),
           data.menu_on,
           function (on) {
             api("/api/notify", { method: "POST", body: { menu_on: on } })
-              .then(function () { toast(on ? "Включено" : "Отключено"); })
-              .catch(function () { toast("Не удалось сохранить"); });
+              .then(function () { toast(on ? t("notify.on") : t("notify.off")); })
+              .catch(function () { toast(t("notify.saveFailed")); });
           }
         ));
         listWrap.appendChild(card);
-        listWrap.appendChild(el("p", "center-note", "Время рассылок пока общее для всех — своё время для каждого добавим отдельно, если понадобится."));
+        listWrap.appendChild(el("p", "center-note", t("notify.footnote")));
       }).catch(function () {
         listWrap.innerHTML = "";
-        listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить настройки уведомлений."));
+        listWrap.appendChild(el("div", "empty-note", t("notify.loadFailed")));
       });
     });
   }
@@ -1507,18 +2120,18 @@
   function openSupportSubscreen() {
     openWizard(function (body) {
       wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", "Поддержка"));
-      body.appendChild(el("p", null, "С любыми предложениями или проблемами обращайтесь сюда — мы всегда на связи и рады помочь."));
+      body.appendChild(el("h2", "wizard-title", t("support.title")));
+      body.appendChild(el("p", null, t("support.intro")));
 
-      body.appendChild(el("div", "profile-section-title", "Соцсети"));
+      body.appendChild(el("div", "profile-section-title", t("support.social")));
       var social = el("div", "card profile-nav-list");
-      social.appendChild(buildContactRow(ICON_TELEGRAM, "Telegram", "@ssaavveeyy", "https://t.me/ssaavveeyy"));
-      social.appendChild(buildContactRow(ICON_INSTAGRAM, "Instagram", "@pause.tashkent", "https://instagram.com/pause.tashkent"));
+      social.appendChild(buildContactRow(ICON_TELEGRAM, t("support.telegram"), "@ssaavveeyy", "https://t.me/ssaavveeyy"));
+      social.appendChild(buildContactRow(ICON_INSTAGRAM, t("support.instagram"), "@pause.tashkent", "https://instagram.com/pause.tashkent"));
       body.appendChild(social);
 
-      body.appendChild(el("div", "profile-section-title", "Контакты"));
+      body.appendChild(el("div", "profile-section-title", t("support.contacts")));
       var contacts = el("div", "card profile-nav-list");
-      contacts.appendChild(buildContactRow(ICON_PHONE, "Телефон", "+998 91 776 34 09", "tel:+998917763409"));
+      contacts.appendChild(buildContactRow(ICON_PHONE, t("support.phone"), "+998 91 776 34 09", "tel:+998917763409"));
       body.appendChild(contacts);
     });
   }
@@ -1526,16 +2139,16 @@
   function renderProfileScreen() {
     screenHeader("profile-header", {
       back: function () { showScreen("home"); },
-      title: "Профиль",
+      title: t("profile.title"),
       center: true,
-      right: { icon: ICON_GEAR, label: "Настройки", onClick: openSettingsSubscreen },
+      right: { icon: ICON_GEAR, label: t("profile.settings"), onClick: openSettingsSubscreen },
     });
     var root = document.getElementById("profile-root");
     root.innerHTML = "";
     var p = state.profile;
 
     if (!p.registered) {
-      root.appendChild(el("div", "empty-note", "Вы ещё не зарегистрированы. Наберите /start в чате с ботом, чтобы завести профиль."));
+      root.appendChild(el("div", "empty-note", t("profile.notRegistered")));
       return;
     }
 
@@ -1548,26 +2161,25 @@
     } else {
       head.appendChild(el("div", "avatar", initials(p.name)));
     }
-    head.appendChild(el("div", "profile-name", p.name || "Без имени"));
+    head.appendChild(el("div", "profile-name", p.name || t("profile.noName")));
     head.appendChild(el("div", "profile-contact", formatPhone(p.phone)));
 
     // Статус клуба виден сразу, с первого заказа (даже на "🕊 Гость PAUSE",
     // 0 заказов) — не прячем, пока не наберётся хоть один, как было
     // раньше. По тапу — сколько осталось до следующего уровня (см.
     // sheets.get_club_level — та же самая чистая функция, что и в боте).
-    var badge = el("button", "pill profile-club-badge", p.club.emoji + " Участник " + p.club.label);
+    var badge = el("button", "pill profile-club-badge", p.club.emoji + " " + t("profile.member") + " " + p.club.label);
     badge.addEventListener("click", function () {
       haptic("select");
       if (p.club.next_label) {
         var total = p.order_count + p.club.left;
         var pct = total ? Math.min(100, Math.round((p.order_count / total) * 100)) : 0;
         showInfo(
-          '<div class="club-progress-label">До статуса «' + p.club.next_emoji + ' ' + escapeHtml(p.club.next_label) +
-          '» осталось заказов: ' + p.club.left + '</div>' +
+          '<div class="club-progress-label">' + t("profile.toNextLevel", { emoji: p.club.next_emoji, label: escapeHtml(p.club.next_label), left: p.club.left }) + '</div>' +
           '<div class="club-progress-track"><div class="club-progress-fill" style="width:' + pct + '%"></div></div>'
         );
       } else {
-        showInfo('<div class="club-progress-label">Вы уже на высшем уровне PAUSE Club 🎉</div>');
+        showInfo('<div class="club-progress-label">' + t("profile.topLevel") + '</div>');
       }
     });
     head.appendChild(badge);
@@ -1579,13 +2191,13 @@
     // не считается (см. отчёт пользователю).
     var statRow = el("div", "profile-stat-row");
     var s1 = el("button", "profile-stat profile-stat-clickable");
-    s1.innerHTML = '<div class="profile-stat-value">' + p.order_count + '</div><div class="profile-stat-label">заказов</div>';
-    s1.addEventListener("click", function () { haptic("select"); openProfileSubscreen("Мои заказы", loadOrders); });
+    s1.innerHTML = '<div class="profile-stat-value">' + p.order_count + '</div><div class="profile-stat-label">' + t("profile.statOrders") + '</div>';
+    s1.addEventListener("click", function () { haptic("select"); openProfileSubscreen(t("orders.title"), loadOrders); });
     var s2 = el("div", "profile-stat");
-    s2.innerHTML = '<div class="profile-stat-value">—</div><div class="profile-stat-label">акции</div>';
+    s2.innerHTML = '<div class="profile-stat-value">—</div><div class="profile-stat-label">' + t("profile.statPromo") + '</div>';
     var s3 = el("div", "profile-stat");
     var postsCount = (state.feed || []).filter(function (post) { return post.author === p.name; }).length;
-    s3.innerHTML = '<div class="profile-stat-value">' + postsCount + '</div><div class="profile-stat-label">постов</div>';
+    s3.innerHTML = '<div class="profile-stat-value">' + postsCount + '</div><div class="profile-stat-label">' + t("profile.statPosts") + '</div>';
     statRow.appendChild(s1); statRow.appendChild(s2); statRow.appendChild(s3);
     root.appendChild(statRow);
 
@@ -1594,15 +2206,15 @@
     // отдельная иконка-шестерёнка в шапке, второе — уже своя вкладка
     // нижней навигации (Послания), дублировать её здесь незачем.
     var rows = el("div", "card profile-nav-list");
-    rows.appendChild(buildProfileRow(ICON_ORDERS, "Мои заказы", function () { openProfileSubscreen("Мои заказы", loadOrders); }));
-    rows.appendChild(buildProfileRow(ICON_HEART, "Избранное", function () { toast("Избранное — скоро добавим"); }));
-    rows.appendChild(buildProfileRow(ICON_BELL, "Уведомления", openNotifySubscreen));
-    rows.appendChild(buildProfileRow(ICON_TAG, "Бонусы и промокоды", function () { toast("Бонусы и промокоды — скоро добавим"); }));
-    rows.appendChild(buildProfileRow(ICON_SUPPORT, "Поддержка", openSupportSubscreen));
+    rows.appendChild(buildProfileRow(ICON_ORDERS, t("profile.myOrders"), function () { openProfileSubscreen(t("orders.title"), loadOrders); }));
+    rows.appendChild(buildProfileRow(ICON_HEART, t("profile.favorites"), function () { toast(t("profile.favSoon")); }));
+    rows.appendChild(buildProfileRow(ICON_BELL, t("profile.notifications"), openNotifySubscreen));
+    rows.appendChild(buildProfileRow(ICON_TAG, t("profile.bonuses"), function () { toast(t("profile.bonusesSoon")); }));
+    rows.appendChild(buildProfileRow(ICON_SUPPORT, t("profile.support"), openSupportSubscreen));
     root.appendChild(rows);
 
     if (tg) {
-      var exitBtn = el("button", "btn-ghost profile-exit-btn", "Выйти");
+      var exitBtn = el("button", "btn-ghost profile-exit-btn", t("profile.logout"));
       // Отдельного "логина" в системе нет — личность приходит из Telegram
       // автоматически при каждом открытии, выходить не из чего технически;
       // честный эквивалент "Выйти" здесь — просто закрыть Mini App.
@@ -1613,11 +2225,13 @@
 
   // --- Мои заказы --------------------------------------------------------
 
-  var ORDERS_PAY_FILTERS = [
-    { key: "all", label: "Все" },
-    { key: "paid", label: "Оплачено" },
-    { key: "unpaid", label: "Не оплачено" },
-  ];
+  function ORDERS_PAY_FILTERS() {
+    return [
+      { key: "all", label: t("orders.all") },
+      { key: "paid", label: t("orders.paid") },
+      { key: "unpaid", label: t("orders.unpaid") },
+    ];
+  }
 
   function loadOrders(root) {
     var payFilter = "all";
@@ -1627,7 +2241,7 @@
       function renderOrders() {
         root.innerHTML = "";
         if (!data.pending.length && !data.orders.length) {
-          root.appendChild(el("div", "empty-note", "Заказов пока не было."));
+          root.appendChild(el("div", "empty-note", t("orders.empty")));
           return;
         }
 
@@ -1636,7 +2250,7 @@
         // статуса оплаты пока не имеет, показываем их только на "Все".
         if (data.orders.length) {
           var chips = el("div", "feed-filters");
-          ORDERS_PAY_FILTERS.forEach(function (f) {
+          ORDERS_PAY_FILTERS().forEach(function (f) {
             var chip = el("button", "filter-chip" + (payFilter === f.key ? " active" : ""), f.label);
             chip.addEventListener("click", function () { payFilter = f.key; renderOrders(); });
             chips.appendChild(chip);
@@ -1648,37 +2262,47 @@
           data.pending.forEach(function (p) {
             var card = el("div", "card");
             card.innerHTML =
-              '<div class="order-card-head"><span class="order-card-date">' + p.date + '</span><span class="pill gold">На проверке</span></div>' +
+              '<div class="order-card-head"><span class="order-card-date">' + p.date + '</span><span class="pill gold">' + t("orders.reviewing") + '</span></div>' +
               '<div class="order-card-items">' + itemsText(p.items) + '</div>';
             root.appendChild(card);
           });
         }
 
-        data.orders.filter(function (g) {
+        var filteredOrders = data.orders.filter(function (g) {
           if (payFilter === "paid") return g.paid;
           if (payFilter === "unpaid") return !g.paid;
           return true;
-        }).forEach(function (g) {
+        });
+
+        // По фильтру "Не оплачено" пустой список — это хорошая новость,
+        // а не "ничего не нашлось": долгов нет, повод похвалить, а не
+        // показать нейтральную заглушку.
+        if (payFilter === "unpaid" && !filteredOrders.length) {
+          root.appendChild(el("div", "empty-note", t("orders.allPaid")));
+          return;
+        }
+
+        filteredOrders.forEach(function (g) {
           var card = el("div", "card");
           var statusPill = g.canceled
-            ? '<span class="pill muted">Отменён</span>'
-            : g.complete ? '<span class="pill">Завершён</span>' : '<span class="pill gold">Готовится</span>';
-          var payPill = '<span class="pill ' + (g.paid ? "paid" : "unpaid") + '">' + (g.paid ? "Оплачено" : "Не оплачено") + '</span>';
+            ? '<span class="pill muted">' + t("orders.canceled") + '</span>'
+            : g.complete ? '<span class="pill">' + t("orders.complete") + '</span>' : '<span class="pill gold">' + t("orders.preparing") + '</span>';
+          var payPill = '<span class="pill ' + (g.paid ? "paid" : "unpaid") + '">' + (g.paid ? t("orders.paid") : t("orders.unpaid")) + '</span>';
           card.innerHTML =
             '<div class="order-card-head"><span class="order-card-date">' + g.date + '</span>' +
             '<span class="order-card-pills">' + payPill + statusPill + '</span></div>' +
-            '<div class="order-card-items">' + itemsText(g.items) + (g.is_debt ? " (в долг)" : "") + '</div>';
+            '<div class="order-card-items">' + itemsText(g.items) + (g.is_debt ? t("orders.debtTag") : "") + '</div>';
           if (g.can_cancel || (!g.canceled && g.row_for_feedback)) {
             var actions = el("div", "order-card-actions");
             if (g.can_cancel) {
-              var cancelBtn = el("button", "btn-ghost", "Отменить");
+              var cancelBtn = el("button", "btn-ghost", t("orders.cancel"));
               cancelBtn.addEventListener("click", function () {
-                showConfirm("Отменить заказ на " + g.date + "?", "Да, отменить", function () { cancelOrder(root); });
+                showConfirm(t("orders.cancelConfirm", { date: g.date }), t("orders.cancelYes"), function () { cancelOrder(root); });
               });
               actions.appendChild(cancelBtn);
             }
             if (!g.canceled && g.row_for_feedback) {
-              var fbBtn = el("button", "btn-text", "★ Отзыв");
+              var fbBtn = el("button", "btn-text", t("orders.review"));
               fbBtn.addEventListener("click", function () { openFeedback(g); });
               actions.appendChild(fbBtn);
             }
@@ -1688,12 +2312,12 @@
         });
 
         if (data.debt > 0) {
-          root.appendChild(el("div", "center-note", "Текущий долг: " + fmtSum(data.debt)));
+          root.appendChild(el("div", "center-note", t("orders.debtLine", { sum: fmtSum(data.debt) })));
         }
       }
     }).catch(function () {
       root.innerHTML = "";
-      root.appendChild(el("div", "empty-note", "Не удалось загрузить заказы."));
+      root.appendChild(el("div", "empty-note", t("orders.loadFailed")));
     });
   }
 
@@ -1703,13 +2327,13 @@
 
   function cancelOrder(ordersRoot) {
     api("/api/orders/cancel", { method: "POST", body: {} }).then(function () {
-      toast("Заказ отменён");
+      toast(t("orders.canceledToast"));
       haptic("success");
       loadOrders(ordersRoot);
     }).catch(function (err) {
-      var msg = "Не удалось отменить заказ";
-      if (err.code === "too_late") msg = "Уже поздно для самостоятельной отмены — напишите в поддержку.";
-      else if (err.code === "card_pending") msg = "Оплата картой уже в обработке — отмена через поддержку.";
+      var msg = t("orders.cancelFailed");
+      if (err.code === "too_late") msg = t("orders.cancelTooLate");
+      else if (err.code === "card_pending") msg = t("orders.cancelCardPending");
       toast(msg);
     });
   }
@@ -1719,7 +2343,7 @@
     var stars = 0;
     openWizard(function (body) {
       wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", "Отзыв о заказе"));
+      body.appendChild(el("h2", "wizard-title", t("feedback.title")));
       body.appendChild(el("p", null, label));
 
       var starsRow = el("div", "star-rating");
@@ -1741,21 +2365,21 @@
 
       var field = el("div", "field");
       field.style.marginTop = "14px";
-      field.innerHTML = '<textarea id="feedback-input" rows="4" placeholder="Комментарий — необязательно"></textarea>';
+      field.innerHTML = '<textarea id="feedback-input" rows="4" placeholder="' + escapeHtml(t("feedback.commentPlaceholder")) + '"></textarea>';
       body.appendChild(field);
 
-      var send = el("button", "btn-primary wizard-footer-btn", "Отправить");
+      var send = el("button", "btn-primary wizard-footer-btn", t("feedback.send"));
       send.addEventListener("click", function () {
         var text = document.getElementById("feedback-input").value.trim();
         // Можно отправить просто оценку без комментария, но не пустую
         // форму совсем — хотя бы звёзды или хотя бы текст.
-        if (!stars && !text) { toast("Поставьте оценку или напишите пару слов"); return; }
+        if (!stars && !text) { toast(t("feedback.needSomething")); return; }
         send.disabled = true;
         api("/api/feedback", { method: "POST", body: { text: text, stars: stars, order_label: label } }).then(function () {
           haptic("success");
-          toast("Спасибо, что рассказали 🤎");
+          toast(t("feedback.thanks"));
           closeWizard();
-        }).catch(function (err) { send.disabled = false; toast("Не получилось отправить: " + err.message); });
+        }).catch(function (err) { send.disabled = false; toast(t("feedback.sendFailed", { msg: err.message })); });
       });
       body.appendChild(send);
     });
@@ -1788,54 +2412,8 @@
 
   var editState = {};
 
-  function openEditProfile() {
-    var p = state.profile;
-    openWizard(function (body) {
-      wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", "Редактировать профиль"));
-
-      var nameField = el("div", "field");
-      nameField.innerHTML = '<label>Имя</label><input type="text" id="edit-name" value="' + escapeHtml(p.name || "") + '">';
-      body.appendChild(nameField);
-
-      var phoneField = el("div", "field");
-      phoneField.innerHTML = '<label>Телефон</label><input type="tel" id="edit-phone" value="' + escapeHtml(p.phone || "") + '">';
-      body.appendChild(phoneField);
-
-      var curZone = editState.zone || p.zone || "";
-      var curPoint = editState.point || p.point || "";
-      var pointField = el("div", "field");
-      pointField.innerHTML = '<label>Точка доставки</label>';
-      var pointBtn = el("div", "card option-row selected");
-      pointBtn.innerHTML = '<div class="option-row-label">' + escapeHtml((curZone && curPoint) ? (curZone + ", " + curPoint) : "Указать точку") + '</div>';
-      pointBtn.addEventListener("click", function () {
-        wizardStep(function (b) { renderZonePickerForEdit(b); });
-      });
-      pointField.appendChild(pointBtn);
-      body.appendChild(pointField);
-
-      var save = el("button", "btn-primary wizard-footer-btn", "Сохранить");
-      save.addEventListener("click", function () {
-        save.disabled = true;
-        var body2 = {
-          name: document.getElementById("edit-name").value.trim(),
-          phone: document.getElementById("edit-phone").value.trim(),
-          zone: editState.zone || "", point: editState.point || "", is_new_point: !!editState.isNewPoint,
-        };
-        api("/api/profile", { method: "POST", body: body2 }).then(function () {
-          haptic("success");
-          toast("Сохранено");
-          closeWizard();
-          state.profile = null;
-          loadProfile();
-        }).catch(function (err) { save.disabled = false; toast("Не удалось сохранить: " + err.message); });
-      });
-      body.appendChild(save);
-    });
-  }
-
   function renderZonePickerForEdit(body) {
-    body.appendChild(el("h2", "wizard-title", "Район"));
+    body.appendChild(el("h2", "wizard-title", t("address.zone")));
     api("/api/zones").then(function (data) {
       data.zones.forEach(function (z) {
         var row = el("div", "card option-row");
@@ -1844,7 +2422,7 @@
         body.appendChild(row);
       });
       var otherRow = el("div", "card option-row");
-      otherRow.appendChild(el("div", "option-row-label", "Другой район"));
+      otherRow.appendChild(el("div", "option-row-label", t("address.otherZone")));
       otherRow.addEventListener("click", function () { wizardStep(function (b) { renderNewPointFormForEdit(b, ""); }); });
       body.appendChild(otherRow);
     });
@@ -1860,36 +2438,36 @@
         row.addEventListener("click", function () {
           editState = { zone: zone, point: pt, isNewPoint: false };
           closeWizard();
-          openEditProfile();
+          openEditDeliveryAddress();
         });
         body.appendChild(row);
       });
       var otherRow = el("div", "card option-row");
-      otherRow.appendChild(el("div", "option-row-label", "Другая точка"));
+      otherRow.appendChild(el("div", "option-row-label", t("address.otherPoint")));
       otherRow.addEventListener("click", function () { wizardStep(function (b) { renderNewPointFormForEdit(b, zone); }); });
       body.appendChild(otherRow);
     });
   }
 
   function renderNewPointFormForEdit(body, zone) {
-    body.appendChild(el("h2", "wizard-title", "Новая точка"));
+    body.appendChild(el("h2", "wizard-title", t("address.newPoint")));
     var field = el("div", "field");
-    field.innerHTML = '<label>Адрес / название точки</label><input type="text" id="ep-new-point">';
+    field.innerHTML = '<label>' + escapeHtml(t("address.newPointField")) + '</label><input type="text" id="ep-new-point">';
     body.appendChild(field);
     if (!zone) {
       var zf = el("div", "field");
-      zf.innerHTML = '<label>Район</label><input type="text" id="ep-new-zone">';
+      zf.innerHTML = '<label>' + escapeHtml(t("address.newZoneField")) + '</label><input type="text" id="ep-new-zone">';
       body.insertBefore(zf, field);
     }
-    var next = el("button", "btn-primary wizard-footer-btn", "Готово");
+    var next = el("button", "btn-primary wizard-footer-btn", t("address.done"));
     next.addEventListener("click", function () {
       var pointVal = document.getElementById("ep-new-point").value.trim();
       var zoneVal = zone || (document.getElementById("ep-new-zone") || {}).value || "";
       zoneVal = zoneVal.trim();
-      if (!pointVal || !zoneVal) { toast("Заполните район и точку"); return; }
+      if (!pointVal || !zoneVal) { toast(t("address.fillBoth")); return; }
       editState = { zone: zoneVal, point: pointVal, isNewPoint: true };
       closeWizard();
-      openEditProfile();
+      openEditDeliveryAddress();
     });
     body.appendChild(next);
   }
@@ -1924,7 +2502,37 @@
     });
   }
 
+  // Статические подписи вне рендер-функций экранов (нижняя навигация,
+  // сплэш) — сами по себе не перерисовываются при заходе на вкладку,
+  // поэтому обновляются отдельно здесь: один раз при старте и заново при
+  // смене языка (см. applyLangToUI/setLang в openLanguageSubscreen).
+  function applyStaticI18n() {
+    document.getElementById("splash-tagline-1").textContent = t("splash.tagline1");
+    document.getElementById("splash-tagline-2").textContent = t("splash.tagline2");
+    document.getElementById("splash-start").textContent = t("splash.start");
+    var navKeys = { home: "nav.home", menu: "nav.menu", club: "nav.club", messages: "nav.messages", profile: "nav.profile" };
+    Array.prototype.forEach.call(document.querySelectorAll(".nav-item"), function (b) {
+      var span = b.querySelector("span");
+      var key = navKeys[b.dataset.screen];
+      if (span && key) span.textContent = t(key);
+      if (key) b.setAttribute("aria-label", t(key));
+    });
+    var composeBtn = document.getElementById("feed-compose-btn");
+    if (composeBtn) composeBtn.textContent = t("club.publish");
+  }
+
+  // Перерисовывает то, что уже видно на экране, сразу после смены языка
+  // в Настройках — без этого пришлось бы заново открывать вкладку, чтобы
+  // увидеть эффект.
+  function applyLangToUI() {
+    applyStaticI18n();
+    var renderers = { home: renderHomeScreen, menu: renderMenuScreen, club: renderFeedScreen, messages: renderMessagesFeedScreen, profile: renderProfileScreen };
+    var fn = renderers[state.screen];
+    if (fn) fn();
+  }
+
   function init() {
+    applyStaticI18n();
     maybeShowSplash();
     resetOrder();
     editState = {};
@@ -1936,9 +2544,9 @@
       var root = document.getElementById("home-root");
       root.innerHTML = "";
       if (err.status === 401 || err.status === 403) {
-        root.appendChild(el("div", "menu-state", "<h2>Доступ ограничен</h2><p>PAUSE App пока открыт только для команды PAUSE.</p>"));
+        root.appendChild(el("div", "menu-state", "<h2>" + t("access.deniedTitle") + "</h2><p>" + t("access.deniedText") + "</p>"));
       } else {
-        root.appendChild(el("div", "menu-state", "<h2>Небольшая заминка</h2><p>Не получилось связаться с сервером — потяните экран вниз или откройте приложение заново.</p>"));
+        root.appendChild(el("div", "menu-state", "<h2>" + t("access.errorTitle") + "</h2><p>" + t("access.errorText") + "</p>"));
       }
     });
   }
