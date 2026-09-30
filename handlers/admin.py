@@ -347,6 +347,8 @@ async def _broadcast_new_menu(bot: Bot):
     """Персональное оповещение всем клиентам о том, что меню на сегодня
     опубликовано — по имени, в тёплом духе, с кнопкой сразу в «Меню»."""
     for c in sheets.get_broadcast_clients():
+        if c.get("notify_menu_off"):
+            continue
         try:
             greeting = texts.NEW_MENU_GREETING.format(name=c.get("name") or "")
             await bot.send_message(int(c["tg_id"]), greeting, reply_markup=kb.menu_broadcast_kb())

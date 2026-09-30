@@ -13,8 +13,10 @@
   --ink-soft-bg: rgba(43, 40, 35, 0.08);
   --card: #fffdf8;          /* белый для карточек */
   --line: rgba(43, 40, 35, 0.12);
-  --accent-warm: #b1442e;   /* единственный цветной акцент — метка "Розыгрыш" на макете */
+  --accent-warm: #b1442e;   /* единственный цветной акцент из макета — метка "Розыгрыш" */
   --accent-warm-soft: rgba(177, 68, 46, 0.12);
+  --success: #3f7d4f;       /* статус оплаты "Оплачено" — по прямой просьбе, не из макета */
+  --success-soft: rgba(63, 125, 79, 0.14);
   --radius-lg: 20px;
   --radius-md: 14px;
   --radius-sm: 10px;
@@ -760,6 +762,75 @@ p { margin: 0; color: var(--ink-soft); }
 
 .center-note { text-align: center; color: var(--ink-soft); font-size: 13.5px; margin-top: 14px; }
 .link-inline { color: var(--ink); font-weight: 600; }
+
+/* ------------------------------------------------------------------ */
+/* Статус оплаты — единственное место в приложении, где цвет несёт      */
+/* смысл (зелёный/красный), по прямой просьбе — не часть общей палитры. */
+/* ------------------------------------------------------------------ */
+
+.pill.paid { background: var(--success-soft); color: var(--success); }
+.pill.unpaid { background: var(--accent-warm-soft); color: var(--accent-warm); }
+.order-card-pills { display: flex; gap: 6px; flex: 0 0 auto; }
+
+/* ------------------------------------------------------------------ */
+/* Профиль — кликабельная плашка статистики (Мои заказы)                */
+/* ------------------------------------------------------------------ */
+
+.profile-stat-clickable { border: 1px solid var(--line); cursor: pointer; }
+.profile-stat-clickable:active { background: var(--ink-soft-bg); }
+
+/* ------------------------------------------------------------------ */
+/* Поддержка — блоки "Соцсети"/"Контакты"                               */
+/* ------------------------------------------------------------------ */
+
+.contact-row { text-decoration: none; color: inherit; }
+.contact-row-value { display: block; font-size: 12.5px; color: var(--ink-soft); font-weight: 400; margin-top: 2px; }
+
+/* ------------------------------------------------------------------ */
+/* Отзыв — рейтинг звёздами                                            */
+/* ------------------------------------------------------------------ */
+
+.star-rating { display: flex; gap: 6px; justify-content: center; margin: 18px 0 4px; }
+.star-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  color: var(--line);
+}
+.star-btn.active { color: var(--ink); }
+.star-btn svg path { fill: currentColor; }
+
+/* ------------------------------------------------------------------ */
+/* Уведомления — переключатели                                         */
+/* ------------------------------------------------------------------ */
+
+.toggle-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.toggle-row:last-child { border-bottom: none; }
+.toggle-row-text { flex: 1; min-width: 0; }
+.toggle-row-title { font-size: 14.5px; color: var(--ink); font-weight: 600; }
+.toggle-row-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.toggle-switch {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  border: none;
+  background: var(--ink-soft-bg);
+  position: relative;
+  transition: background .15s ease;
+}
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: 0 1px 3px rgba(43, 40, 35, 0.25);
+  transition: transform .15s ease;
+}
+.toggle-switch.on { background: var(--ink); }
+.toggle-switch.on::after { transform: translateX(18px); }
 
 @media (min-width: 480px) {
   #content { max-width: 480px; margin: 0 auto; }

@@ -59,6 +59,8 @@ async def send_warm_broadcast(bot: Bot):
     for c in clients:
         if tickets.get(str(c.get("id")), 0) > 0:
             continue
+        if c.get("notify_morning_off"):
+            continue
         try:
             greeting = texts.MORNING_GREETING.format(name=c.get("name") or "")
             await bot.send_message(int(c["tg_id"]), f"{greeting}\n\n{line}")

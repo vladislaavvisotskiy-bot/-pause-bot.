@@ -118,6 +118,8 @@ def _load_clients(force=False):
             "tg_id": cell(config.COL_TG_ID),
             "reg_date": cell(config.COL_REG_DATE),
             "order_count": int(order_count_raw) if order_count_raw.isdigit() else 0,
+            "notify_morning_off": cell(config.COL_NOTIFY_MORNING_OFF).lower() == "да",
+            "notify_menu_off": cell(config.COL_NOTIFY_MENU_OFF).lower() == "да",
         })
     _cache["clients"] = clients
     _cache["clients_ts"] = now
@@ -339,6 +341,7 @@ def get_client_orders(client_id, limit=10) -> list:
                 "set": row[config.O_SET - 1] if len(row) >= config.O_SET else "",
                 "qty": row[config.O_QTY - 1] if len(row) >= config.O_QTY else "",
                 "payment": row[config.O_PAYMENT - 1] if len(row) >= config.O_PAYMENT else "",
+                "status": row[config.O_STATUS - 1].strip() if len(row) >= config.O_STATUS else "",
                 "comment": comment,
                 "canceled": is_canceled(comment),
                 "batch": row[config.O_ORDER_BATCH - 1].strip() if len(row) >= config.O_ORDER_BATCH else "",
@@ -376,11 +379,20 @@ def get_client_order_groups(client_id, limit=10) -> list:
                 "payment": r["payment"],
                 "comment": r["comment"],
                 "canceled": r["canceled"],
+                "paid": True,
             }
             order.append(key)
         g = groups[key]
         g["items"].append({"set": r["set"], "qty": r["qty"]})
         g["rows"].append(r["row"])
+        # "Оплачено" на весь заказ — только если ОПЛАЧЕНО во всех его
+        # строках (столбец L "Заказы", формула по столбцу K — см.
+        # confirm_card_payment/confirm_cash_payment). Обычно все строки
+        # одного оформления делят один и тот же способ оплаты, но так
+        # безопаснее и на случай расхождения — не покажем "оплачено",
+        # если хоть одна позиция ещё нет.
+        if r["status"].strip().upper() != "ОПЛАЧЕНО":
+            g["paid"] = False
     return [groups[k] for k in order][:limit]
 
 

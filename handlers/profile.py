@@ -457,6 +457,7 @@ async def feedback_save(message: Message, state: FSMContext, bot: Bot):
                     name=client.get("name", ""),
                     client_id=client.get("id", ""),
                     order=order_info,
+                    stars="без оценки",
                     text=text,
                 ),
             )

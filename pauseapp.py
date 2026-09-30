@@ -420,6 +420,43 @@ async def api_profile(request: web.Request):
     })
 
 
+# ---------------------------------------------------------------------------
+# Настройки уведомлений — Профиль → Уведомления. Два независимых
+# переключателя поверх уже существующих рассылок (см. bot.send_warm_broadcast
+# и handlers/admin.py:_broadcast_new_menu — оба сами проверяют эти флаги на
+# каждого клиента). Настоящего расписания "во сколько именно" здесь нет и
+# в этой версии не будет: обе рассылки — общие по всем клиентам разом, в
+# одно и то же время (см. config.WARM_BROADCAST_TIME), под каждого клиента
+# отдельное время потребовало бы отдельного планировщика — это отдельная,
+# более крупная задача.
+# ---------------------------------------------------------------------------
+
+async def api_notify(request: web.Request):
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    return web.json_response({
+        "morning_on": not client.get("notify_morning_off"),
+        "menu_on": not client.get("notify_menu_off"),
+    })
+
+
+async def api_notify_set(request: web.Request):
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    body = await request.json()
+    if "morning_on" in body:
+        col = config.COL_NOTIFY_MORNING_OFF
+        await _retry_sheets(sheets.update_client_field, client["row"], col, "" if body["morning_on"] else "Да")
+    if "menu_on" in body:
+        col = config.COL_NOTIFY_MENU_OFF
+        await _retry_sheets(sheets.update_client_field, client["row"], col, "" if body["menu_on"] else "Да")
+    return web.json_response({"ok": True})
+
+
 async def api_profile_edit(request: web.Request):
     tg_id = request["tg_id"]
     client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
@@ -469,7 +506,7 @@ async def api_orders(request: web.Request):
 
     pending_out = [{
         "date": p["date"],
-        "items": p["items"],
+        "items": [{"set": texts.display_set_name(i["set"]), "qty": i["qty"]} for i in p["items"]],
         "payment": p["payment"],
         "status": "pending_point",
     } for p in pending]
@@ -481,12 +518,19 @@ async def api_orders(request: web.Request):
             and not sheets.is_after_cancel_cutoff(g["date"])
             and not _card_pending_status(g["payment"])
         )
+        # Клиенту — только клиентские названия (те же, что на карточках в
+        # Меню), техническое имя столбца G "Заказы" наружу не уходит.
+        display_items = [
+            {"set": texts.display_set_name(i["set"]), "qty": i["qty"]}
+            for i in g["items"]
+        ]
         groups_out.append({
             "date": g["date"],
-            "items": g["items"],
+            "items": display_items,
             "payment": g["payment"],
             "canceled": g["canceled"],
             "is_debt": g["payment"] == "В долг",
+            "paid": g["paid"],
             "complete": sheets.is_order_complete(g["date"]) if not g["canceled"] else False,
             "can_cancel": can_cancel,
             "row_for_feedback": g["rows"][0] if g["rows"] else None,
@@ -539,15 +583,21 @@ async def api_feedback(request: web.Request):
     body = await request.json()
     text = (body.get("text") or "").strip()
     order_label = (body.get("order_label") or "—").strip()
-    if not text:
+    try:
+        stars = int(body.get("stars") or 0)
+    except (TypeError, ValueError):
+        stars = 0
+    stars = max(0, min(5, stars))
+    if not stars and not text:
         return web.json_response({"error": "text_required"}, status=400)
 
     bot = request.app.get("bot")
     if bot and config.ADMIN_IDS:
         try:
+            stars_line = ("★" * stars + "☆" * (5 - stars)) if stars else "без оценки"
             await notify_admins(bot, texts.ADMIN_FEEDBACK_ALERT.format(
                 name=client.get("name", ""), client_id=client.get("id", ""),
-                order=order_label, text=text,
+                order=order_label, stars=stars_line, text=text or "(без комментария)",
             ))
         except Exception:
             logger.exception("PAUSE App: не удалось уведомить админов об отзыве")
@@ -686,6 +736,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/order/screenshot", api_upload_screenshot)
     app.router.add_get("/api/profile", api_profile)
     app.router.add_post("/api/profile", api_profile_edit)
+    app.router.add_get("/api/notify", api_notify)
+    app.router.add_post("/api/notify", api_notify_set)
     app.router.add_get("/api/orders", api_orders)
     app.router.add_post("/api/orders/cancel", api_orders_cancel)
     app.router.add_post("/api/feedback", api_feedback)

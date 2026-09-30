@@ -192,7 +192,10 @@
 
   var ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22"><path d="M15 5l-7 7 7 7"/></svg>';
   var ICON_BELL_HDR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="21" height="21"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>';
-  var ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="21" height="21"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8h-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3h-.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.6V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V10c.1.7.6 1.3 1.3 1.5h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1Z"/></svg>';
+  // Стандартная, многократно проверенная иконка "шестерёнка" (Feather
+  // Icons, settings) — прошлая версия была нарисована вручную и рендерилась
+  // неровно (зубцы разного размера/шага), заменена на готовый, точный путь.
+  var ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="21" height="21" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   var ICON_KEBAB = '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
 
   // -------------------------------------------------------------------
@@ -566,7 +569,7 @@
         img.addEventListener("error", function () { img.remove(); });
         body.appendChild(img);
       }
-      var favBtn = el("button", "set-detail-fav", '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 20s-7-4.4-9.3-8.8C1.3 8 2.7 5 6 5c2 0 3.3 1 4 2.3.7-1.3 2-2.3 4-2.3 3.3 0 4.7 3 3.3 6.2C19 15.6 12 20 12 20Z"/></svg>');
+      var favBtn = el("button", "set-detail-fav", ICON_HEART);
       // "Избранное" в системе пока нет (см. отчёт) — честная заглушка,
       // а не притворяющаяся рабочей кнопка.
       favBtn.addEventListener("click", function (e) { e.stopPropagation(); toast("Избранное — скоро добавим"); });
@@ -1374,12 +1377,21 @@
 
   // Иконки строк меню профиля — чисто декоративные, 20×20.
   var ICON_ORDERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>';
-  var ICON_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M12 20s-7-4.4-9.3-8.8C1.3 8 2.7 5 6 5c2 0 3.3 1 4 2.3.7-1.3 2-2.3 4-2.3 3.3 0 4.7 3 3.3 6.2C19 15.6 12 20 12 20Z"/></svg>';
+  // Стандартный симметричный контур сердца (Feather Icons, heart) —
+  // прошлый путь был кривой ручной работы, левая и правая половины не
+  // совпадали.
+  var ICON_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
   var ICON_ENVELOPE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>';
   var ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>';
   var ICON_TAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M3 12 12 3h7v7l-9 9-7-7Z"/><circle cx="15.5" cy="7.5" r="1.2"/></svg>';
   var ICON_SLIDERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M4 7h11M4 12h16M4 17h8"/><circle cx="17" cy="7" r="1.6"/><circle cx="9" cy="17" r="1.6"/></svg>';
   var ICON_SUPPORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><circle cx="12" cy="12" r="9"/><path d="M9.3 9.7a2.7 2.7 0 1 1 3.7 2.5c-.7.3-1 .9-1 1.6v.3"/><circle cx="12" cy="16.8" r="0.6" fill="currentColor" stroke="none"/></svg>';
+
+  // Иконки блока "Поддержка" — Telegram, Instagram, телефон.
+  var ICON_TELEGRAM = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M21.4 3.5 2.9 10.9c-1.2.5-1.2 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.6.4.8.8.8.3 0 .5-.1.7-.3l2.5-2.4 4.9 3.6c.9.5 1.5.2 1.7-.8l3.2-15c.3-1.3-.4-1.8-1.6-1.4Zm-11.8 10.6-1.1-3.7 8.9-5.5c.4-.3.8-.1.5.2l-8.3 8.9Z"/></svg>';
+  var ICON_INSTAGRAM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="21" height="21"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="0.9" fill="currentColor" stroke="none"/></svg>';
+  var ICON_PHONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="21" height="21" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2a1.5 1.5 0 0 1 1.5-.4c1.1.4 2.3.6 3.6.6a1.5 1.5 0 0 1 1.5 1.5V20a1.5 1.5 0 0 1-1.5 1.5C10.6 21.5 2.5 13.4 2.5 3.5A1.5 1.5 0 0 1 4 2h2.1a1.5 1.5 0 0 1 1.5 1.5c0 1.3.2 2.5.6 3.6a1.5 1.5 0 0 1-.4 1.5z"/></svg>';
+  var ICON_STAR = '<svg viewBox="0 0 24 24" width="34" height="34"><path d="M12 2.5l2.9 6.3 6.8.7-5.1 4.7 1.5 6.8-6.1-3.6-6.1 3.6 1.5-6.8-5.1-4.7 6.8-.7Z"/></svg>';
 
   function buildProfileRow(icon, label, onClick) {
     var row = el("div", "profile-nav-row");
@@ -1422,13 +1434,92 @@
     });
   }
 
+  function buildContactRow(icon, label, value, href) {
+    var row = el("a", "profile-nav-row contact-row");
+    row.href = href;
+    row.target = "_blank";
+    row.rel = "noopener";
+    row.innerHTML =
+      '<span class="profile-nav-row-icon">' + icon + '</span>' +
+      '<span class="profile-nav-row-label">' + escapeHtml(label) +
+      '<span class="contact-row-value">' + escapeHtml(value) + '</span></span>' +
+      '<span class="profile-nav-row-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg></span>';
+    row.addEventListener("click", function () { haptic("select"); });
+    return row;
+  }
+
+  function buildToggleRow(title, subtitle, initialOn, onChange) {
+    var row = el("div", "toggle-row");
+    var text = el("div", "toggle-row-text");
+    text.innerHTML = '<div class="toggle-row-title">' + escapeHtml(title) + '</div><div class="toggle-row-sub">' + escapeHtml(subtitle) + '</div>';
+    row.appendChild(text);
+    var sw = el("button", "toggle-switch" + (initialOn ? " on" : ""));
+    sw.setAttribute("aria-label", title);
+    sw.addEventListener("click", function () {
+      var next = !sw.classList.contains("on");
+      sw.classList.toggle("on", next);
+      onChange(next);
+    });
+    row.appendChild(sw);
+    return row;
+  }
+
+  function openNotifySubscreen() {
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", "Уведомления"));
+      var listWrap = el("div");
+      listWrap.appendChild(el("div", "skeleton-block"));
+      body.appendChild(listWrap);
+
+      api("/api/notify").then(function (data) {
+        listWrap.innerHTML = "";
+        var card = el("div", "card");
+        card.appendChild(buildToggleRow(
+          "Утреннее напоминание",
+          "Тёплое сообщение утром с напоминанием заказать",
+          data.morning_on,
+          function (on) {
+            api("/api/notify", { method: "POST", body: { morning_on: on } })
+              .then(function () { toast(on ? "Включено" : "Отключено"); })
+              .catch(function () { toast("Не удалось сохранить"); });
+          }
+        ));
+        card.appendChild(buildToggleRow(
+          "О публикации меню",
+          "Сообщение, когда на сегодня опубликовано новое меню",
+          data.menu_on,
+          function (on) {
+            api("/api/notify", { method: "POST", body: { menu_on: on } })
+              .then(function () { toast(on ? "Включено" : "Отключено"); })
+              .catch(function () { toast("Не удалось сохранить"); });
+          }
+        ));
+        listWrap.appendChild(card);
+        listWrap.appendChild(el("p", "center-note", "Время рассылок пока общее для всех — своё время для каждого добавим отдельно, если понадобится."));
+      }).catch(function () {
+        listWrap.innerHTML = "";
+        listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить настройки уведомлений."));
+      });
+    });
+  }
+
   function openSupportSubscreen() {
     openWizard(function (body) {
       wizardPhaseEl.innerHTML = "";
       body.appendChild(el("h2", "wizard-title", "Поддержка"));
-      var supportCard = el("div", "card");
-      supportCard.innerHTML = 'Что-то пошло не так или есть вопрос? Напишите нам напрямую — <span class="link-inline">@ssaavveeyy</span>.';
-      body.appendChild(supportCard);
+      body.appendChild(el("p", null, "С любыми предложениями или проблемами обращайтесь сюда — мы всегда на связи и рады помочь."));
+
+      body.appendChild(el("div", "profile-section-title", "Соцсети"));
+      var social = el("div", "card profile-nav-list");
+      social.appendChild(buildContactRow(ICON_TELEGRAM, "Telegram", "@ssaavveeyy", "https://t.me/ssaavveeyy"));
+      social.appendChild(buildContactRow(ICON_INSTAGRAM, "Instagram", "@pause.tashkent", "https://instagram.com/pause.tashkent"));
+      body.appendChild(social);
+
+      body.appendChild(el("div", "profile-section-title", "Контакты"));
+      var contacts = el("div", "card profile-nav-list");
+      contacts.appendChild(buildContactRow(ICON_PHONE, "Телефон", "+998 91 776 34 09", "tel:+998917763409"));
+      body.appendChild(contacts);
     });
   }
 
@@ -1487,8 +1578,9 @@
     // "акции" — тире, а не выдуманное число: участие в розыгрышах нигде
     // не считается (см. отчёт пользователю).
     var statRow = el("div", "profile-stat-row");
-    var s1 = el("div", "profile-stat");
+    var s1 = el("button", "profile-stat profile-stat-clickable");
     s1.innerHTML = '<div class="profile-stat-value">' + p.order_count + '</div><div class="profile-stat-label">заказов</div>';
+    s1.addEventListener("click", function () { haptic("select"); openProfileSubscreen("Мои заказы", loadOrders); });
     var s2 = el("div", "profile-stat");
     s2.innerHTML = '<div class="profile-stat-value">—</div><div class="profile-stat-label">акции</div>';
     var s3 = el("div", "profile-stat");
@@ -1504,7 +1596,7 @@
     var rows = el("div", "card profile-nav-list");
     rows.appendChild(buildProfileRow(ICON_ORDERS, "Мои заказы", function () { openProfileSubscreen("Мои заказы", loadOrders); }));
     rows.appendChild(buildProfileRow(ICON_HEART, "Избранное", function () { toast("Избранное — скоро добавим"); }));
-    rows.appendChild(buildProfileRow(ICON_BELL, "Уведомления", function () { toast("Уведомления — скоро добавим"); }));
+    rows.appendChild(buildProfileRow(ICON_BELL, "Уведомления", openNotifySubscreen));
     rows.appendChild(buildProfileRow(ICON_TAG, "Бонусы и промокоды", function () { toast("Бонусы и промокоды — скоро добавим"); }));
     rows.appendChild(buildProfileRow(ICON_SUPPORT, "Поддержка", openSupportSubscreen));
     root.appendChild(rows);
@@ -1521,48 +1613,83 @@
 
   // --- Мои заказы --------------------------------------------------------
 
+  var ORDERS_PAY_FILTERS = [
+    { key: "all", label: "Все" },
+    { key: "paid", label: "Оплачено" },
+    { key: "unpaid", label: "Не оплачено" },
+  ];
+
   function loadOrders(root) {
+    var payFilter = "all";
     api("/api/orders").then(function (data) {
-      root.innerHTML = "";
-      if (!data.pending.length && !data.orders.length) {
-        root.appendChild(el("div", "empty-note", "Заказов пока не было."));
-        return;
-      }
-      data.pending.forEach(function (p) {
-        var card = el("div", "card");
-        card.innerHTML =
-          '<div class="order-card-head"><span class="order-card-date">' + p.date + '</span><span class="pill gold">На проверке</span></div>' +
-          '<div class="order-card-items">' + itemsText(p.items) + '</div>';
-        root.appendChild(card);
-      });
-      data.orders.forEach(function (g) {
-        var card = el("div", "card");
-        var statusPill = g.canceled
-          ? '<span class="pill muted">Отменён</span>'
-          : g.complete ? '<span class="pill">Завершён</span>' : '<span class="pill gold">Готовится</span>';
-        card.innerHTML =
-          '<div class="order-card-head"><span class="order-card-date">' + g.date + '</span>' + statusPill + '</div>' +
-          '<div class="order-card-items">' + itemsText(g.items) + (g.is_debt ? " (в долг)" : "") + '</div>';
-        if (g.can_cancel || (!g.canceled && g.row_for_feedback)) {
-          var actions = el("div", "order-card-actions");
-          if (g.can_cancel) {
-            var cancelBtn = el("button", "btn-ghost", "Отменить");
-            cancelBtn.addEventListener("click", function () {
-              showConfirm("Отменить заказ на " + g.date + "?", "Да, отменить", function () { cancelOrder(root); });
-            });
-            actions.appendChild(cancelBtn);
-          }
-          if (!g.canceled && g.row_for_feedback) {
-            var fbBtn = el("button", "btn-text", "★ Отзыв");
-            fbBtn.addEventListener("click", function () { openFeedback(g); });
-            actions.appendChild(fbBtn);
-          }
-          card.appendChild(actions);
+      renderOrders();
+
+      function renderOrders() {
+        root.innerHTML = "";
+        if (!data.pending.length && !data.orders.length) {
+          root.appendChild(el("div", "empty-note", "Заказов пока не было."));
+          return;
         }
-        root.appendChild(card);
-      });
-      if (data.debt > 0) {
-        root.appendChild(el("div", "center-note", "Текущий долг: " + fmtSum(data.debt)));
+
+        // Фильтр по оплате имеет смысл только для оформленных заказов —
+        // "На рассмотрении" (pending, точка ещё не подтверждена) своего
+        // статуса оплаты пока не имеет, показываем их только на "Все".
+        if (data.orders.length) {
+          var chips = el("div", "feed-filters");
+          ORDERS_PAY_FILTERS.forEach(function (f) {
+            var chip = el("button", "filter-chip" + (payFilter === f.key ? " active" : ""), f.label);
+            chip.addEventListener("click", function () { payFilter = f.key; renderOrders(); });
+            chips.appendChild(chip);
+          });
+          root.appendChild(chips);
+        }
+
+        if (payFilter === "all") {
+          data.pending.forEach(function (p) {
+            var card = el("div", "card");
+            card.innerHTML =
+              '<div class="order-card-head"><span class="order-card-date">' + p.date + '</span><span class="pill gold">На проверке</span></div>' +
+              '<div class="order-card-items">' + itemsText(p.items) + '</div>';
+            root.appendChild(card);
+          });
+        }
+
+        data.orders.filter(function (g) {
+          if (payFilter === "paid") return g.paid;
+          if (payFilter === "unpaid") return !g.paid;
+          return true;
+        }).forEach(function (g) {
+          var card = el("div", "card");
+          var statusPill = g.canceled
+            ? '<span class="pill muted">Отменён</span>'
+            : g.complete ? '<span class="pill">Завершён</span>' : '<span class="pill gold">Готовится</span>';
+          var payPill = '<span class="pill ' + (g.paid ? "paid" : "unpaid") + '">' + (g.paid ? "Оплачено" : "Не оплачено") + '</span>';
+          card.innerHTML =
+            '<div class="order-card-head"><span class="order-card-date">' + g.date + '</span>' +
+            '<span class="order-card-pills">' + payPill + statusPill + '</span></div>' +
+            '<div class="order-card-items">' + itemsText(g.items) + (g.is_debt ? " (в долг)" : "") + '</div>';
+          if (g.can_cancel || (!g.canceled && g.row_for_feedback)) {
+            var actions = el("div", "order-card-actions");
+            if (g.can_cancel) {
+              var cancelBtn = el("button", "btn-ghost", "Отменить");
+              cancelBtn.addEventListener("click", function () {
+                showConfirm("Отменить заказ на " + g.date + "?", "Да, отменить", function () { cancelOrder(root); });
+              });
+              actions.appendChild(cancelBtn);
+            }
+            if (!g.canceled && g.row_for_feedback) {
+              var fbBtn = el("button", "btn-text", "★ Отзыв");
+              fbBtn.addEventListener("click", function () { openFeedback(g); });
+              actions.appendChild(fbBtn);
+            }
+            card.appendChild(actions);
+          }
+          root.appendChild(card);
+        });
+
+        if (data.debt > 0) {
+          root.appendChild(el("div", "center-note", "Текущий долг: " + fmtSum(data.debt)));
+        }
       }
     }).catch(function () {
       root.innerHTML = "";
@@ -1589,20 +1716,42 @@
 
   function openFeedback(group) {
     var label = group.date + " — " + itemsText(group.items);
+    var stars = 0;
     openWizard(function (body) {
       wizardPhaseEl.innerHTML = "";
       body.appendChild(el("h2", "wizard-title", "Отзыв о заказе"));
       body.appendChild(el("p", null, label));
+
+      var starsRow = el("div", "star-rating");
+      var starBtns = [];
+      for (var i = 1; i <= 5; i++) {
+        (function (n) {
+          var b = el("button", "star-btn", ICON_STAR);
+          b.setAttribute("aria-label", n + " из 5");
+          b.addEventListener("click", function () {
+            haptic("select");
+            stars = n;
+            starBtns.forEach(function (sb, idx) { sb.classList.toggle("active", idx < stars); });
+          });
+          starBtns.push(b);
+          starsRow.appendChild(b);
+        })(i);
+      }
+      body.appendChild(starsRow);
+
       var field = el("div", "field");
       field.style.marginTop = "14px";
-      field.innerHTML = '<textarea id="feedback-input" rows="4" placeholder="Что понравилось, что стоит поправить?"></textarea>';
+      field.innerHTML = '<textarea id="feedback-input" rows="4" placeholder="Комментарий — необязательно"></textarea>';
       body.appendChild(field);
+
       var send = el("button", "btn-primary wizard-footer-btn", "Отправить");
       send.addEventListener("click", function () {
         var text = document.getElementById("feedback-input").value.trim();
-        if (!text) { toast("Напишите пару слов"); return; }
+        // Можно отправить просто оценку без комментария, но не пустую
+        // форму совсем — хотя бы звёзды или хотя бы текст.
+        if (!stars && !text) { toast("Поставьте оценку или напишите пару слов"); return; }
         send.disabled = true;
-        api("/api/feedback", { method: "POST", body: { text: text, order_label: label } }).then(function () {
+        api("/api/feedback", { method: "POST", body: { text: text, stars: stars, order_label: label } }).then(function () {
           haptic("success");
           toast("Спасибо, что рассказали 🤎");
           closeWizard();

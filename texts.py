@@ -292,7 +292,8 @@ FEEDBACK_THANKS = "Спасибо, что рассказали! Обязател
 
 ADMIN_FEEDBACK_ALERT = (
     "⭐ Отзыв от клиента {name} (ID {client_id})\n"
-    "О заказе: {order}\n\n"
+    "О заказе: {order}\n"
+    "Оценка: {stars}\n\n"
     "{text}"
 )
 
