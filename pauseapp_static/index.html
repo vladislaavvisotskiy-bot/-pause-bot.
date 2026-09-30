@@ -79,6 +79,12 @@
     </button>
   </nav>
 
+  <!-- Плавающая панель корзины — появляется, как только в заказе есть
+       хоть одна позиция (см. app.js: syncCartBar). Идёт сразу следующим
+       сиблингом после #bottom-nav — от этого зависит CSS-селектор
+       #bottom-nav.nav-hidden ~ .cart-bar в styles.css. -->
+  <div id="cart-bar" class="cart-bar" hidden></div>
+
   <!-- Приветственный экран — один раз, дальше запоминаем в localStorage
        этого устройства и не показываем повторно (см. app.js: SPLASH_KEY). -->
   <div id="splash" class="splash" hidden>

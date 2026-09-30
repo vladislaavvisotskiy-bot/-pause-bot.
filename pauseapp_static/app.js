@@ -45,18 +45,16 @@
     feedFilter: "all",    // "all" | один из config.FEED_POST_TYPES — фильтр экрана CLUB
     messagesFilter: "all", // тот же принцип, отдельный фильтр экрана Послания
     favoriteKeys: null,    // null — ещё не грузили; иначе Set(s.key) избранных блюд клиента
+    cart: [],              // корзина заказа — переживает закрытие визарда, см. addToCart/syncCartBar
   };
 
   // -------------------------------------------------------------------
   // Словарь интерфейса — три языка. Переведён только сам интерфейс
-  // (кнопки/заголовки/подсказки/пустые состояния) — реальный контент,
-  // который печатает админ (подпись к меню, посты ленты, послания,
-  // названия сетов вроде "Пауза дня.") НЕ переводится автоматически, это
-  // чужой текст, а не элемент интерфейса. Шаги самого визарда заказа
-  // (корзина/точка/гарнир и т.д.) тоже пока не переведены — сейчас кнопка
-  // "Заказать" никуда не ведёт (см. openSetDetail), переводить сейчас
-  // недоступный клиенту флоу нет смысла — сделаем вместе с включением
-  // самого заказа. Узбекский и английский — мой перевод, стоит проверить
+  // (кнопки/заголовки/подсказки/пустые состояния, включая корзину и
+  // оформление заказа) — реальный контент, который печатает админ
+  // (подпись к меню, посты ленты, послания, названия сетов вроде "Пауза
+  // дня.") НЕ переводится автоматически, это чужой текст, а не элемент
+  // интерфейса. Узбекский и английский — мой перевод, стоит проверить
   // носителем перед тем, как считать финальным.
   // -------------------------------------------------------------------
   var I18N = {
@@ -91,8 +89,6 @@
       "menu.retry": "Повторить",
       "menu.soonTitle": "Меню скоро будет",
       "menu.soonText": "Мы ещё готовим сегодняшнее меню — загляните чуть позже 🌿",
-      "menu.closedTitle": "Приём на сегодня закрыт",
-      "menu.closedText": "Прием заказов на сегодня закрылся в {time}. Загляните завтра — мы уже готовим следующее меню.",
       "menu.hero": "Выбери свою паузу на сегодня",
       "menu.all": "Все",
       "menu.emptyCategory": "В этой категории пока пусто.",
@@ -104,6 +100,41 @@
       "menu.garnishNextStep": "Гарнир выбирается на следующем шаге",
       "menu.order": "Заказать",
       "menu.orderUnavailable": "Сейчас недоступно для заказа",
+      "menu.orderClosedNote": "Приём заказов на сегодня закрыт",
+      "menu.addToCart": "Добавить в заказ",
+      "menu.pickGarnishFirst": "Выберите гарнир",
+      "menu.addedToCart": "Добавлено в заказ",
+
+      "cart.barLabel": "Позиций: {count}",
+      "cart.barButton": "Корзина",
+      "cart.title": "Ваша корзина",
+      "cart.total": "Итого",
+      "cart.checkoutBtn": "Оформить заказ",
+
+      "checkout.title": "Оформление заказа",
+      "checkout.deliveryTitle": "Куда доставить",
+      "checkout.change": "Изменить",
+      "checkout.commentTitle": "Комментарий к заказу",
+      "checkout.commentPlaceholder": "Необязательно — например, код домофона",
+      "checkout.paymentTitle": "Оплата",
+      "checkout.cash": "Наличные",
+      "checkout.card": "Карта",
+      "checkout.attachScreenshot": "Прикрепить скрин",
+      "checkout.attachLater": "Прикреплю позже",
+      "checkout.screenshotAttached": "Скрин приложен ✓",
+      "checkout.uploading": "Загружаю…",
+      "checkout.uploadFailed": "Не удалось загрузить скрин: {msg}",
+      "checkout.confirmBtn": "Подтвердить заказ",
+      "checkout.sending": "Отправляю…",
+      "checkout.needPoint": "Укажите точку доставки",
+      "checkout.needPayment": "Выберите способ оплаты",
+      "checkout.submitFailed": "Не удалось отправить заказ — проверьте соединение и попробуйте снова.",
+      "checkout.newPointNote": "Новая точка — заказ подтвердит координатор",
+      "checkout.doneWarm": "Записали, спасибо, что выбрали паузу",
+      "checkout.donePendingTitle": "Заказ принят",
+      "checkout.donePendingText": "Новая точка — координатор уточнит адрес и подтвердит заказ. Мы напишем, как только всё готово.",
+      "checkout.doneBtn": "Готово",
+      "care.numberLabel": "Послание № {number} из {total}",
 
       "club.title": "Pause Club", "club.more": "Ещё", "club.moreSoon": "Скоро добавим",
       "club.empty": "Пока здесь тихо — самое время опубликовать первый пост.",
@@ -244,8 +275,6 @@
       "menu.retry": "Qayta urinish",
       "menu.soonTitle": "Menyu tez orada",
       "menu.soonText": "Bugungi menyuni hali tayyorlamoqdamiz — birozdan keyin qarang 🌿",
-      "menu.closedTitle": "Bugungi qabul yopiq",
-      "menu.closedText": "Bugungi buyurtmalar qabul qilish {time} da yopildi. Ertaga kiring — biz allaqachon keyingi menyuni tayyorlaymiz.",
       "menu.hero": "Bugungi pauzangizni tanlang",
       "menu.all": "Barchasi",
       "menu.emptyCategory": "Bu toifada hozircha bo'sh.",
@@ -257,6 +286,41 @@
       "menu.garnishNextStep": "Garnir keyingi bosqichda tanlanadi",
       "menu.order": "Buyurtma berish",
       "menu.orderUnavailable": "Hozircha buyurtma qabul qilinmayapti",
+      "menu.orderClosedNote": "Bugungi buyurtmalar qabul qilish yopiq",
+      "menu.addToCart": "Buyurtma qo'shish",
+      "menu.pickGarnishFirst": "Garnir tanlang",
+      "menu.addedToCart": "Buyurtmaga qo'shildi",
+
+      "cart.barLabel": "Pozitsiyalar: {count}",
+      "cart.barButton": "Savatcha",
+      "cart.title": "Savatchangiz",
+      "cart.total": "Jami",
+      "cart.checkoutBtn": "Buyurtmani rasmiylashtirish",
+
+      "checkout.title": "Buyurtmani rasmiylashtirish",
+      "checkout.deliveryTitle": "Qayerga yetkazish",
+      "checkout.change": "O'zgartirish",
+      "checkout.commentTitle": "Buyurtmaga izoh",
+      "checkout.commentPlaceholder": "Ixtiyoriy — masalan, domofon kodi",
+      "checkout.paymentTitle": "To'lov",
+      "checkout.cash": "Naqd pul",
+      "checkout.card": "Karta",
+      "checkout.attachScreenshot": "Skrinshot biriktirish",
+      "checkout.attachLater": "Keyinroq yuboraman",
+      "checkout.screenshotAttached": "Skrinshot biriktirildi ✓",
+      "checkout.uploading": "Yuklanmoqda…",
+      "checkout.uploadFailed": "Skrinshotni yuklab bo'lmadi: {msg}",
+      "checkout.confirmBtn": "Buyurtmani tasdiqlash",
+      "checkout.sending": "Yuborilmoqda…",
+      "checkout.needPoint": "Yetkazib berish nuqtasini ko'rsating",
+      "checkout.needPayment": "To'lov usulini tanlang",
+      "checkout.submitFailed": "Buyurtmani yuborib bo'lmadi — aloqani tekshirib, qayta urinib ko'ring.",
+      "checkout.newPointNote": "Yangi nuqta — buyurtmani koordinator tasdiqlaydi",
+      "checkout.doneWarm": "Qabul qildik, pauzani tanlaganingiz uchun rahmat",
+      "checkout.donePendingTitle": "Buyurtma qabul qilindi",
+      "checkout.donePendingText": "Yangi nuqta — koordinator manzilni aniqlab, buyurtmani tasdiqlaydi. Hammasi tayyor bo'lganda yozamiz.",
+      "checkout.doneBtn": "Tayyor",
+      "care.numberLabel": "Xabar № {number} / {total}",
 
       "club.title": "Pause Club", "club.more": "Yana", "club.moreSoon": "Tez orada qo'shamiz",
       "club.empty": "Hozircha bu yerda jimjit — birinchi postni joylash uchun ayni payt.",
@@ -397,8 +461,6 @@
       "menu.retry": "Retry",
       "menu.soonTitle": "Menu coming soon",
       "menu.soonText": "We're still preparing today's menu — check back shortly 🌿",
-      "menu.closedTitle": "Orders closed for today",
-      "menu.closedText": "Orders for today closed at {time}. Come back tomorrow — we're already preparing the next menu.",
       "menu.hero": "Choose your pause for today",
       "menu.all": "All",
       "menu.emptyCategory": "Nothing in this category yet.",
@@ -410,6 +472,41 @@
       "menu.garnishNextStep": "The side is chosen on the next step",
       "menu.order": "Order",
       "menu.orderUnavailable": "Ordering isn't available right now",
+      "menu.orderClosedNote": "Orders for today are closed",
+      "menu.addToCart": "Add to order",
+      "menu.pickGarnishFirst": "Choose a side",
+      "menu.addedToCart": "Added to your order",
+
+      "cart.barLabel": "Items: {count}",
+      "cart.barButton": "Cart",
+      "cart.title": "Your cart",
+      "cart.total": "Total",
+      "cart.checkoutBtn": "Proceed to checkout",
+
+      "checkout.title": "Checkout",
+      "checkout.deliveryTitle": "Delivery address",
+      "checkout.change": "Change",
+      "checkout.commentTitle": "Order comment",
+      "checkout.commentPlaceholder": "Optional — e.g. intercom code",
+      "checkout.paymentTitle": "Payment",
+      "checkout.cash": "Cash",
+      "checkout.card": "Card",
+      "checkout.attachScreenshot": "Attach screenshot",
+      "checkout.attachLater": "I'll send it later",
+      "checkout.screenshotAttached": "Screenshot attached ✓",
+      "checkout.uploading": "Uploading…",
+      "checkout.uploadFailed": "Couldn't upload the screenshot: {msg}",
+      "checkout.confirmBtn": "Confirm order",
+      "checkout.sending": "Sending…",
+      "checkout.needPoint": "Please set a delivery point",
+      "checkout.needPayment": "Please choose a payment method",
+      "checkout.submitFailed": "Couldn't send the order — check your connection and try again.",
+      "checkout.newPointNote": "New point — the coordinator will confirm the order",
+      "checkout.doneWarm": "Got it, thank you for choosing a pause",
+      "checkout.donePendingTitle": "Order received",
+      "checkout.donePendingText": "New point — the coordinator will confirm the address and the order. We'll let you know once it's ready.",
+      "checkout.doneBtn": "Done",
+      "care.numberLabel": "Message № {number} of {total}",
 
       "club.title": "Pause Club", "club.more": "More", "club.moreSoon": "Coming soon",
       "club.empty": "It's quiet here — a great time to publish the first post.",
@@ -836,13 +933,12 @@
   }
 
   document.getElementById("wizard-back").addEventListener("click", wizardBack);
-  document.getElementById("wizard-close").addEventListener("click", function () {
-    if (order.cart.length || order.point) {
-      showConfirm("Прервать оформление заказа? Корзина не сохранится.", "Да, прервать", closeWizard);
-    } else {
-      closeWizard();
-    }
-  });
+  // Раньше здесь спрашивали подтверждение "Прервать оформление заказа?",
+  // если в корзине были позиции — но корзина (state.cart) теперь не
+  // зависит от того, открыт визард или нет: закрыть визард в любой
+  // момент безопасно, ничего не потеряется, плавающая панель корзины
+  // просто останется на месте.
+  document.getElementById("wizard-close").addEventListener("click", closeWizard);
 
   // -------------------------------------------------------------------
   // ГЛАВНАЯ — приветствие + переход к разделам, всё на реальных данных
@@ -974,11 +1070,10 @@
       return;
     }
 
-    if (data.cutoff_passed) {
-      root.appendChild(menuStateBlock(ICON_CLOCK, t("menu.closedTitle"), t("menu.closedText", { time: data.cutoff_time })));
-      return;
-    }
-
+    // Приём после отсечки больше не блокирует весь экран — карточки всё
+    // равно показываются (можно посмотреть состав на завтра), просто у
+    // каждой вместо кнопки "Добавить в заказ" мягкая пометка о закрытом
+    // приёме (см. buildMenuSetCard: canOrderNow()).
     var hero = el("div", "menu-hero");
     hero.appendChild(el("h2", null, t("menu.hero")));
     root.appendChild(hero);
@@ -1028,133 +1123,165 @@
     root.appendChild(grid);
   }
 
+  var ICON_CHEVRON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>';
+
+  // Карточка блюда — сворачиваемая прямо в списке (Меню/Главная/Избранное):
+  // свёрнутая — миниатюра слева, название+стрелка, буллеты состава, цена;
+  // по тапу фото переезжает наверх на всю ширину и под ним раскрывается
+  // весь состав, выбор гарнира/варианта, счётчик количества и кнопка
+  // "Добавить в заказ" (см. ТЗ — плавающая корзина ниже). Своё локальное
+  // состояние (что выбрано, развёрнута ли) живёт в замыкании — у каждой
+  // карточки отдельный экземпляр, поэтому Главная/Меню/Избранное не мешают
+  // друг другу, даже отображая один и тот же сет одновременно.
   function buildMenuSetCard(s) {
-    // Горизонтальная карточка (миниатюра слева) — как в списке блюд на
-    // макете; полноразмерное фото/детали — уже на отдельном экране
-    // (см. openSetDetail), сама карточка в списке только открывает его.
-    // Фото слева на всю высоту карточки, справа — название+стрелка одной
-    // строкой, список ингредиентов буллетами и цена внизу (s.description
-    // — см. sheets.set_set_description; пусто, пока админ не заполнил
-    // через /admin → "✉️ Описание блюд", тогда просто нет списка).
     var card = el("div", "card menu-set-card");
-    if (s.photo_url) {
-      var img = el("img", "menu-set-thumb");
-      img.alt = "";
-      img.loading = "lazy";
-      img.addEventListener("error", function () { img.remove(); });
-      setPhotoSrc(img, s.photo_url);
-      card.appendChild(img);
-    } else {
-      card.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
-    }
-    var body = el("div", "menu-set-card-body");
+    var expanded = false;
+    var sel = { variantIdx: 0, garnish: "", qty: 1 };
 
-    var head = el("div", "menu-set-card-head");
-    head.appendChild(el("div", "menu-set-card-name", escapeHtml(s.display_name)));
-    head.appendChild(el("div", "menu-set-card-chevron", '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>'));
-    body.appendChild(head);
-
-    if (s.description && s.description.length) {
-      var list = el("ul", "menu-set-card-desc");
-      s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
-      body.appendChild(list);
+    function currentEffSet() {
+      if (!s.is_variant_group) return s;
+      var v = s.variants[sel.variantIdx] || s.variants[0];
+      return {
+        key: v.technical, display_name: s.display_name + " · " + v.label, price: v.price,
+        has_garnish: v.has_garnish, garnish_options: v.garnish_options,
+      };
     }
 
-    if (s.is_variant_group) {
-      var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
-      body.appendChild(el("div", "menu-set-card-price", t("menu.from", { sum: fmtSum(minP) })));
-    } else {
-      body.appendChild(el("div", "menu-set-card-price", fmtSum(s.price)));
-      if (s.has_garnish) body.appendChild(el("div", "menu-set-card-note", t("menu.withGarnish")));
+    function canOrderNow() {
+      return !state.menu || state.menu.can_order !== false;
     }
-    card.appendChild(body);
-    card.addEventListener("click", function () { openSetDetail(s); });
-    return card;
-  }
 
-  // --- Детальная карточка блюда (открывается по клику из списка/с
-  // Главной) — отдельный экран перед визардом заказа, как на макете:
-  // крупное фото, цена, кнопка "Заказать" запускает тот же самый
-  // startOrderFromCard, что раньше вызывался прямо по клику на карточку. --
+    function render() {
+      card.innerHTML = "";
+      card.onclick = null;
+      card.classList.toggle("expanded", expanded);
 
-  function openSetDetail(s) {
-    haptic("select");
-    openWizard(function (body) {
-      wizardPhaseEl.innerHTML = "";
       if (s.photo_url) {
-        var img = el("img", "set-detail-photo");
+        var img = el("img", "menu-set-thumb");
         img.alt = "";
+        img.loading = "lazy";
         img.addEventListener("error", function () { img.remove(); });
         setPhotoSrc(img, s.photo_url);
-        body.appendChild(img);
-      }
-      var favBtn = el("button", "set-detail-fav", ICON_HEART);
-      // Состояние "уже в избранном" подгружается лениво (см.
-      // ensureFavoriteKeys) — кнопка рисуется сразу пустым сердечком, не
-      // дожидаясь ответа сервера, и обновляется, когда он придёт (обычно
-      // мгновенно — Set кэшируется на сессию после первого раза).
-      ensureFavoriteKeys().then(function (keys) {
-        favBtn.classList.toggle("active", keys.has(s.key));
-        favBtn.innerHTML = keys.has(s.key) ? ICON_HEART_FILLED : ICON_HEART;
-      });
-      favBtn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        favBtn.disabled = true;
-        toggleFavorite(s.key).then(function (favorited) {
-          favBtn.disabled = false;
-          favBtn.classList.toggle("active", favorited);
-          favBtn.innerHTML = favorited ? ICON_HEART_FILLED : ICON_HEART;
-          haptic("success");
-          toast(favorited ? t("menu.favAdded") : t("menu.favRemoved"));
-        }).catch(function (err) {
-          favBtn.disabled = false;
-          toast(t("menu.favFailed", { msg: err.message }));
-        });
-      });
-      body.appendChild(favBtn);
-
-      var wrap = el("div", "set-detail-body");
-      wrap.appendChild(el("h2", "wizard-title", s.display_name));
-      if (s.is_variant_group) {
-        var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
-        wrap.appendChild(el("div", "set-detail-price", t("menu.from", { sum: fmtSum(minP) })));
+        card.appendChild(img);
       } else {
-        wrap.appendChild(el("div", "set-detail-price", fmtSum(s.price)));
-        if (s.has_garnish) wrap.appendChild(el("div", "set-detail-note", t("menu.garnishNextStep")));
+        card.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
       }
-      body.appendChild(wrap);
 
-      // Первая версия — только витрина реального сегодняшнего меню, сам
-      // заказ через приложение пока не принимаем (см. договорённость:
-      // "Заказать" -> уведомление, полноценный визард подключим отдельным
-      // шагом). startOrderFromCard ниже уже готов и рабочий — просто не
-      // вызывается из этой кнопки, пока владелец не попросит включить.
-      var orderBtn = el("button", "btn-primary wizard-footer-btn", t("menu.order"));
-      orderBtn.addEventListener("click", function () { toast(t("menu.orderUnavailable")); });
-      body.appendChild(orderBtn);
-    });
-  }
+      var body = el("div", "menu-set-card-body");
+      var head = el("div", "menu-set-card-head");
+      head.appendChild(el("div", "menu-set-card-name", escapeHtml(s.display_name)));
 
-  function startOrderFromCard(s) {
-    if (!state.profile || !state.profile.registered) {
-      toast("Сначала зарегистрируйтесь в боте: наберите /start");
-      return;
-    }
-    haptic("select");
-    resetOrder();
-    if (s.is_variant_group) {
-      openWizard(function (body) { stepVariant(body, s); });
-    } else {
-      openWizard(function (body) {
-        order.curSet = s;
-        if (s.has_garnish && s.garnish_options.length) {
-          stepGarnish(body, s);
+      if (expanded) {
+        var favBtn = el("button", "menu-set-fav-btn", ICON_HEART);
+        ensureFavoriteKeys().then(function (keys) {
+          favBtn.classList.toggle("active", keys.has(s.key));
+          favBtn.innerHTML = keys.has(s.key) ? ICON_HEART_FILLED : ICON_HEART;
+        });
+        favBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          favBtn.disabled = true;
+          toggleFavorite(s.key).then(function (favorited) {
+            favBtn.disabled = false;
+            favBtn.classList.toggle("active", favorited);
+            favBtn.innerHTML = favorited ? ICON_HEART_FILLED : ICON_HEART;
+            haptic("success");
+            toast(favorited ? t("menu.favAdded") : t("menu.favRemoved"));
+          }).catch(function (err) {
+            favBtn.disabled = false;
+            toast(t("menu.favFailed", { msg: err.message }));
+          });
+        });
+        head.appendChild(favBtn);
+      }
+      head.appendChild(el("div", "menu-set-card-chevron" + (expanded ? " up" : ""), ICON_CHEVRON));
+      body.appendChild(head);
+
+      if (s.description && s.description.length) {
+        var list = el("ul", "menu-set-card-desc");
+        s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
+        body.appendChild(list);
+      }
+
+      if (!expanded) {
+        if (s.is_variant_group) {
+          var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
+          body.appendChild(el("div", "menu-set-card-price", t("menu.from", { sum: fmtSum(minP) })));
         } else {
-          order.curGarnish = "";
-          stepQty(body);
+          body.appendChild(el("div", "menu-set-card-price", fmtSum(s.price)));
+          if (s.has_garnish) body.appendChild(el("div", "menu-set-card-note", t("menu.withGarnish")));
         }
-      });
+        card.appendChild(body);
+        card.onclick = function () { haptic("select"); expanded = true; render(); };
+        return;
+      }
+
+      // --- развёрнутое состояние ---
+      // Важно: render() пересобирает card.innerHTML и переназначает
+      // card.onclick/head.onclick синхронно, прямо изнутри обработчиков
+      // клика на вложенных элементах (шапка/кнопка "Добавить"). Если не
+      // остановить всплытие, один и тот же клик — уже после того, как
+      // card только что получил новый onclick — продолжает всплывать до
+      // card и немедленно раскрывает её обратно (поймано и подтверждено
+      // тестом: клик "Добавить" сворачивал карточку и тут же сам её
+      // разворачивал снова). Поэтому каждый вложенный интерактивный
+      // элемент останавливает событие сам.
+      head.style.cursor = "pointer";
+      head.onclick = function (e) { e.stopPropagation(); haptic("select"); expanded = false; render(); };
+
+      var effSet = currentEffSet();
+      body.appendChild(el("div", "menu-set-card-price", fmtSum(effSet.price)));
+
+      if (s.is_variant_group) {
+        var variantRow = el("div", "menu-set-chip-row");
+        s.variants.forEach(function (v, idx) {
+          var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(v.label));
+          chip.addEventListener("click", function (e) { e.stopPropagation(); sel.variantIdx = idx; sel.garnish = ""; render(); });
+          variantRow.appendChild(chip);
+        });
+        body.appendChild(variantRow);
+      }
+
+      if (effSet.has_garnish && effSet.garnish_options.length) {
+        var garnishRow = el("div", "menu-set-chip-row");
+        effSet.garnish_options.forEach(function (g) {
+          var chip = el("button", "menu-set-chip" + (sel.garnish === g.value ? " active" : ""), escapeHtml(g.display));
+          chip.addEventListener("click", function (e) { e.stopPropagation(); sel.garnish = g.value; render(); });
+          garnishRow.appendChild(chip);
+        });
+        body.appendChild(garnishRow);
+      }
+
+      if (!canOrderNow()) {
+        body.appendChild(el("div", "menu-set-closed-note", t("menu.orderClosedNote")));
+      } else {
+        var qtyRow = el("div", "menu-set-qty-row");
+        var minus = el("button", "menu-set-qty-btn", "–");
+        var value = el("div", "menu-set-qty-value", String(sel.qty));
+        var plus = el("button", "menu-set-qty-btn", "+");
+        minus.addEventListener("click", function (e) { e.stopPropagation(); if (sel.qty > 1) { sel.qty--; value.textContent = sel.qty; haptic(); } });
+        plus.addEventListener("click", function (e) { e.stopPropagation(); sel.qty++; value.textContent = sel.qty; haptic(); });
+        qtyRow.appendChild(minus); qtyRow.appendChild(value); qtyRow.appendChild(plus);
+        body.appendChild(qtyRow);
+
+        var addBtn = el("button", "btn-primary", t("menu.addToCart"));
+        addBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          if (effSet.has_garnish && effSet.garnish_options.length && !sel.garnish) { toast(t("menu.pickGarnishFirst")); return; }
+          addToCart(effSet, sel);
+          haptic("success");
+          toast(t("menu.addedToCart"));
+          expanded = false;
+          sel = { variantIdx: 0, garnish: "", qty: 1 };
+          render();
+        });
+        body.appendChild(addBtn);
+      }
+
+      card.appendChild(body);
     }
+
+    render();
+    return card;
   }
 
   function escapeHtml(s) {
@@ -1469,110 +1596,18 @@
   }
 
   // -------------------------------------------------------------------
-  // ЗАКАЗ — состояние корзины на время визарда
+  // КОРЗИНА + ОФОРМЛЕНИЕ ЗАКАЗА — корзина (state.cart) не зависит от
+  // визарда: свернуть/закрыть визард не теряет добавленные позиции,
+  // только явное удаление позиции или успешная отправка заказа его
+  // очищает. checkout — черновик полей оформления (точка/комментарий/
+  // оплата), живёт, пока не отправлен заказ.
   // -------------------------------------------------------------------
 
-  var order = {};
-  function resetOrder() {
-    order = { cart: [], zone: "", point: "", isNewPoint: false, comment: "", payment: "", screenshotFileId: null };
+  var checkout = {};
+  function resetCheckout() {
+    checkout = { zone: "", point: "", isNewPoint: false, comment: "", payment: "", screenshotFileId: null };
   }
-
-  // --- Шаг: выбор сета (вторичный, изнутри визарда — см. "+ Ещё сет" в
-  // stepCart; первичный вход теперь с самого экрана Меню, см.
-  // startOrderFromCard) -------------------------------------------------
-
-  function stepSets(body) {
-    setWizardPhase(0, 4);
-    body.appendChild(el("h2", "wizard-title", order.cart.length ? "Добавить ещё сет" : "Что будем заказывать?"));
-    state.menu.sets.forEach(function (s) {
-      var card = el("div", "card set-card");
-      var main = el("div", "set-card-main");
-      main.appendChild(el("div", "set-card-name", s.display_name));
-      if (s.is_variant_group) {
-        var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
-        main.appendChild(el("div", "set-card-price", "от " + fmtSum(minP)));
-      } else {
-        main.appendChild(el("div", "set-card-price", fmtSum(s.price)));
-        if (s.has_garnish) main.appendChild(el("div", "set-card-garnish-note", "с выбором гарнира"));
-      }
-      card.appendChild(main);
-      card.appendChild(el("div", "set-card-chevron", '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>'));
-      card.addEventListener("click", function () {
-        haptic("select");
-        if (s.is_variant_group) wizardStep(function (b) { stepVariant(b, s); });
-        else chooseSet(s);
-      });
-      body.appendChild(card);
-    });
-    if (order.cart.length) {
-      var doneBtn = el("button", "btn-ghost", "Дальше →");
-      doneBtn.style.marginTop = "16px";
-      doneBtn.addEventListener("click", function () { wizardStep(stepPoint); });
-      body.appendChild(doneBtn);
-    }
-  }
-
-  function stepVariant(body, group) {
-    setWizardPhase(0, 4);
-    body.appendChild(el("h2", "wizard-title", group.display_name));
-    group.variants.forEach(function (v) {
-      var row = el("div", "card option-row");
-      row.appendChild(el("div", null, '<div class="option-row-label">' + v.label + '</div><div class="option-row-sub">' + fmtSum(v.price) + '</div>'));
-      row.addEventListener("click", function () {
-        haptic("select");
-        chooseSet({ key: v.technical, display_name: group.display_name + " · " + v.label, price: v.price, has_garnish: v.has_garnish, garnish_options: v.garnish_options });
-      });
-      body.appendChild(row);
-    });
-  }
-
-  function chooseSet(s) {
-    order.curSet = s;
-    if (s.has_garnish && s.garnish_options.length) {
-      wizardStep(function (b) { stepGarnish(b, s); });
-    } else {
-      order.curGarnish = "";
-      wizardStep(stepQty);
-    }
-  }
-
-  function stepGarnish(body, s) {
-    setWizardPhase(0, 4);
-    body.appendChild(el("h2", "wizard-title", "Гарнир — " + s.display_name));
-    s.garnish_options.forEach(function (g) {
-      var row = el("div", "card option-row");
-      row.appendChild(el("div", "option-row-label", g.display));
-      row.addEventListener("click", function () {
-        haptic("select");
-        order.curGarnish = g.value;
-        wizardStep(stepQty);
-      });
-      body.appendChild(row);
-    });
-  }
-
-  function stepQty(body) {
-    setWizardPhase(0, 4);
-    var qty = 1;
-    body.appendChild(el("h2", "wizard-title", "Сколько порций?"));
-    var stepper = el("div", "stepper");
-    var minus = el("button", "stepper-btn", "–");
-    var value = el("div", "stepper-value", "1");
-    var plus = el("button", "stepper-btn", "+");
-    minus.addEventListener("click", function () { if (qty > 1) { qty--; value.textContent = qty; haptic(); } });
-    plus.addEventListener("click", function () { qty++; value.textContent = qty; haptic(); });
-    stepper.appendChild(minus); stepper.appendChild(value); stepper.appendChild(plus);
-    body.appendChild(stepper);
-
-    var nextBtn = el("button", "btn-primary wizard-footer-btn", "Добавить в заказ");
-    nextBtn.addEventListener("click", function () {
-      order.cart.push({ set: order.curSet.key, display: order.curSet.display_name, garnish: order.curGarnish || "", garnishDisplay: garnishDisplayFor(order.curSet, order.curGarnish), price: order.curSet.price || 0, qty: qty });
-      order.curSet = null;
-      order.curGarnish = "";
-      wizardStep(stepCart);
-    });
-    body.appendChild(nextBtn);
-  }
+  resetCheckout();
 
   function garnishDisplayFor(s, value) {
     if (!value || !s.garnish_options) return "";
@@ -1580,316 +1615,331 @@
     return found ? found.display : value;
   }
 
+  function addToCart(effSet, sel) {
+    state.cart.push({
+      set: effSet.key, display: effSet.display_name,
+      garnish: sel.garnish || "", garnishDisplay: garnishDisplayFor(effSet, sel.garnish),
+      price: effSet.price || 0, qty: sel.qty,
+    });
+    syncCartBar();
+  }
+
+  function cartTotal() { return state.cart.reduce(function (s, i) { return s + i.price * i.qty; }, 0); }
+
+  // Плавающая панель над нижней навигацией — появляется, как только в
+  // корзине есть хоть одна позиция, и исчезает сама, как только корзина
+  // опустела (см. stepCart ниже — там же закрывается и сам экран
+  // корзины, если в нём убрали последнюю позицию).
+  function syncCartBar() {
+    var bar = document.getElementById("cart-bar");
+    if (!state.cart.length) {
+      bar.hidden = true;
+      bar.onclick = null;
+      return;
+    }
+    bar.innerHTML =
+      '<div class="cart-bar-info"><span class="cart-bar-count">' + escapeHtml(t("cart.barLabel", { count: state.cart.length })) + '</span><span class="cart-bar-total">' + fmtSum(cartTotal()) + '</span></div>' +
+      '<button class="cart-bar-btn">' + escapeHtml(t("cart.barButton")) + '</button>';
+    bar.hidden = false;
+    bar.onclick = openCartScreen;
+  }
+
+  function openCartScreen() {
+    haptic("select");
+    openWizard(function (body) { stepCart(body); });
+  }
+
+  // wizardStep()/wizardReplace() кладут в стек функции рендера, а не
+  // "именованные экраны" — если из stepCheckout уйти в выбор района/
+  // точки (несколько шагов вглубь) и там всё выбрать, возврат должен
+  // схлопнуть стек обратно к самому stepCheckout (индекс 1: [stepCart,
+  // stepCheckout, ...]), а не плодить второй его экземпляр поверх.
+  function backToCheckout() {
+    if (wizardStack.length > 2) wizardStack.length = 2;
+    renderWizardCurrent();
+  }
+
   function stepCart(body) {
-    setWizardPhase(0, 4);
-    body.appendChild(el("h2", "wizard-title", "Ваша корзина"));
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", t("cart.title")));
     var card = el("div", "card");
-    order.cart.forEach(function (item, idx) {
+    state.cart.forEach(function (item, idx) {
       var row = el("div", "cart-row");
       var left = el("div");
-      left.appendChild(el("div", "cart-row-name", item.qty + "× " + item.display));
-      if (item.garnishDisplay) left.appendChild(el("div", "cart-row-sub", item.garnishDisplay));
+      left.appendChild(el("div", "cart-row-name", escapeHtml(item.display)));
+      if (item.garnishDisplay) left.appendChild(el("div", "cart-row-sub", escapeHtml(item.garnishDisplay)));
       row.appendChild(left);
-      var right = el("div", null, '<span class="cart-row-sum">' + fmtSum(item.price * item.qty) + '</span>');
+
+      var right = el("div", "cart-row-right");
+      var qtyRow = el("div", "menu-set-qty-row cart-row-qty");
+      var minus = el("button", "menu-set-qty-btn", "–");
+      var value = el("div", "menu-set-qty-value", String(item.qty));
+      var plus = el("button", "menu-set-qty-btn", "+");
+      minus.addEventListener("click", function () { if (item.qty > 1) { item.qty--; haptic(); wizardReplace(stepCart); } });
+      plus.addEventListener("click", function () { item.qty++; haptic(); wizardReplace(stepCart); });
+      qtyRow.appendChild(minus); qtyRow.appendChild(value); qtyRow.appendChild(plus);
+      right.appendChild(qtyRow);
+      right.appendChild(el("span", "cart-row-sum", fmtSum(item.price * item.qty)));
       var rm = el("button", "cart-row-remove", "×");
-      rm.addEventListener("click", function () { order.cart.splice(idx, 1); wizardReplace(stepCart); });
+      rm.addEventListener("click", function () {
+        state.cart.splice(idx, 1);
+        syncCartBar();
+        if (!state.cart.length) { closeWizard(); return; }
+        wizardReplace(stepCart);
+      });
       right.appendChild(rm);
       row.appendChild(right);
       card.appendChild(row);
     });
-    var total = order.cart.reduce(function (s, i) { return s + i.price * i.qty; }, 0);
     var totalRow = el("div", "summary-total");
-    totalRow.innerHTML = '<span class="summary-total-label">Итого</span><span class="summary-total-value">' + fmtSum(total) + '</span>';
+    totalRow.innerHTML = '<span class="summary-total-label">' + escapeHtml(t("cart.total")) + '</span><span class="summary-total-value">' + fmtSum(cartTotal()) + '</span>';
     card.appendChild(totalRow);
     body.appendChild(card);
 
-    var addMore = el("button", "btn-ghost", "+ Ещё сет");
-    addMore.style.marginTop = "14px";
-    addMore.addEventListener("click", function () { wizardStep(stepSets); });
-    body.appendChild(addMore);
-
-    var next = el("button", "btn-primary wizard-footer-btn", "Дальше →");
-    next.addEventListener("click", function () { wizardStep(stepPoint); });
+    var next = el("button", "btn-primary wizard-footer-btn", t("cart.checkoutBtn"));
+    next.addEventListener("click", function () { wizardStep(stepCheckout); });
     body.appendChild(next);
   }
 
-  // --- Шаг: точка доставки ---------------------------------------------
+  // --- Оформление заказа — один экран, без пошаговых переходов --------
 
-  function stepPoint(body) {
-    setWizardPhase(1, 4);
+  function stepCheckout(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", t("checkout.title")));
+
     var profile = state.profile;
-    var hasDefault = profile.zone && profile.point;
-
-    if (hasDefault && !order._pointStepShown) {
-      order.zone = profile.zone; order.point = profile.point; order.isNewPoint = false;
+    if (!checkout.zone && !checkout.point && profile && profile.zone && profile.point) {
+      checkout.zone = profile.zone; checkout.point = profile.point; checkout.isNewPoint = false;
     }
-
-    body.appendChild(el("h2", "wizard-title", "Куда доставить?"));
-
-    if (order.zone && order.point) {
-      var card = el("div", "card");
-      card.innerHTML = '<div class="list-row-label" style="font-weight:600;color:var(--ink)">' + order.zone + '</div><div class="list-row-value" style="text-align:left;margin-top:2px">' + order.point + '</div>';
-      body.appendChild(card);
-      var change = el("button", "btn-text", "Изменить точку");
-      change.style.marginTop = "10px";
-      change.addEventListener("click", function () { order.zone = ""; order.point = ""; wizardReplace(stepPoint); });
-      body.appendChild(change);
-
-      var next = el("button", "btn-primary wizard-footer-btn", "Дальше →");
-      next.addEventListener("click", function () { wizardStep(stepComment); });
-      body.appendChild(next);
-      return;
+    var deliveryField = el("div", "field");
+    deliveryField.innerHTML = '<label>' + escapeHtml(t("checkout.deliveryTitle")) + '</label>';
+    if (checkout.zone && checkout.point) {
+      var ptCard = el("div", "card option-row selected");
+      ptCard.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(checkout.zone) + '</div><div class="option-row-sub">' + escapeHtml(checkout.point) + '</div></div>';
+      deliveryField.appendChild(ptCard);
+      var change = el("button", "btn-text", t("checkout.change"));
+      change.addEventListener("click", function () { wizardStep(function (b) { renderZonePickerForCheckout(b); }); });
+      deliveryField.appendChild(change);
+    } else {
+      var setBtn = el("div", "card option-row");
+      setBtn.appendChild(el("div", "option-row-label", t("address.setPoint")));
+      setBtn.addEventListener("click", function () { wizardStep(function (b) { renderZonePickerForCheckout(b); }); });
+      deliveryField.appendChild(setBtn);
     }
+    body.appendChild(deliveryField);
+    if (checkout.isNewPoint) body.appendChild(el("p", "center-note", t("checkout.newPointNote")));
 
-    order._pointStepShown = true;
-    renderZonePicker(body);
+    var commentField = el("div", "field");
+    commentField.innerHTML =
+      '<label>' + escapeHtml(t("checkout.commentTitle")) + '</label>' +
+      '<textarea id="checkout-comment" rows="2" placeholder="' + escapeHtml(t("checkout.commentPlaceholder")) + '"></textarea>';
+    body.appendChild(commentField);
+    var commentInput = commentField.querySelector("textarea");
+    commentInput.value = checkout.comment || "";
+    commentInput.addEventListener("input", function (e) { checkout.comment = e.target.value; });
+
+    var payField = el("div", "field");
+    payField.innerHTML = '<label>' + escapeHtml(t("checkout.paymentTitle")) + '</label>';
+    var cashValue = (state.menu.payment_options || []).filter(function (p) { return !/карт/i.test(p); })[0] || t("checkout.cash");
+    var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
+    var tilesRow = el("div", "payment-tiles-row");
+    [{ value: cashValue, label: t("checkout.cash") }, { value: cardValue, label: t("checkout.card") }].forEach(function (opt) {
+      var tile = el("button", "payment-tile" + (checkout.payment === opt.value ? " active" : ""), escapeHtml(opt.label));
+      tile.addEventListener("click", function () {
+        haptic("select");
+        checkout.payment = opt.value;
+        if (opt.value === cashValue) checkout.screenshotFileId = null;
+        wizardReplace(stepCheckout);
+      });
+      tilesRow.appendChild(tile);
+    });
+    payField.appendChild(tilesRow);
+
+    if (checkout.payment && checkout.payment === cardValue) {
+      payField.appendChild(el("div", "requisites-box", escapeHtml(state.menu.card_requisites || "")));
+      if (checkout.screenshotFileId) {
+        payField.appendChild(el("div", "checkout-screenshot-ok", escapeHtml(t("checkout.screenshotAttached"))));
+      } else {
+        var attachRow = el("div", "checkout-attach-row");
+        var fileInput = el("input");
+        fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none";
+        var attachBtn = el("button", "btn-primary", t("checkout.attachScreenshot"));
+        var laterBtn = el("button", "btn-ghost", t("checkout.attachLater"));
+        attachBtn.addEventListener("click", function () { fileInput.click(); });
+        fileInput.addEventListener("change", function () {
+          if (!fileInput.files || !fileInput.files[0]) return;
+          var file = fileInput.files[0];
+          attachBtn.disabled = true;
+          attachBtn.textContent = t("checkout.uploading");
+          apiUpload("/api/order/screenshot", file, file.name).then(function (data) {
+            checkout.screenshotFileId = data.file_id;
+            haptic("success");
+            wizardReplace(stepCheckout);
+          }).catch(function (err) {
+            attachBtn.disabled = false;
+            attachBtn.textContent = t("checkout.attachScreenshot");
+            toast(t("checkout.uploadFailed", { msg: err.message }));
+          });
+        });
+        laterBtn.addEventListener("click", function () { checkout.screenshotFileId = null; wizardReplace(stepCheckout); });
+        attachRow.appendChild(fileInput);
+        attachRow.appendChild(attachBtn);
+        attachRow.appendChild(laterBtn);
+        payField.appendChild(attachRow);
+      }
+    }
+    body.appendChild(payField);
+
+    var confirmBtn = el("button", "btn-primary wizard-footer-btn", t("checkout.confirmBtn"));
+    confirmBtn.addEventListener("click", function () { submitCheckoutOrder(confirmBtn); });
+    body.appendChild(confirmBtn);
   }
 
-  function renderZonePicker(body) {
+  // Выбор района → точки при оформлении — та же логика, что уже
+  // используется в боте и в Профиле → Адрес доставки (см.
+  // renderZonePickerForEdit чуть ниже): список районов/точек из тех же
+  // данных (sheets.get_zones/get_points), при выборе существующей точки
+  // запоминаем её как точку по умолчанию (sheets.update_client_point —
+  // см. api_order_submit), вариант вписать новую точку вручную уходит на
+  // модерацию администратору вместо немедленной записи заказа.
+  function renderZonePickerForCheckout(body) {
+    body.appendChild(el("h2", "wizard-title", t("address.zone")));
     api("/api/zones").then(function (data) {
       data.zones.forEach(function (z) {
         var row = el("div", "card option-row");
         row.appendChild(el("div", "option-row-label", z));
-        row.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderPointPicker(b, z); }); });
+        row.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderPointPickerForCheckout(b, z); }); });
         body.appendChild(row);
       });
       var otherRow = el("div", "card option-row");
-      otherRow.appendChild(el("div", "option-row-label", "Другой район"));
-      otherRow.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderNewPointForm(b, ""); }); });
+      otherRow.appendChild(el("div", "option-row-label", t("address.otherZone")));
+      otherRow.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderNewPointFormForCheckout(b, ""); }); });
       body.appendChild(otherRow);
     });
   }
 
-  function renderPointPicker(body, zone) {
-    setWizardPhase(1, 4);
+  function renderPointPickerForCheckout(body, zone) {
     body.appendChild(el("h2", "wizard-title", zone));
     api("/api/points?zone=" + encodeURIComponent(zone)).then(function (data) {
-      if (!data.points.length) {
-        renderNewPointForm(body, zone);
-        return;
-      }
+      if (!data.points.length) { renderNewPointFormForCheckout(body, zone); return; }
       data.points.forEach(function (p) {
         var row = el("div", "card option-row");
         row.appendChild(el("div", "option-row-label", p));
         row.addEventListener("click", function () {
           haptic("select");
-          order.zone = zone; order.point = p; order.isNewPoint = false;
-          wizardStep(stepComment);
+          checkout.zone = zone; checkout.point = p; checkout.isNewPoint = false;
+          backToCheckout();
         });
         body.appendChild(row);
       });
       var otherRow = el("div", "card option-row");
-      otherRow.appendChild(el("div", "option-row-label", "Другая точка"));
-      otherRow.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderNewPointForm(b, zone); }); });
+      otherRow.appendChild(el("div", "option-row-label", t("address.otherPoint")));
+      otherRow.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderNewPointFormForCheckout(b, zone); }); });
       body.appendChild(otherRow);
     });
   }
 
-  function renderNewPointForm(body, zone) {
-    setWizardPhase(1, 4);
-    body.appendChild(el("h2", "wizard-title", "Новая точка"));
-    body.appendChild(el("p", null, "Впишите адрес или название места — мы уточним и добавим в справочник. Заказ примем сразу, как координатор подтвердит точку."));
+  function renderNewPointFormForCheckout(body, zone) {
+    body.appendChild(el("h2", "wizard-title", t("address.newPoint")));
     var field = el("div", "field");
-    field.innerHTML = '<label>Адрес / название точки</label><input type="text" id="new-point-input" placeholder="Например: офис Malika Plaza, 4 этаж">';
+    field.innerHTML = '<label>' + escapeHtml(t("address.newPointField")) + '</label><input type="text" id="co-new-point">';
     body.appendChild(field);
     if (!zone) {
       var zf = el("div", "field");
-      zf.innerHTML = '<label>Район</label><input type="text" id="new-zone-input" placeholder="Например: Юнусабад">';
+      zf.innerHTML = '<label>' + escapeHtml(t("address.newZoneField")) + '</label><input type="text" id="co-new-zone">';
       body.insertBefore(zf, field);
     }
-    var next = el("button", "btn-primary wizard-footer-btn", "Дальше →");
+    var next = el("button", "btn-primary wizard-footer-btn", t("address.done"));
     next.addEventListener("click", function () {
-      var pointVal = document.getElementById("new-point-input").value.trim();
-      var zoneVal = zone || (document.getElementById("new-zone-input") || {}).value || "";
+      var pointVal = document.getElementById("co-new-point").value.trim();
+      var zoneVal = zone || (document.getElementById("co-new-zone") || {}).value || "";
       zoneVal = zoneVal.trim();
-      if (!pointVal || !zoneVal) { toast("Заполните район и точку"); return; }
-      order.zone = zoneVal; order.point = pointVal; order.isNewPoint = true;
-      wizardStep(stepComment);
+      if (!pointVal || !zoneVal) { toast(t("address.fillBoth")); return; }
+      checkout.zone = zoneVal; checkout.point = pointVal; checkout.isNewPoint = true;
+      backToCheckout();
     });
     body.appendChild(next);
   }
 
-  // --- Шаг: комментарий --------------------------------------------------
+  // --- Отправка — тот же /api/order, что и раньше (см. pauseapp.py:
+  // api_order_submit — дата активного меню/отсечка/ID клиента/статус
+  // "на модерации" для новой точки/привязка скрина уже реализованы там,
+  // здесь только вызов). ------------------------------------------------
 
-  function stepComment(body) {
-    setWizardPhase(2, 4);
-    body.appendChild(el("h2", "wizard-title", "Комментарий к заказу"));
-    body.appendChild(el("p", null, "Необязательно — например, код домофона или пожелание к доставке."));
-    var field = el("div", "field");
-    field.style.marginTop = "14px";
-    field.innerHTML = '<textarea id="comment-input" rows="3" placeholder="Например: домофон 45К, позвонить за 5 минут">' + (order.comment || "") + '</textarea>';
-    body.appendChild(field);
-    var next = el("button", "btn-primary wizard-footer-btn", "Дальше →");
-    next.addEventListener("click", function () {
-      order.comment = document.getElementById("comment-input").value.trim();
-      wizardStep(stepPayment);
-    });
-    body.appendChild(next);
-  }
-
-  // --- Шаг: оплата ---------------------------------------------------
-
-  function stepPayment(body) {
-    setWizardPhase(3, 4);
-    body.appendChild(el("h2", "wizard-title", "Способ оплаты"));
-    state.menu.payment_options.forEach(function (p) {
-      var row = el("div", "card option-row" + (order.payment === p ? " selected" : ""));
-      row.appendChild(el("div", "option-row-label", p));
-      row.appendChild(el("div", "option-row-check"));
-      row.addEventListener("click", function () {
-        haptic("select");
-        order.payment = p;
-        if (/карт/i.test(p)) wizardStep(stepCardDecision);
-        else { order.screenshotFileId = null; wizardStep(stepSummary); }
-      });
-      body.appendChild(row);
-    });
-  }
-
-  function stepCardDecision(body) {
-    setWizardPhase(3, 4);
-    body.appendChild(el("h2", "wizard-title", "Реквизиты для оплаты"));
-    body.appendChild(el("div", "requisites-box", escapeHtml(state.menu.card_requisites)));
-    var now = el("button", "btn-primary", "Отправить скрин сейчас");
-    now.addEventListener("click", function () { wizardStep(stepScreenshot); });
-    var later = el("button", "btn-ghost", "Пришлю скрин позже");
-    later.style.marginTop = "10px";
-    later.addEventListener("click", function () { order.screenshotFileId = null; wizardStep(stepSummary); });
-    body.appendChild(now);
-    body.appendChild(later);
-  }
-
-  function stepScreenshot(body) {
-    setWizardPhase(3, 4);
-    body.appendChild(el("h2", "wizard-title", "Скрин оплаты"));
-    var zone = el("div", "upload-zone", "Нажмите, чтобы выбрать фото скрина оплаты");
-    var input = el("input");
-    input.type = "file"; input.accept = "image/*"; input.style.display = "none";
-    zone.appendChild(input);
-    body.appendChild(zone);
-    zone.addEventListener("click", function () { input.click(); });
-
-    var next = el("button", "btn-primary wizard-footer-btn", "Загрузить и продолжить");
-    next.disabled = true;
-    body.appendChild(next);
-
-    var chosenFile = null;
-    input.addEventListener("change", function () {
-      if (!input.files || !input.files[0]) return;
-      chosenFile = input.files[0];
-      var img = el("img", "upload-preview");
-      img.src = URL.createObjectURL(chosenFile);
-      zone.appendChild(img);
-      zone.textContent = "";
-      zone.appendChild(img);
-      next.disabled = false;
-    });
-
-    next.addEventListener("click", function () {
-      if (!chosenFile) return;
-      next.disabled = true;
-      next.textContent = "Загружаю…";
-      apiUpload("/api/order/screenshot", chosenFile, chosenFile.name).then(function (data) {
-        order.screenshotFileId = data.file_id;
-        haptic("success");
-        wizardStep(stepSummary);
-      }).catch(function (err) {
-        next.disabled = false;
-        next.textContent = "Загрузить и продолжить";
-        toast("Не удалось загрузить скрин: " + err.message);
-      });
-    });
-  }
-
-  // --- Шаг: сводка и подтверждение ---------------------------------------
-
-  function stepSummary(body) {
-    setWizardPhase(3, 4);
-    body.appendChild(el("h2", "wizard-title", "Проверьте заказ"));
-    var card = el("div", "card");
-    order.cart.forEach(function (item) {
-      var row = el("div", "cart-row");
-      var left = el("div");
-      left.appendChild(el("div", "cart-row-name", item.qty + "× " + item.display));
-      if (item.garnishDisplay) left.appendChild(el("div", "cart-row-sub", item.garnishDisplay));
-      row.appendChild(left);
-      row.appendChild(el("span", "cart-row-sum", fmtSum(item.price * item.qty)));
-      card.appendChild(row);
-    });
-    var total = order.cart.reduce(function (s, i) { return s + i.price * i.qty; }, 0);
-    var totalRow = el("div", "summary-total");
-    totalRow.innerHTML = '<span class="summary-total-label">Итого</span><span class="summary-total-value">' + fmtSum(total) + '</span>';
-    card.appendChild(totalRow);
-    body.appendChild(card);
-
-    var info = el("div", "card");
-    info.style.marginTop = "12px";
-    var lines = [];
-    lines.push('<div class="list-row"><span class="list-row-label">Куда</span><span class="list-row-value">' + escapeHtml(order.zone + ", " + order.point) + '</span></div>');
-    lines.push('<div class="list-row"><span class="list-row-label">Оплата</span><span class="list-row-value">' + escapeHtml(order.payment) + (order.screenshotFileId ? " · скрин приложен" : "") + '</span></div>');
-    if (order.comment) lines.push('<div class="list-row"><span class="list-row-label">Комментарий</span><span class="list-row-value">' + escapeHtml(order.comment) + '</span></div>');
-    if (order.isNewPoint) lines.push('<div class="list-row"><span class="list-row-label">⚠️</span><span class="list-row-value">Новая точка — заказ подтвердит координатор</span></div>');
-    info.innerHTML = lines.join("");
-    body.appendChild(info);
-
-    var confirmBtn = el("button", "btn-primary wizard-footer-btn", "Всё верно, отправить");
-    confirmBtn.addEventListener("click", function () { submitOrder(confirmBtn); });
-    body.appendChild(confirmBtn);
-
-    var restart = el("button", "btn-ghost", "Начать заново");
-    restart.style.marginTop = "10px";
-    restart.addEventListener("click", function () { resetOrder(); wizardReplace(stepSets); });
-    body.appendChild(restart);
-  }
-
-  function submitOrder(btn) {
+  function submitCheckoutOrder(btn) {
+    if (!checkout.zone || !checkout.point) { toast(t("checkout.needPoint")); return; }
+    if (!checkout.payment) { toast(t("checkout.needPayment")); return; }
     btn.disabled = true;
-    btn.textContent = "Отправляю…";
+    btn.textContent = t("checkout.sending");
     api("/api/order", {
       method: "POST",
       body: {
-        cart: order.cart.map(function (i) { return { set: i.set, garnish: i.garnish, qty: i.qty }; }),
-        zone: order.zone, point: order.point, is_new_point: order.isNewPoint,
-        comment: order.comment, payment: order.payment, screenshot_file_id: order.screenshotFileId,
+        cart: state.cart.map(function (i) { return { set: i.set, garnish: i.garnish, qty: i.qty }; }),
+        zone: checkout.zone, point: checkout.point, is_new_point: checkout.isNewPoint,
+        comment: checkout.comment, payment: checkout.payment, screenshot_file_id: checkout.screenshotFileId,
       },
     }).then(function (data) {
       haptic("success");
-      if (data.status === "pending") wizardStep(function (b) { stepPendingSuccess(b); });
-      else wizardStep(function (b) { stepDone(b, data.care); });
-      state.menu = null; // при следующем открытии перечитаем актуальное меню
-    }).catch(function (err) {
+      var pending = data.status === "pending";
+      var care = data.care || null;
+      // Корзину чистим только сейчас, после реального успеха — при
+      // ошибке (см. catch ниже) она остаётся нетронутой, как и просили.
+      state.cart = [];
+      resetCheckout();
+      syncCartBar();
+      state.menu = null; // перечитаем актуальное меню при следующем открытии
+      // state.profile НЕ сбрасываем: zone/point в нём не устарели (при
+      // заказе на уже известную точку они и так не менялись, при заказе
+      // на новую точку sheets.update_client_point вообще не вызывается,
+      // пока модератор не подтвердит) — а сброс здесь обнулил бы точку
+      // по умолчанию на экране оформления следующего заказа в этой же
+      // сессии, что и происходило до фикса.
+      wizardStep(function (b) { stepOrderConfirmed(b, pending, care); });
+    }).catch(function () {
       btn.disabled = false;
-      btn.textContent = "Всё верно, отправить";
+      btn.textContent = t("checkout.confirmBtn");
       haptic("error");
-      toast("Не удалось отправить заказ: " + err.message);
+      toast(t("checkout.submitFailed"));
     });
   }
 
-  function stepDone(body, care) {
+  // --- Подтверждение — тёплая фраза, через секунду-две сменяется
+  // карточкой цифрового послания (та же нумерация, что у бота, см.
+  // sheets.get_next_message_number/save_care_message). -------------------
+
+  function stepOrderConfirmed(body, pending, care) {
     wizardPhaseEl.innerHTML = "";
     document.getElementById("wizard-back").style.visibility = "hidden";
-    body.innerHTML =
-      '<div style="text-align:center;padding:40px 10px 0">' +
-      '<div style="color:var(--ink);margin-bottom:18px">' + ICON_LEAF + '</div>' +
-      '<h2>Заказ отправлен 🌿</h2>' +
-      (care ? '<p style="margin-top:14px;font-weight:600;font-size:17px;color:var(--ink)">«' + escapeHtml(care.phrase) + '»</p><p style="margin-top:6px;font-size:12px">послание № ' + care.number + ' из ' + care.total + '</p>' : "") +
-      '</div>';
-    var done = el("button", "btn-primary wizard-footer-btn", "Готово");
-    done.addEventListener("click", function () { closeWizard(); state.profile = null; showScreen("menu"); loadMenu(); });
-    body.appendChild(done);
+    var wrap = el("div", "order-confirm-anim");
+    wrap.innerHTML =
+      '<div class="order-confirm-icon">' + ICON_LEAF + '</div>' +
+      '<h2>' + escapeHtml(pending ? t("checkout.donePendingTitle") : t("checkout.doneWarm")) + '</h2>' +
+      (pending ? '<p style="margin-top:10px">' + escapeHtml(t("checkout.donePendingText")) + '</p>' : "");
+    body.appendChild(wrap);
+
+    if (care) {
+      setTimeout(function () {
+        if (document.getElementById("wizard").hidden) return;
+        wizardReplace(function (b) { stepCareMessageCard(b, care); });
+      }, 1400);
+    } else {
+      var done = el("button", "btn-primary wizard-footer-btn", t("checkout.doneBtn"));
+      done.style.marginTop = "26px";
+      done.addEventListener("click", function () { closeWizard(); showScreen("menu"); loadMenu(); });
+      body.appendChild(done);
+    }
   }
 
-  function stepPendingSuccess(body) {
+  function stepCareMessageCard(body, care) {
     wizardPhaseEl.innerHTML = "";
     document.getElementById("wizard-back").style.visibility = "hidden";
-    body.innerHTML =
-      '<div style="text-align:center;padding:40px 10px 0">' +
-      '<div style="color:var(--ink);margin-bottom:18px">' + ICON_CLOCK + '</div>' +
-      '<h2>Точка на проверке</h2>' +
-      '<p style="margin-top:10px">Координатор уточнит адрес и подтвердит заказ — обычно это быстро. Мы напишем, как только всё готово.</p>' +
-      '</div>';
-    var done = el("button", "btn-primary wizard-footer-btn", "Готово");
-    done.addEventListener("click", function () { closeWizard(); showScreen("menu"); });
+    var card = el("div", "care-message-card");
+    card.innerHTML =
+      '<div class="care-message-number">' + escapeHtml(t("care.numberLabel", { number: care.number, total: care.total })) + '</div>' +
+      '<div class="care-message-text">«' + escapeHtml(care.phrase) + '»</div>';
+    body.appendChild(card);
+    var done = el("button", "btn-primary wizard-footer-btn", t("checkout.doneBtn"));
+    done.addEventListener("click", function () { closeWizard(); showScreen("menu"); loadMenu(); });
     body.appendChild(done);
   }
 
@@ -1934,7 +1984,7 @@
   // совпадали.
   var ICON_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
   // Та же самая форма, просто залитая — состояние "уже в избранном"
-  // (см. openSetDetail/.set-detail-fav.active).
+  // (см. buildMenuSetCard/.menu-set-fav-btn.active).
   var ICON_HEART_FILLED = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
   var ICON_ENVELOPE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7 12 12.5 19.5 7"/></svg>';
   var ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>';
@@ -2644,7 +2694,7 @@
   function init() {
     applyStaticI18n();
     maybeShowSplash();
-    resetOrder();
+    resetCheckout();
     editState = {};
     initNav();
     initBottomNavScroll();

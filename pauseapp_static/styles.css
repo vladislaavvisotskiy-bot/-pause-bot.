@@ -483,36 +483,143 @@ p { margin: 0; color: var(--ink-soft); }
 .menu-set-card-desc li::before { content: "•"; position: absolute; left: 0; color: var(--ink-soft); }
 .menu-set-card-price { color: var(--ink); font-weight: 700; font-size: 14.5px; margin-top: 8px; }
 .menu-set-card-note { color: var(--ink-soft); font-size: 11.5px; margin-top: 2px; }
-.menu-set-card-chevron { color: var(--ink-soft); flex: 0 0 auto; margin-top: 2px; }
+.menu-set-card-chevron { color: var(--ink-soft); flex: 0 0 auto; margin-top: 2px; transition: transform .25s ease; }
+.menu-set-card-chevron.up svg { transform: rotate(-90deg); }
 
-/* Детальная карточка блюда — отдельный "экран" визарда перед заказом */
-.set-detail-photo {
+/* Раскрытая карточка блюда — фото переезжает наверх на всю ширину,
+   под ним крупный заголовок (та же .menu-set-card-name, просто крупнее
+   в этом состоянии), полный состав, цена, выбор варианта/гарнира,
+   счётчик количества и "Добавить в заказ" на всю ширину карточки. */
+.menu-set-card.expanded { flex-direction: column; cursor: default; }
+.menu-set-card.expanded .menu-set-thumb,
+.menu-set-card.expanded .menu-set-thumb-empty {
   width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-radius: var(--radius-lg);
-  display: block;
-  margin-bottom: 16px;
-  background: var(--ivory-deep);
+  height: auto;
+  aspect-ratio: 16 / 9;
+  align-self: auto;
+  margin-bottom: 14px;
 }
-.set-detail-fav {
-  position: absolute;
-  top: calc(var(--safe-top) + 14px);
-  right: 18px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: rgba(255, 253, 248, 0.9);
+.menu-set-card.expanded .menu-set-card-name { font-size: 19px; }
+.menu-set-card.expanded .menu-set-card-desc li { font-size: 13px; }
+.menu-set-fav-btn { background: none; border: none; color: var(--ink); flex: 0 0 auto; padding: 2px; }
+.menu-set-fav-btn.active { color: var(--accent-warm); }
+
+.menu-set-chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 2px; }
+.menu-set-chip {
+  background: var(--card);
+  border: 1px solid var(--line);
   color: var(--ink);
-  border: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 13px;
+  border-radius: 999px;
+}
+.menu-set-chip.active { background: var(--ink); border-color: var(--ink); color: var(--ivory); }
+
+.menu-set-qty-row { display: flex; align-items: center; gap: 16px; margin: 16px 0 4px; }
+.menu-set-qty-btn {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+}
+.menu-set-qty-btn:active { background: var(--ivory-deep); }
+.menu-set-qty-value { font-size: 18px; font-weight: 700; color: var(--ink); min-width: 24px; text-align: center; }
+
+.menu-set-card.expanded .btn-primary { margin-top: 16px; }
+.menu-set-closed-note { color: var(--ink-soft); font-size: 13px; text-align: center; padding: 14px 0 2px; }
+
+/* ------------------------------------------------------------------ */
+/* Плавающая панель корзины — над нижней навигацией, появляется, как     */
+/* только в заказе есть хоть одна позиция (см. app.js: syncCartBar).    */
+/* ------------------------------------------------------------------ */
+
+.cart-bar {
+  position: fixed;
+  left: 14px; right: 14px;
+  bottom: calc(66px + var(--safe-bottom));
+  z-index: 41;
+  background: var(--ink);
+  color: var(--ivory);
+  border-radius: 999px;
+  padding: 10px 8px 10px 20px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 10px;
+  box-shadow: 0 8px 22px rgba(43, 40, 35, 0.28);
+  transition: bottom .22s ease;
+  animation: cart-bar-in .25s ease;
 }
-.set-detail-fav.active { color: var(--accent-warm); }
-.set-detail-body { margin-bottom: 20px; }
-.set-detail-price { color: var(--ink); font-weight: 700; font-size: 18px; margin-top: 4px; }
-.set-detail-note { color: var(--ink-soft); font-size: 13px; margin-top: 6px; }
+@keyframes cart-bar-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* Следует за нижней навигацией при её скрытии по прокрутке — #cart-bar
+   в index.html стоит следующим сиблингом сразу после #bottom-nav,
+   чистый CSS, без отдельного JS-слушателя. */
+#bottom-nav.nav-hidden ~ .cart-bar { bottom: calc(14px + var(--safe-bottom)); }
+.cart-bar-info { display: flex; flex-direction: column; }
+.cart-bar-count { font-size: 11px; opacity: .75; }
+.cart-bar-total { font-size: 15.5px; font-weight: 700; }
+.cart-bar-btn {
+  background: var(--ivory);
+  color: var(--ink);
+  border: none;
+  border-radius: 999px;
+  padding: 11px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Корзина / оформление заказа                                         */
+/* ------------------------------------------------------------------ */
+
+.cart-row-right { display: flex; align-items: center; gap: 10px; }
+.cart-row-qty { margin: 0; gap: 10px; }
+.cart-row-qty .menu-set-qty-btn { width: 28px; height: 28px; font-size: 15px; }
+.cart-row-qty .menu-set-qty-value { font-size: 15px; min-width: 18px; }
+
+.payment-tiles-row { display: flex; gap: 10px; }
+.payment-tile {
+  flex: 1;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 18px 10px;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 15px;
+  text-align: center;
+}
+.payment-tile.active { border-color: var(--ink); background: var(--ink-soft-bg); }
+.checkout-attach-row { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.checkout-screenshot-ok { color: var(--success); font-weight: 600; font-size: 13.5px; margin-top: 10px; }
+
+/* Подтверждение заказа — тёплая фраза с мягким появлением, затем сама
+   сменяется карточкой цифрового послания (см. stepOrderConfirmed/
+   stepCareMessageCard). */
+.order-confirm-anim {
+  text-align: center;
+  padding: 50px 10px 0;
+  animation: order-confirm-in .5s ease;
+}
+.order-confirm-icon { color: var(--ink); margin-bottom: 18px; }
+@keyframes order-confirm-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.care-message-card {
+  background: var(--ink);
+  color: var(--ivory);
+  border-radius: var(--radius-lg);
+  padding: 34px 24px;
+  text-align: center;
+  margin: 30px 0;
+  animation: order-confirm-in .4s ease;
+}
+.care-message-number { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; opacity: .7; margin-bottom: 14px; }
+.care-message-text { font-size: 20px; font-weight: 600; line-height: 1.5; }
 
 /* ------------------------------------------------------------------ */
 /* Профиль                                                             */
@@ -586,17 +693,6 @@ p { margin: 0; color: var(--ink-soft); }
 .lang-row-check { color: var(--accent-warm); flex: 0 0 auto; display: flex; margin-left: auto; }
 .profile-exit-btn { margin-top: 18px; }
 
-.list-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 4px;
-  border-bottom: 1px solid var(--line);
-}
-.list-row:last-child { border-bottom: none; }
-.list-row-label { color: var(--ink); font-size: 14.5px; }
-.list-row-value { color: var(--ink-soft); font-size: 13.5px; text-align: right; }
-
 .order-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .order-card-date { font-weight: 700; color: var(--ink); }
 .order-card-items { font-size: 13.5px; color: var(--ink-soft); margin-top: 4px; }
@@ -634,25 +730,6 @@ p { margin: 0; color: var(--ink-soft); }
 }
 .field input:focus, .field textarea:focus { outline: none; border-color: var(--ink); }
 
-/* ------------------------------------------------------------------ */
-/* Сеты — карточки выбора в мастере заказа                             */
-/* ------------------------------------------------------------------ */
-
-.set-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px;
-  margin-bottom: 10px;
-  cursor: pointer;
-}
-.set-card-main { flex: 1; min-width: 0; }
-.set-card-name { font-weight: 700; font-size: 17px; color: var(--ink); }
-.set-card-price { color: var(--ink); font-weight: 600; font-size: 14px; margin-top: 3px; }
-.set-card-garnish-note { color: var(--ink-soft); font-size: 12px; margin-top: 3px; }
-.set-card-chevron { color: var(--ink-soft); flex: 0 0 auto; }
-
 .option-row {
   display: flex;
   align-items: center;
@@ -670,31 +747,6 @@ p { margin: 0; color: var(--ink-soft); }
   flex: 0 0 auto;
 }
 .option-row.selected .option-row-check { border-color: var(--ink); background: var(--ink); }
-
-.stepper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  padding: 30px 0 10px;
-}
-.stepper-btn {
-  width: 46px; height: 46px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--ink);
-  font-size: 22px;
-  display: flex; align-items: center; justify-content: center;
-}
-.stepper-btn:active { background: var(--ivory-deep); }
-.stepper-value {
-  font-size: 36px;
-  font-weight: 700;
-  color: var(--ink);
-  min-width: 60px;
-  text-align: center;
-}
 
 .cart-row {
   display: flex;
@@ -739,10 +791,8 @@ p { margin: 0; color: var(--ink-soft); }
   color: var(--ink-soft);
   font-size: 13.5px;
 }
-.upload-preview { width: 100%; border-radius: var(--radius-md); margin-top: 10px; display: block; }
-
 /* ------------------------------------------------------------------ */
-/* Полноэкранный визард заказа                                         */
+/* Полноэкранный визард — заказ, корзина, профиль и т.п.                */
 /* ------------------------------------------------------------------ */
 
 .wizard {
@@ -775,12 +825,6 @@ p { margin: 0; color: var(--ink-soft); }
   flex: 1 1 auto;
   overflow-y: auto;
   padding: 20px 18px calc(30px + var(--safe-bottom));
-  position: relative;
-  /* Точка отсчёта для .set-detail-fav ниже — без этого он позиционировался
-     бы от #wizard (fixed, во весь экран), а не от самого тела визарда, и
-     всегда перекрывал бы кнопку "Закрыть" в шапке независимо от прокрутки
-     (нашёл при добавлении реального тапа на сердечко — раньше кнопка
-     ничего не делала, поэтому совпадение областей клика было незаметно). */
 }
 .wizard-title { margin-bottom: 16px; }
 .wizard-footer-btn { margin-top: 22px; }
@@ -789,7 +833,7 @@ p { margin: 0; color: var(--ink-soft); }
 /* Разное                                                              */
 /* ------------------------------------------------------------------ */
 
-.center-note { text-align: center; color: var(--ink-soft); font-size: 13.5px; margin-top: 14px; }
+.center-note { text-align: center; color: var(--ink-soft); font-size: 13.5px; margin: 14px 0; }
 .link-inline { color: var(--ink); font-weight: 600; }
 
 /* ------------------------------------------------------------------ */
