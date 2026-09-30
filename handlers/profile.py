@@ -92,7 +92,8 @@ async def my_orders(callback: CallbackQuery):
         return
 
     pending = sheets.get_client_pending_orders(client["id"])
-    groups = sheets.get_client_order_groups(client["id"], limit=10)
+    order_rows = sheets.get_client_orders(client["id"], limit=10**9)
+    groups = sheets.get_client_order_groups(client["id"], limit=10, rows=order_rows)
     if not pending and not groups:
         await callback.message.answer(texts.MY_ORDERS_EMPTY, reply_markup=kb.my_orders_kb([], show_cancel=False))
         await callback.answer()
@@ -125,7 +126,7 @@ async def my_orders(callback: CallbackQuery):
             ))
         lines.append("")
 
-    debt = sheets.get_client_debt(client["id"])
+    debt = sheets.get_client_debt_from_orders(order_rows)
     text = "\n".join(lines).rstrip()
     if debt > 0:
         text += texts.MY_DEBT_LINE.format(sum=debt)

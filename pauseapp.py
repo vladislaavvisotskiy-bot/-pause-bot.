@@ -500,9 +500,14 @@ async def api_orders(request: web.Request):
     if not client:
         return web.json_response({"error": "not_registered"}, status=404)
 
+    # Один проход по листу "Заказы" на двоих (группы + долг), а не два —
+    # раньше get_client_order_groups и get_client_debt каждый читали ВЕСЬ
+    # лист заново (800+ строк), из-за чего "Мои заказы" заметно тормозило
+    # независимо от устройства клиента.
     pending = await _retry_sheets(sheets.get_client_pending_orders, client["id"])
-    groups = await _retry_sheets(sheets.get_client_order_groups, client["id"], limit=10)
-    debt = await _retry_sheets(sheets.get_client_debt, client["id"])
+    order_rows = await _retry_sheets(sheets.get_client_orders, client["id"], limit=10**9)
+    groups = await _retry_sheets(sheets.get_client_order_groups, client["id"], limit=10, rows=order_rows)
+    debt = await _retry_sheets(sheets.get_client_debt_from_orders, order_rows)
 
     pending_out = [{
         "date": p["date"],

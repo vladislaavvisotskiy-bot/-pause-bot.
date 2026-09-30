@@ -293,6 +293,33 @@ def get_client_debt(client_id) -> int:
     return total
 
 
+def get_client_debt_from_orders(orders: list) -> int:
+    """То же самое, что get_client_debt, но без повторного чтения ВСЕГО
+    листа "Заказы" с нуля — переиспользует уже полученные строки клиента
+    (см. get_client_orders), которые и так нужны рядом (экран "Мои
+    заказы" в боте и в PAUSE App раньше читал "Заказы" дважды подряд —
+    один раз под get_client_order_groups, второй раз под get_client_debt
+    — на реальном листе (800+ строк) это было заметно медленно; отсюда и
+    вопрос "почему так долго грузит")."""
+    prices = get_set_prices()
+    total = 0
+    for o in orders:
+        if o["payment"].strip() != "В долг" or o["canceled"]:
+            continue
+        try:
+            qty = int(str(o["qty"]).strip() or 0)
+        except ValueError:
+            qty = 0
+        amount = qty * prices.get(o["set"], 0)
+        if not amount and o.get("sum"):
+            try:
+                amount = int(str(o["sum"]).replace(" ", "").replace(",", "") or 0)
+            except ValueError:
+                amount = 0
+        total += amount
+    return total
+
+
 def get_all_debtors() -> list:
     """Возвращает список [(имя, id, сумма_долга)] — агрегированный по всем заказам."""
     ws = _ws(config.SHEET_ORDERS)
@@ -345,11 +372,12 @@ def get_client_orders(client_id, limit=10) -> list:
                 "comment": comment,
                 "canceled": is_canceled(comment),
                 "batch": row[config.O_ORDER_BATCH - 1].strip() if len(row) >= config.O_ORDER_BATCH else "",
+                "sum": row[config.O_SUM - 1] if len(row) >= config.O_SUM else "",
             })
     return out[-limit:][::-1]
 
 
-def get_client_order_groups(client_id, limit=10) -> list:
+def get_client_order_groups(client_id, limit=10, rows=None) -> list:
     """Заказы клиента, сгруппированные по ОДНОМУ оформлению — один
     оформленный заказ мог занять несколько строк (несколько сетов), но это
     по-прежнему один заказ для отмены/отзыва/истории/скрина оплаты.
@@ -365,8 +393,14 @@ def get_client_order_groups(client_id, limit=10) -> list:
     разом, затерев/переприкрепив скрин к чужому (уже оформленному отдельно)
     заказу. Строки без batch (старые, до этого фикса) группируются по
     дате как раньше — обратная совместимость, ничего не расщепляет задним
-    числом. Возвращает от новых к старым."""
-    rows = get_client_orders(client_id, limit=10**9)  # уже от новых к старым
+    числом. Возвращает от новых к старым.
+
+    rows — уже полученные get_client_orders(client_id, limit=10**9), если
+    они у вызывающего кода и так уже есть (например, чтобы заодно
+    посчитать долг без повторного чтения всего листа "Заказы" — см.
+    get_client_debt_from_orders). По умолчанию читает сама, как раньше."""
+    if rows is None:
+        rows = get_client_orders(client_id, limit=10**9)  # уже от новых к старым
     groups, order = {}, []
     for r in rows:
         key = (r["date"], r["batch"])
