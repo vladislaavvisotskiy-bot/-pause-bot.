@@ -916,6 +916,25 @@ def set_today_garnishes_for_set(set_name: str, garnishes: list):
         ws.update_cells(cells)
 
 
+def set_set_photo(set_name: str, file_id: str):
+    """Записывает Telegram file_id фото блюда в столбец N (Фото-ссылка,
+    см. config.REF_SET_PHOTO_COL) — та же логика группировки, что и в
+    set_today_garnishes_for_set: если set_name — имя группы переменной
+    цены (config.SET_VARIANTS, например "Самса"), пишет ОДИНАКОВЫЙ
+    file_id во ВСЕ технические варианты группы разом, т.к. клиент видит
+    группу одной карточкой с одним фото (см. pauseapp.py:_serialize_sets)."""
+    names = [t for t, _ in config.SET_VARIANTS[set_name]] if set_name in config.SET_VARIANTS else [set_name]
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_TABLE_RANGE)
+    cells = [
+        gspread.Cell(2 + i, config.REF_SET_PHOTO_COL, file_id)
+        for i, row in enumerate(rows)
+        if row and row[0].strip() in names
+    ]
+    if cells:
+        ws.update_cells(cells)
+
+
 def get_today_sets() -> list:
     """Сеты, реально доступные сегодня для заказа — задаёт админ после
     публикации меню, кнопками-чекбоксами (см. handlers/admin.py:

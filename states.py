@@ -51,3 +51,7 @@ class AdminMenu(StatesGroup):
     preview = State()
     waiting_date = State()
     confirming_publish = State()
+
+
+class AdminSetPhoto(StatesGroup):
+    waiting_photo = State()

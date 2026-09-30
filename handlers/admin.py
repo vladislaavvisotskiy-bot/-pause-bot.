@@ -14,7 +14,7 @@ import texts
 import keyboards as kb
 import config
 import pdf_report
-from states import AdminClub, AdminMenu
+from states import AdminClub, AdminMenu, AdminSetPhoto
 
 router = Router()
 logger = logging.getLogger("pause_bot")
@@ -27,6 +27,81 @@ _ALBUM_WAIT = 1.5  # секунд ждём остальные фото альб�
 
 def _is_admin(user_id: int) -> bool:
     return user_id in config.ADMIN_IDS
+
+
+# ---------------------------------------------------------------------------
+# "🖼 Фото блюд" — админ шлёт боту обычное фото, а не вставляет ссылку
+# вручную в таблицу. Фото уходит в приватный канал MEDIA_CHAT_ID, как и
+# фото ленты CLUB (см. pauseapp.api_feed_publish), в "Справочники" пишется
+# только Telegram file_id (см. sheets.set_set_photo, pauseapp._resolve_photo_url).
+#
+# Регистрируем ЭТИ обработчики раньше admin_menu_photo ниже (у него нет
+# фильтра по состоянию — он ловит ЛЮБОЕ фото от админа) — router aiogram
+# отдаёт апдейт первому подходящему по фильтрам хендлеру, поэтому порядок
+# регистрации здесь важен: иначе фото, присланное в состоянии
+# AdminSetPhoto.waiting_photo, всегда перехватывал бы admin_menu_photo.
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data == "admin_set_photos")
+async def admin_set_photos_open(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    catalog = sheets.get_sets()
+    await callback.message.answer(texts.ADMIN_SET_PHOTOS_INTRO, reply_markup=kb.admin_set_photo_pick_kb(catalog))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("setphoto_pick:"))
+async def admin_set_photo_pick(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    name = callback.data.split(":", 1)[1]
+    await state.set_state(AdminSetPhoto.waiting_photo)
+    await state.update_data(set_photo_name=name)
+    await callback.message.answer(
+        texts.ADMIN_SET_PHOTO_PROMPT.format(name=name),
+        reply_markup=kb.admin_set_photo_cancel_kb(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "setphoto_cancel")
+async def admin_set_photo_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.answer(texts.ADMIN_SET_PHOTO_CANCELED)
+    await callback.answer()
+
+
+@router.message(AdminSetPhoto.waiting_photo, F.photo)
+async def admin_set_photo_receive(message: Message, state: FSMContext, bot: Bot):
+    if not _is_admin(message.from_user.id):
+        return
+    data = await state.get_data()
+    name = data.get("set_photo_name")
+    await state.clear()
+    if not name:
+        return
+    if not config.MEDIA_CHAT_ID:
+        await message.answer(texts.ADMIN_SET_PHOTO_NO_MEDIA_CHAT)
+        return
+    try:
+        sent = await bot.send_photo(int(config.MEDIA_CHAT_ID), message.photo[-1].file_id)
+        file_id = sent.photo[-1].file_id
+        sheets.set_set_photo(name, file_id)
+    except Exception as e:
+        logger.exception("PAUSE App: не удалось сохранить фото блюда «%s»", name)
+        await message.answer(texts.ADMIN_SET_PHOTO_UPLOAD_FAILED.format(error=str(e)))
+        return
+    await message.answer(texts.ADMIN_SET_PHOTO_SAVED.format(name=name))
+
+
+@router.message(AdminSetPhoto.waiting_photo)
+async def admin_set_photo_wrong_type(message: Message):
+    if not _is_admin(message.from_user.id):
+        return
+    await message.answer(texts.ADMIN_SET_PHOTO_NOT_PHOTO, reply_markup=kb.admin_set_photo_cancel_kb())
 
 
 @router.message(Command("webapp_debug"))

@@ -278,6 +278,7 @@ def admin_panel_kb() -> InlineKeyboardMarkup:
     b.button(text=texts.ADMIN_BROADCAST_BTN, callback_data="admin_broadcast_panel")
     b.button(text="💰 Должники", callback_data="admin_debtors")
     b.button(text=texts.ADMIN_CLUB_PANEL_BTN, callback_data="admin_club_panel")
+    b.button(text=texts.ADMIN_SET_PHOTOS_BTN, callback_data="admin_set_photos")
     if config.WEBAPP_URL:
         b.button(text=texts.ADMIN_ROUTE_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/miniapp"))
         # PAUSE App — новый клиентский Mini App, пока доступен только
@@ -317,6 +318,32 @@ def admin_club_panel_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_CLUB_INFO_BTN, callback_data="admin_club_info")
     b.button(text=texts.BACK_BTN, callback_data="admin_back:panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_set_photo_pick_kb(catalog: list) -> InlineKeyboardMarkup:
+    """Список блюд для "🖼 Фото блюд" — та же группировка сетов
+    переменной цены в одну кнопку, что и admin_sets_toggle_kb (клиент
+    видит группу, например "Самса", одной карточкой с одним фото, см.
+    pauseapp.py:_serialize_sets), только без чекбоксов — простой выбор,
+    одно нажатие сразу переводит в ожидание фото."""
+    b = InlineKeyboardBuilder()
+    seen = set()
+    for name in catalog:
+        key = config.SET_VARIANT_GROUP.get(name, name)
+        if key in seen:
+            continue
+        seen.add(key)
+        b.button(text=key, callback_data=f"setphoto_pick:{key}")
+    b.button(text=texts.BACK_BTN, callback_data="admin_back:panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_set_photo_cancel_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_SET_PHOTO_CANCEL_BTN, callback_data="setphoto_cancel")
     b.adjust(1)
     return b.as_markup()
 

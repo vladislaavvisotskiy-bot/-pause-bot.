@@ -113,6 +113,22 @@ async def api_me(request: web.Request):
 # для того же самого шага в чат-боте (см. комментарии у каждого поля).
 # ---------------------------------------------------------------------------
 
+def _resolve_photo_url(raw: str) -> str:
+    """Столбец "Фото-ссылка" в Справочниках содержит либо готовую
+    публичную ссылку (вписана вручную прямо в таблицу), либо — если фото
+    прислали боту через /admin → "🖼 Фото блюд" — голый Telegram file_id
+    (см. sheets.set_set_photo). Второе нужно обернуть в прокси-путь;
+    первое отдаём как есть. api_feed_image ниже уже умеет отдавать ЛЮБОЙ
+    file_id (ничего специфичного для ленты CLUB в нём нет), переиспользуем
+    его же, вместо отдельного эндпоинта под фото блюд."""
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    return "/pauseapp/api/feed/image/" + raw
+
+
 def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extra: dict = None) -> list:
     """Тот же порядок веток, что и в keyboards.set_kb/handlers/order.py:
     _proceed_after_set_choice — группа переменной цены (config.SET_VARIANTS)
@@ -163,7 +179,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
                 "has_garnish": False,
                 "garnish_options": [],
                 "category": first_extra.get("category", ""),
-                "photo_url": first_extra.get("photo_url", ""),
+                "photo_url": _resolve_photo_url(first_extra.get("photo_url", "")),
             })
         else:
             has_garnish = clean.lower() in sets_with_garnish
@@ -181,7 +197,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
                 "has_garnish": bool(garnish_options),
                 "garnish_options": garnish_options,
                 "category": clean_extra.get("category", ""),
-                "photo_url": clean_extra.get("photo_url", ""),
+                "photo_url": _resolve_photo_url(clean_extra.get("photo_url", "")),
             })
     return items
 
