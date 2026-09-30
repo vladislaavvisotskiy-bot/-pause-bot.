@@ -1032,10 +1032,10 @@
     var card = el("div", "card menu-set-card");
     if (s.photo_url) {
       var img = el("img", "menu-set-thumb");
-      img.src = s.photo_url;
       img.alt = "";
       img.loading = "lazy";
       img.addEventListener("error", function () { img.remove(); });
+      setPhotoSrc(img, s.photo_url);
       card.appendChild(img);
     } else {
       card.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
@@ -1076,9 +1076,9 @@
       wizardPhaseEl.innerHTML = "";
       if (s.photo_url) {
         var img = el("img", "set-detail-photo");
-        img.src = s.photo_url;
         img.alt = "";
         img.addEventListener("error", function () { img.remove(); });
+        setPhotoSrc(img, s.photo_url);
         body.appendChild(img);
       }
       var favBtn = el("button", "set-detail-fav", ICON_HEART);
@@ -1200,6 +1200,23 @@
       .then(function (blob) { return URL.createObjectURL(blob); });
     _feedImageCache[url] = p;
     p.then(function (blobUrl) { imgEl.src = blobUrl; }).catch(function () { imgEl.style.display = "none"; });
+  }
+
+  // Фото блюд (карточка Меню/Избранного, детальный экран) приходят двумя
+  // видами: либо обычная публичная ссылка, вписанная вручную в таблицу
+  // (grep pauseapp.py:_resolve_photo_url — тогда она начинается с
+  // http(s), обычный <img src> подходит), либо тот же самый защищённый
+  // прокси, что и у фото ленты (загружено через /admin → "🖼 Фото блюд" —
+  // относительный путь вида "/pauseapp/api/feed/image/{file_id}", тоже за
+  // admin_auth_middleware, нужен loadFeedImage). Раньше здесь везде стоял
+  // голый img.src — для внешних ссылок работало, а для нового прокси
+  // молча падало на 401 и фото просто исчезало (см. отчёт пользователя).
+  function setPhotoSrc(imgEl, url) {
+    if (/^https?:\/\//.test(url)) {
+      imgEl.src = url;
+    } else {
+      loadFeedImage(url, imgEl);
+    }
   }
 
   function loadFeed() {
