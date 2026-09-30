@@ -129,6 +129,13 @@ def _resolve_photo_url(raw: str) -> str:
     return "/pauseapp/api/feed/image/" + raw
 
 
+def _split_description(raw: str) -> list:
+    """Сырой текст из столбца "Описание" (см. sheets.set_set_description)
+    в список буллетов на карточку — каждая непустая строка становится
+    отдельным пунктом (см. pauseapp_static/app.js: buildMenuSetCard)."""
+    return [line.strip() for line in (raw or "").splitlines() if line.strip()]
+
+
 def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extra: dict = None) -> list:
     """Тот же порядок веток, что и в keyboards.set_kb/handlers/order.py:
     _proceed_after_set_choice — группа переменной цены (config.SET_VARIANTS)
@@ -136,10 +143,11 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
     есть) списком гарниров РОВНО этого сета на сегодня (см.
     sheets.get_today_garnishes_for_set).
 
-    extra — sheets.get_set_extra(): категория/фото на карточку (см. экран
-    Меню в PAUSE App). Оба поля необязательны — пустая строка, если админ
-    их ещё не заполнил в таблице, фронт тогда просто не рисует фото-блок
-    и не добавляет карточку ни в один чип категории, кроме "Все"."""
+    extra — sheets.get_set_extra(): категория/фото/описание на карточку
+    (см. экран Меню в PAUSE App). Все поля необязательны — пустая строка,
+    если админ их ещё не заполнил, фронт тогда просто не рисует
+    соответствующий блок карточки (фото/буллеты) и не добавляет её ни в
+    один чип категории, кроме "Все"."""
     extra = extra or {}
     items = []
     seen_groups = set()
@@ -180,6 +188,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
                 "garnish_options": [],
                 "category": first_extra.get("category", ""),
                 "photo_url": _resolve_photo_url(first_extra.get("photo_url", "")),
+                "description": _split_description(first_extra.get("description", "")),
             })
         else:
             has_garnish = clean.lower() in sets_with_garnish
@@ -198,6 +207,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
                 "garnish_options": garnish_options,
                 "category": clean_extra.get("category", ""),
                 "photo_url": _resolve_photo_url(clean_extra.get("photo_url", "")),
+                "description": _split_description(clean_extra.get("description", "")),
             })
     return items
 

@@ -14,7 +14,7 @@ import texts
 import keyboards as kb
 import config
 import pdf_report
-from states import AdminClub, AdminMenu, AdminSetPhoto
+from states import AdminClub, AdminMenu, AdminSetPhoto, AdminSetDescription
 
 router = Router()
 logger = logging.getLogger("pause_bot")
@@ -30,10 +30,14 @@ def _is_admin(user_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# "🖼 Фото блюд" — админ шлёт боту обычное фото, а не вставляет ссылку
-# вручную в таблицу. Фото уходит в приватный канал MEDIA_CHAT_ID, как и
-# фото ленты CLUB (см. pauseapp.api_feed_publish), в "Справочники" пишется
-# только Telegram file_id (см. sheets.set_set_photo, pauseapp._resolve_photo_url).
+# "🖼 Фото блюд" и "✉️ Описание блюд" — админ шлёт боту обычное фото/текст,
+# а не правит таблицу вручную. Фото уходит в приватный канал MEDIA_CHAT_ID,
+# как и фото ленты CLUB (см. pauseapp.api_feed_publish), в "Справочники"
+# пишется только Telegram file_id (см. sheets.set_set_photo,
+# pauseapp._resolve_photo_url); текст описания пишется как есть, каждая
+# строка — отдельный буллет на карточке (см. sheets.set_set_description).
+# Временное решение до переделки всей админ-части публикации меню —
+# договорённость в чате.
 #
 # Регистрируем ЭТИ обработчики раньше admin_menu_photo ниже (у него нет
 # фильтра по состоянию — он ловит ЛЮБОЕ фото от админа) — router aiogram
@@ -48,7 +52,9 @@ async def admin_set_photos_open(callback: CallbackQuery):
         await callback.answer(texts.ADMIN_ONLY, show_alert=True)
         return
     catalog = sheets.get_sets()
-    await callback.message.answer(texts.ADMIN_SET_PHOTOS_INTRO, reply_markup=kb.admin_set_photo_pick_kb(catalog))
+    await callback.message.answer(
+        texts.ADMIN_SET_PHOTOS_INTRO, reply_markup=kb.admin_set_pick_kb(catalog, "setphoto_pick:")
+    )
     await callback.answer()
 
 
@@ -62,7 +68,7 @@ async def admin_set_photo_pick(callback: CallbackQuery, state: FSMContext):
     await state.update_data(set_photo_name=name)
     await callback.message.answer(
         texts.ADMIN_SET_PHOTO_PROMPT.format(name=name),
-        reply_markup=kb.admin_set_photo_cancel_kb(),
+        reply_markup=kb.admin_set_input_cancel_kb("setphoto_cancel"),
     )
     await callback.answer()
 
@@ -101,7 +107,68 @@ async def admin_set_photo_receive(message: Message, state: FSMContext, bot: Bot)
 async def admin_set_photo_wrong_type(message: Message):
     if not _is_admin(message.from_user.id):
         return
-    await message.answer(texts.ADMIN_SET_PHOTO_NOT_PHOTO, reply_markup=kb.admin_set_photo_cancel_kb())
+    await message.answer(texts.ADMIN_SET_PHOTO_NOT_PHOTO, reply_markup=kb.admin_set_input_cancel_kb("setphoto_cancel"))
+
+
+@router.callback_query(F.data == "admin_set_descriptions")
+async def admin_set_descriptions_open(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    catalog = sheets.get_sets()
+    await callback.message.answer(
+        texts.ADMIN_SET_DESCRIPTIONS_INTRO, reply_markup=kb.admin_set_pick_kb(catalog, "setdesc_pick:")
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("setdesc_pick:"))
+async def admin_set_description_pick(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    name = callback.data.split(":", 1)[1]
+    await state.set_state(AdminSetDescription.waiting_text)
+    await state.update_data(set_desc_name=name)
+    await callback.message.answer(
+        texts.ADMIN_SET_DESCRIPTION_PROMPT.format(name=name),
+        reply_markup=kb.admin_set_input_cancel_kb("setdesc_cancel"),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "setdesc_cancel")
+async def admin_set_description_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.answer(texts.ADMIN_SET_PHOTO_CANCELED)
+    await callback.answer()
+
+
+@router.message(AdminSetDescription.waiting_text, F.text)
+async def admin_set_description_receive(message: Message, state: FSMContext):
+    if not _is_admin(message.from_user.id):
+        return
+    data = await state.get_data()
+    name = data.get("set_desc_name")
+    await state.clear()
+    if not name:
+        return
+    try:
+        sheets.set_set_description(name, message.text.strip())
+    except Exception as e:
+        logger.exception("PAUSE App: не удалось сохранить описание блюда «%s»", name)
+        await message.answer(texts.ADMIN_SET_DESCRIPTION_SAVE_FAILED.format(error=str(e)))
+        return
+    await message.answer(texts.ADMIN_SET_DESCRIPTION_SAVED.format(name=name))
+
+
+@router.message(AdminSetDescription.waiting_text)
+async def admin_set_description_wrong_type(message: Message):
+    if not _is_admin(message.from_user.id):
+        return
+    await message.answer(
+        texts.ADMIN_SET_DESCRIPTION_NOT_TEXT, reply_markup=kb.admin_set_input_cancel_kb("setdesc_cancel")
+    )
 
 
 @router.message(Command("webapp_debug"))

@@ -279,6 +279,7 @@ def admin_panel_kb() -> InlineKeyboardMarkup:
     b.button(text="💰 Должники", callback_data="admin_debtors")
     b.button(text=texts.ADMIN_CLUB_PANEL_BTN, callback_data="admin_club_panel")
     b.button(text=texts.ADMIN_SET_PHOTOS_BTN, callback_data="admin_set_photos")
+    b.button(text=texts.ADMIN_SET_DESCRIPTIONS_BTN, callback_data="admin_set_descriptions")
     if config.WEBAPP_URL:
         b.button(text=texts.ADMIN_ROUTE_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/miniapp"))
         # PAUSE App — новый клиентский Mini App, пока доступен только
@@ -322,12 +323,14 @@ def admin_club_panel_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def admin_set_photo_pick_kb(catalog: list) -> InlineKeyboardMarkup:
-    """Список блюд для "🖼 Фото блюд" — та же группировка сетов
+def admin_set_pick_kb(catalog: list, callback_prefix: str) -> InlineKeyboardMarkup:
+    """Список блюд — общая клавиатура для "🖼 Фото блюд" и "✉️ Описание
+    блюд" (callback_prefix отличает, какой шаг запускает нажатие:
+    "setphoto_pick:" или "setdesc_pick:"). Та же группировка сетов
     переменной цены в одну кнопку, что и admin_sets_toggle_kb (клиент
-    видит группу, например "Самса", одной карточкой с одним фото, см.
+    видит группу, например "Самса", одной карточкой, см.
     pauseapp.py:_serialize_sets), только без чекбоксов — простой выбор,
-    одно нажатие сразу переводит в ожидание фото."""
+    одно нажатие сразу переводит в ожидание фото/текста."""
     b = InlineKeyboardBuilder()
     seen = set()
     for name in catalog:
@@ -335,15 +338,18 @@ def admin_set_photo_pick_kb(catalog: list) -> InlineKeyboardMarkup:
         if key in seen:
             continue
         seen.add(key)
-        b.button(text=key, callback_data=f"setphoto_pick:{key}")
+        b.button(text=key, callback_data=f"{callback_prefix}{key}")
     b.button(text=texts.BACK_BTN, callback_data="admin_back:panel")
     b.adjust(1)
     return b.as_markup()
 
 
-def admin_set_photo_cancel_kb() -> InlineKeyboardMarkup:
+def admin_set_input_cancel_kb(cancel_callback: str) -> InlineKeyboardMarkup:
+    """Одна кнопка "❌ Отмена" во время ожидания фото/текста для блюда —
+    cancel_callback отличает, какой шаг отменяем ("setphoto_cancel" или
+    "setdesc_cancel")."""
     b = InlineKeyboardBuilder()
-    b.button(text=texts.ADMIN_SET_PHOTO_CANCEL_BTN, callback_data="setphoto_cancel")
+    b.button(text=texts.ADMIN_SET_PHOTO_CANCEL_BTN, callback_data=cancel_callback)
     b.adjust(1)
     return b.as_markup()
 

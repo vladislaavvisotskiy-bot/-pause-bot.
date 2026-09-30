@@ -435,6 +435,13 @@ ADMIN_SET_PHOTO_NO_MEDIA_CHAT = "Не настроено хранилище фо
 ADMIN_SET_PHOTO_CANCEL_BTN = "❌ Отмена"
 ADMIN_SET_PHOTO_CANCELED = "Отменено."
 
+ADMIN_SET_DESCRIPTIONS_BTN = "✉️ Описание блюд"
+ADMIN_SET_DESCRIPTIONS_INTRO = "Выберите блюдо, для которого хотите добавить или заменить список ингредиентов:"
+ADMIN_SET_DESCRIPTION_PROMPT = "Пришлите список ингредиентов для «{name}» — каждая строка станет отдельным пунктом на карточке."
+ADMIN_SET_DESCRIPTION_NOT_TEXT = "Это не похоже на текст — пришлите список ингредиентов обычным сообщением, или нажмите «Отмена»."
+ADMIN_SET_DESCRIPTION_SAVED = "Описание для «{name}» сохранено ✓"
+ADMIN_SET_DESCRIPTION_SAVE_FAILED = "Не удалось сохранить описание: {error}"
+
 ADMIN_KITCHEN_PDF_CAPTION = "📄 PDF-отчёт для кухни — {date}"
 ADMIN_NO_ORDERS_TODAY = "На сегодня заказов нет."
 ADMIN_NO_ORDERS_FOR_DATE = "Заказов на {date} нет."

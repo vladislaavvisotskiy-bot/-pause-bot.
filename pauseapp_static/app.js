@@ -60,7 +60,7 @@
   // -------------------------------------------------------------------
   var I18N = {
     ru: {
-      "common.currency": "сум", "common.back": "Назад",
+      "common.currency": "UZS", "common.back": "Назад",
       "nav.home": "Главная", "nav.menu": "Меню", "nav.club": "Pause Club",
       "nav.messages": "Послания", "nav.profile": "Профиль",
 
@@ -93,7 +93,6 @@
       "menu.closedTitle": "Приём на сегодня закрыт",
       "menu.closedText": "Прием заказов на сегодня закрылся в {time}. Загляните завтра — мы уже готовим следующее меню.",
       "menu.hero": "Выбери свою паузу на сегодня",
-      "menu.onDate": "На {date}",
       "menu.all": "Все",
       "menu.emptyCategory": "В этой категории пока пусто.",
       "menu.from": "от {sum}",
@@ -210,7 +209,7 @@
     },
 
     uz: {
-      "common.currency": "so'm", "common.back": "Orqaga",
+      "common.currency": "UZS", "common.back": "Orqaga",
       "nav.home": "Bosh sahifa", "nav.menu": "Menyu", "nav.club": "Pause Club",
       "nav.messages": "Xabarlar", "nav.profile": "Profil",
 
@@ -243,7 +242,6 @@
       "menu.closedTitle": "Bugungi qabul yopiq",
       "menu.closedText": "Bugungi buyurtmalar qabul qilish {time} da yopildi. Ertaga kiring — biz allaqachon keyingi menyuni tayyorlaymiz.",
       "menu.hero": "Bugungi pauzangizni tanlang",
-      "menu.onDate": "{date} uchun",
       "menu.all": "Barchasi",
       "menu.emptyCategory": "Bu toifada hozircha bo'sh.",
       "menu.from": "{sum} dan",
@@ -393,7 +391,6 @@
       "menu.closedTitle": "Orders closed for today",
       "menu.closedText": "Orders for today closed at {time}. Come back tomorrow — we're already preparing the next menu.",
       "menu.hero": "Choose your pause for today",
-      "menu.onDate": "For {date}",
       "menu.all": "All",
       "menu.emptyCategory": "Nothing in this category yet.",
       "menu.from": "from {sum}",
@@ -962,12 +959,6 @@
       return;
     }
 
-    if (data.caption) {
-      var dateP = el("div", "pill gold menu-date-pill", t("menu.onDate", { date: escapeHtml(data.date || "") }));
-      root.appendChild(dateP);
-      root.appendChild(el("div", "card menu-caption", escapeHtml(data.caption)));
-    }
-
     var hero = el("div", "menu-hero");
     hero.appendChild(el("h2", null, t("menu.hero")));
     root.appendChild(hero);
@@ -1021,6 +1012,10 @@
     // Горизонтальная карточка (миниатюра слева) — как в списке блюд на
     // макете; полноразмерное фото/детали — уже на отдельном экране
     // (см. openSetDetail), сама карточка в списке только открывает его.
+    // Фото слева на всю высоту карточки, справа — название+стрелка одной
+    // строкой, список ингредиентов буллетами и цена внизу (s.description
+    // — см. sheets.set_set_description; пусто, пока админ не заполнил
+    // через /admin → "✉️ Описание блюд", тогда просто нет списка).
     var card = el("div", "card menu-set-card");
     if (s.photo_url) {
       var img = el("img", "menu-set-thumb");
@@ -1033,7 +1028,18 @@
       card.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
     }
     var body = el("div", "menu-set-card-body");
-    body.appendChild(el("div", "menu-set-card-name", escapeHtml(s.display_name)));
+
+    var head = el("div", "menu-set-card-head");
+    head.appendChild(el("div", "menu-set-card-name", escapeHtml(s.display_name)));
+    head.appendChild(el("div", "menu-set-card-chevron", '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>'));
+    body.appendChild(head);
+
+    if (s.description && s.description.length) {
+      var list = el("ul", "menu-set-card-desc");
+      s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
+      body.appendChild(list);
+    }
+
     if (s.is_variant_group) {
       var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
       body.appendChild(el("div", "menu-set-card-price", t("menu.from", { sum: fmtSum(minP) })));
@@ -1042,7 +1048,6 @@
       if (s.has_garnish) body.appendChild(el("div", "menu-set-card-note", t("menu.withGarnish")));
     }
     card.appendChild(body);
-    card.appendChild(el("div", "menu-set-card-chevron", '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>'));
     card.addEventListener("click", function () { openSetDetail(s); });
     return card;
   }

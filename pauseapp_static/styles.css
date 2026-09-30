@@ -418,13 +418,6 @@ p { margin: 0; color: var(--ink-soft); }
 /* Меню — сегодняшний постер + витрина сетов                           */
 /* ------------------------------------------------------------------ */
 
-.menu-caption {
-  white-space: pre-wrap;
-  color: var(--ink);
-  font-size: 14.5px;
-  line-height: 1.65;
-}
-.menu-date-pill { margin-bottom: 14px; }
 .menu-state {
   text-align: center;
   padding: 60px 16px 10px;
@@ -437,20 +430,24 @@ p { margin: 0; color: var(--ink-soft); }
 
 .menu-category-chips { margin-bottom: 18px; }
 
-.menu-set-grid { display: flex; flex-direction: column; gap: 10px; }
+/* Карточка блюда — фото слева на всю высоту карточки (растягивается
+   flex'ом по самому высокому соседу, см. object-fit:cover ниже — без
+   явной высоты), справа название+стрелка одной строкой, буллеты
+   ингредиентов и цена внизу — точно по присланному макету. */
+.menu-set-grid { display: flex; flex-direction: column; gap: 14px; }
 .menu-set-card {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
+  gap: 14px;
+  padding: 14px;
   cursor: pointer;
 }
 .menu-set-thumb {
-  width: 64px;
-  height: 64px;
+  width: 104px;
+  min-height: 104px;
   border-radius: var(--radius-md);
   object-fit: cover;
   flex: 0 0 auto;
+  align-self: stretch;
   background: var(--ivory-deep);
 }
 .menu-set-thumb-empty {
@@ -460,11 +457,28 @@ p { margin: 0; color: var(--ink-soft); }
   color: var(--ink-soft);
 }
 .menu-set-thumb-empty svg { width: 26px; height: 26px; }
-.menu-set-card-body { flex: 1; min-width: 0; }
-.menu-set-card-name { font-weight: 700; font-size: 15.5px; color: var(--ink); }
-.menu-set-card-price { color: var(--ink); font-weight: 600; font-size: 13.5px; margin-top: 3px; }
+.menu-set-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.menu-set-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.menu-set-card-name { font-weight: 700; font-size: 15.5px; color: var(--ink); line-height: 1.3; }
+.menu-set-card-desc {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu-set-card-desc li {
+  position: relative;
+  padding-left: 13px;
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.menu-set-card-desc li::before { content: "•"; position: absolute; left: 0; color: var(--ink-soft); }
+.menu-set-card-price { color: var(--ink); font-weight: 700; font-size: 14.5px; margin-top: 8px; }
 .menu-set-card-note { color: var(--ink-soft); font-size: 11.5px; margin-top: 2px; }
-.menu-set-card-chevron { color: var(--ink-soft); flex: 0 0 auto; }
+.menu-set-card-chevron { color: var(--ink-soft); flex: 0 0 auto; margin-top: 2px; }
 
 /* Детальная карточка блюда — отдельный "экран" визарда перед заказом */
 .set-detail-photo {

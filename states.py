@@ -55,3 +55,7 @@ class AdminMenu(StatesGroup):
 
 class AdminSetPhoto(StatesGroup):
     waiting_photo = State()
+
+
+class AdminSetDescription(StatesGroup):
+    waiting_text = State()

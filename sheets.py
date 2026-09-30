@@ -848,21 +848,27 @@ def get_sets_with_garnish() -> set:
 
 
 def get_set_extra() -> dict:
-    """Категория и фото-ссылка каждого сета, по точному (регистрозависимому)
-    имени сета — колонки M/N той же строки, что цена/гарнир (см.
-    config.REF_SET_TABLE_RANGE). Один запрос на весь каталог сразу, а не
-    поячейково — тот же принцип, что и в остальных get_* здесь, чтобы не
-    плодить лишние обращения к Sheets API на каждую загрузку /api/menu."""
+    """Категория, фото-ссылка и описание (список ингредиентов) каждого
+    сета, по точному (регистрозависимому) имени сета — колонки M/N/O той
+    же строки, что цена/гарнир (см. config.REF_SET_TABLE_RANGE). Один
+    запрос на весь каталог сразу, а не поячейково — тот же принцип, что и
+    в остальных get_* здесь, чтобы не плодить лишние обращения к Sheets
+    API на каждую загрузку /api/menu. "description" — сырой текст с
+    переводами строк как записал set_set_description; на буллеты его
+    режет уже pauseapp.py:_serialize_sets."""
     ws = _ws(config.SHEET_REFERENCE)
     rows = ws.get(config.REF_SET_TABLE_RANGE)
     out = {}
     for row in rows:
         if not row or not row[0]:
             continue
-        cat_i, photo_i = config.REF_SET_CATEGORY_COL_IDX, config.REF_SET_PHOTO_COL_IDX
+        cat_i, photo_i, desc_i = (
+            config.REF_SET_CATEGORY_COL_IDX, config.REF_SET_PHOTO_COL_IDX, config.REF_SET_DESCRIPTION_COL_IDX,
+        )
         out[row[0]] = {
             "category": row[cat_i].strip() if len(row) > cat_i and row[cat_i] else "",
             "photo_url": row[photo_i].strip() if len(row) > photo_i and row[photo_i] else "",
+            "description": row[desc_i].strip() if len(row) > desc_i and row[desc_i] else "",
         }
     return out
 
@@ -928,6 +934,24 @@ def set_set_photo(set_name: str, file_id: str):
     rows = ws.get(config.REF_SET_TABLE_RANGE)
     cells = [
         gspread.Cell(2 + i, config.REF_SET_PHOTO_COL, file_id)
+        for i, row in enumerate(rows)
+        if row and row[0].strip() in names
+    ]
+    if cells:
+        ws.update_cells(cells)
+
+
+def set_set_description(set_name: str, description: str):
+    """Записывает список ингредиентов блюда в столбец O (Описание, см.
+    config.REF_SET_DESCRIPTION_COL) — та же группировка вариантов
+    переменной цены, что и в set_set_photo/set_today_garnishes_for_set.
+    description хранится как есть, с переводами строк — каждая строка
+    станет отдельным буллетом на карточке (см. pauseapp.py:_serialize_sets)."""
+    names = [t for t, _ in config.SET_VARIANTS[set_name]] if set_name in config.SET_VARIANTS else [set_name]
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_TABLE_RANGE)
+    cells = [
+        gspread.Cell(2 + i, config.REF_SET_DESCRIPTION_COL, description)
         for i, row in enumerate(rows)
         if row and row[0].strip() in names
     ]
