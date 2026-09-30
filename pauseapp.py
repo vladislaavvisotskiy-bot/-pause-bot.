@@ -74,8 +74,28 @@ async def admin_auth_middleware(request: web.Request, handler):
 # Служебное
 # ---------------------------------------------------------------------------
 
+def _static_version() -> str:
+    """Версия для cache-busting query-параметра у styles.css/app.js —
+    время изменения обоих файлов разом. Без этого Telegram WebView может
+    годами отдавать закэшированную СТАРУЮ версию файла по тому же URL
+    (сам файл на сервере уже новый, но клиент об этом не узнаёт без
+    смены URL) — ровно так объяснялось, почему после правки палитры
+    цвета у пользователя визуально не менялись."""
+    try:
+        css_m = os.path.getmtime(os.path.join(STATIC_DIR, "styles.css"))
+        js_m = os.path.getmtime(os.path.join(STATIC_DIR, "app.js"))
+        return str(int(max(css_m, js_m)))
+    except OSError:
+        return "0"
+
+
 async def index_page(request: web.Request):
-    return web.FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    with open(os.path.join(STATIC_DIR, "index.html"), "r", encoding="utf-8") as f:
+        html = f.read()
+    v = _static_version()
+    html = html.replace('href="/pauseapp/static/styles.css"', f'href="/pauseapp/static/styles.css?v={v}"')
+    html = html.replace('src="/pauseapp/static/app.js"', f'src="/pauseapp/static/app.js?v={v}"')
+    return web.Response(text=html, content_type="text/html")
 
 
 async def api_me(request: web.Request):

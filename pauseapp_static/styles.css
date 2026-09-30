@@ -281,9 +281,9 @@ hr.thin-gold {
 /* PAUSE Club — лента                                                  */
 /* ------------------------------------------------------------------ */
 
-.club-header, .screen-hero { text-align: center; padding: 6px 10px 4px; }
-.club-header h2, .screen-hero h2 { font-size: 28px; letter-spacing: 0.01em; }
-.club-header p, .screen-hero p { font-style: italic; font-family: var(--font-serif); font-size: 15px; }
+.screen-hero { text-align: center; padding: 6px 10px 4px; }
+.screen-hero h2 { font-size: 28px; letter-spacing: 0.01em; }
+.screen-hero p { font-style: italic; font-family: var(--font-serif); font-size: 15px; }
 .screen-hero { margin-bottom: 8px; }
 
 .feed-compose-btn { margin: 16px 0 14px; }
