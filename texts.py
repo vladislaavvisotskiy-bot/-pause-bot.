@@ -17,6 +17,7 @@ SET_DISPLAY_NAMES = {
     "Самса без компота": "Пауза дуо.",
     "Chicken bowl": "Chicken bowl.",
     "Beef bowl": "Beef bowl.",
+    "Сет Prime": "Пауза Prime.",
 }
 
 
