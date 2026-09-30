@@ -25,7 +25,10 @@ def _parse_admin_ids(raw: str) -> list:
     return ids
 
 
-ADMIN_IDS = _parse_admin_ids(os.getenv("ADMIN_CHAT_ID", ""))
+# ADMIN_IDS — предпочитаемое имя переменной (см. miniapp/SPEC.md); если не
+# задана, используем уже существующую ADMIN_CHAT_ID — тот же самый список,
+# под старым именем, ничего на хостинге менять не обязательно.
+ADMIN_IDS = _parse_admin_ids(os.getenv("ADMIN_IDS") or os.getenv("ADMIN_CHAT_ID", ""))
 # Первый ID из списка — там, где исторически нужен ровно один chat_id (не
 # список), например BotCommandScopeChat для одного конкретного чата задаётся
 # отдельно на каждого админа (см. bot.py:setup_commands), а не через это поле.

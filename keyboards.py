@@ -280,12 +280,24 @@ def admin_panel_kb() -> InlineKeyboardMarkup:
     b.button(text=texts.ADMIN_CLUB_PANEL_BTN, callback_data="admin_club_panel")
     if config.WEBAPP_URL:
         b.button(text=texts.ADMIN_ROUTE_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/miniapp"))
+        # PAUSE Mini App — UI-прототип, пока доступен только админам
+        # (сервер сам проверяет это по initData на каждый запрос, см.
+        # pauseapp.py) — кнопка входа нужна только здесь, в панели.
+        b.button(text=texts.ADMIN_PAUSEAPP_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
     # "Главное меню" — предпоследней, "Инструкция" — всегда самой
     # последней, независимо от того, сколько кнопок выше появится в
     # будущем.
     b.button(text=texts.HOME_BTN, callback_data="back_to_menu")
     b.button(text=texts.ADMIN_INSTRUCTIONS_BTN, callback_data="admin_instructions")
     b.adjust(1)
+    return b.as_markup()
+
+
+def pauseapp_open_kb() -> InlineKeyboardMarkup:
+    """Отдельная клавиатура для /app (см. handlers/admin.py) — та же
+    кнопка, что и в admin_panel_kb, просто без остальной панели."""
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_PAUSEAPP_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
     return b.as_markup()
 
 
