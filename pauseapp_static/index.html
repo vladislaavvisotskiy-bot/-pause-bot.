@@ -8,6 +8,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Карта выбора точки доставки — Leaflet, та же версия, что в Mini App
+     "Маршрут" (webapp_static), см. app.js: renderDeliveryMapPicker.
+     Файлы лежат локально (pauseapp_static/vendor/leaflet), не с CDN —
+     Telegram WebView на части устройств режет сторонние CDN по своим
+     собственным сетевым политикам, собственный домен всегда доступен. -->
+<link rel="stylesheet" href="/pauseapp/static/vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="/pauseapp/static/styles.css">
 </head>
 <body>
@@ -135,6 +141,7 @@
 
 </div>
 
+<script src="/pauseapp/static/vendor/leaflet/leaflet.js"></script>
 <script src="/pauseapp/static/app.js"></script>
 </body>
 </html>

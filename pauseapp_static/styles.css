@@ -730,6 +730,69 @@ p { margin: 0; color: var(--ink-soft); }
 }
 .field input:focus, .field textarea:focus { outline: none; border-color: var(--ink); }
 
+/* ------------------------------------------------------------------ */
+/* Карта выбора точки доставки (см. app.js: renderDeliveryMapPicker) — */
+/* тот же Esri-стиль тайлов, что и в Mini App "Маршрут" (webapp.js),   */
+/* только карта здесь не на весь экран, а высокая карточка со скруг-   */
+/* лёнными углами — вписывается в общий визард без перекройки шапки.   */
+/* ------------------------------------------------------------------ */
+
+.map-search-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 13px 18px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 14.5px;
+}
+.map-search-input:focus { outline: none; border-color: var(--ink); }
+.map-search-results { margin-top: 8px; }
+.map-search-result {
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.map-search-result:active { background: var(--ink-soft-bg); }
+
+.map-picker-map {
+  width: 100%;
+  height: 46vh;
+  min-height: 300px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--ivory-deep);
+  margin: 14px 0;
+  border: 1px solid var(--line);
+}
+/* Лёгкий тёплый фильтр под айвори-палитру — та же плитка Esri, что и в
+   курьерском "Маршруте" (см. webapp_static/styles.css), без него тайлы
+   остаются нейтрально-серыми и выбиваются из остального приложения. */
+.map-picker-map .leaflet-tile-pane { filter: sepia(18%) saturate(70%) brightness(1.03); }
+.map-picker-map .leaflet-control-attribution {
+  background: rgba(255, 253, 248, 0.75);
+  font-size: 9.5px;
+  color: var(--ink-soft);
+}
+
+.map-picker-hint { color: var(--ink-soft); font-size: 12.5px; text-align: center; margin: -6px 0 14px; }
+
+.map-confirm-sheet {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  animation: order-confirm-in .25s ease;
+}
+.map-confirm-title { font-weight: 700; font-size: 16px; color: var(--ink); margin-bottom: 4px; }
+.map-confirm-address { color: var(--ink-soft); font-size: 12.5px; margin-bottom: 14px; }
+.map-confirm-sheet .btn-primary { margin-top: 14px; }
+
 .option-row {
   display: flex;
   align-items: center;

@@ -1884,6 +1884,50 @@ def _delivery_points_index() -> dict:
     return {p["name"]: p for p in get_delivery_points()}
 
 
+def get_point_zones() -> dict:
+    """Точка (по имени) -> район, с которым она чаще всего сохранена у
+    клиентов — источник подсказки района, когда клиент выбирает уже
+    существующую точку доставки на карте (см. pauseapp.py:
+    api_delivery_points). Один и тот же адрес у разных клиентов почти
+    всегда в одном районе, берём первого попавшегося."""
+    out = {}
+    for c in _load_clients():
+        if c["point"] and c["zone"] and c["point"] not in out:
+            out[c["point"]] = c["zone"]
+    return out
+
+
+def create_or_update_delivery_point(name: str, address: str, lat, lon):
+    """Точка доставки с координатами — записывается автоматически, когда
+    клиент выбирает НОВОЕ место на карте (поиск адреса или метка вручную,
+    см. pauseapp.py: renderDeliveryMapPicker/api_order_submit/
+    api_profile_edit). Раньше "Точки доставки" заполнял только админ
+    руками (см. комментарий у config.SHEET_DELIVERY_POINTS) — здесь то
+    же самое, просто автоматически в момент выбора. Приоритет/ставку
+    курьеру не трогаем (столбцы E/F остаются пустыми) — это админские
+    поля, дозаполнит сам при случае. Если точка с таким именем уже есть
+    (например, её сохранил другой клиент раньше) — просто обновляем
+    адрес/координаты, а не плодим вторую строку."""
+    name_clean = (name or "").strip()
+    if not name_clean:
+        return
+    ws = _ws(config.SHEET_DELIVERY_POINTS)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.DP_DATA_START_ROW:
+            continue
+        existing = row[config.DP_NAME - 1].strip() if len(row) >= config.DP_NAME else ""
+        if existing == name_clean:
+            ws.update_cell(r, config.DP_ADDRESS, address)
+            ws.update_cell(r, config.DP_LAT, lat)
+            ws.update_cell(r, config.DP_LON, lon)
+            _cache["delivery_points"] = None
+            return
+    ws.append_row([name_clean, address, lat, lon, "", ""], value_input_option="USER_ENTERED")
+    _cache["delivery_points"] = None
+
+
 def get_couriers() -> list:
     """Все записи из "Курьеры" — [{"tg_id","name","status"}]. "status" —
     свободная текстовая заметка админа (см. config.COURIER_STATUS), ни на

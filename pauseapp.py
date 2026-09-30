@@ -20,8 +20,10 @@ handlers/club.py в самом боте. Где сравнить с оригин
 import logging
 import os
 import random
+import urllib.parse
 import uuid
 
+import aiohttp
 from aiohttp import web
 from aiogram.types import BufferedInputFile
 
@@ -254,6 +256,62 @@ async def api_points(request: web.Request):
     return web.json_response({"points": await _retry_sheets(sheets.get_points, zone)})
 
 
+async def api_delivery_points(request: web.Request):
+    """Точки с реальными координатами — метки на карте выбора точки
+    доставки (см. pauseapp_static/app.js: renderDeliveryMapPicker).
+    "zone" у каждой — подсказка (см. sheets.get_point_zones), не то же
+    самое, что хранится в самой "Точки доставки" (там района нет вовсе,
+    см. config.py)."""
+    points = await _retry_sheets(sheets.get_delivery_points)
+    zones = await _retry_sheets(sheets.get_point_zones)
+    out = []
+    for p in points:
+        try:
+            lat = float(p["lat"])
+            lon = float(p["lon"])
+        except (TypeError, ValueError):
+            continue
+        out.append({"name": p["name"], "address": p["address"], "lat": lat, "lon": lon, "zone": zones.get(p["name"], "")})
+    return web.json_response({"points": out})
+
+
+# Ташкент — примерная рамка города (юго-запад/северо-восток), чтобы
+# Nominatim не путал местные названия с похожими в других странах.
+_TASHKENT_VIEWBOX = "68.9,41.45,69.6,41.15"
+_NOMINATIM_USER_AGENT = "PauseAppTashkent/1.0 (lunch delivery mini app; Telegram bot)"
+
+
+async def api_geocode(request: web.Request):
+    """Поиск адреса при выборе новой точки доставки на карте — бесплатный
+    геокодер OpenStreetMap (Nominatim), без API-ключа: в отличие от
+    Яндекс/Google Maps, которым для геокодирования нужен платный или
+    требующий регистрации ключ, которого у проекта сейчас нет. Точность
+    для местных ташкентских адресов не всегда идеальна — если станет
+    проблемой, можно будет подключить платный геокодер отдельно."""
+    q = (request.query.get("q") or "").strip()
+    if len(q) < 3:
+        return web.json_response({"results": []})
+    params = {
+        "format": "jsonv2", "q": q, "limit": "6",
+        "viewbox": _TASHKENT_VIEWBOX, "bounded": "1",
+        "countrycodes": "uz", "accept-language": "ru",
+    }
+    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(params)
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=6)) as session:
+            async with session.get(url, headers={"User-Agent": _NOMINATIM_USER_AGENT}) as resp:
+                data = await resp.json(content_type=None)
+    except Exception:
+        logger.exception("PAUSE App: не удалось выполнить поиск адреса (q=%s)", q)
+        return web.json_response({"results": []})
+    out = [
+        {"display_name": d.get("display_name", ""), "lat": d.get("lat"), "lon": d.get("lon")}
+        for d in (data or [])
+        if d.get("lat") and d.get("lon")
+    ]
+    return web.json_response({"results": out})
+
+
 def _payment_value(payment: str, has_screenshot: bool) -> str:
     """Точная копия ветвления handlers/order.py:_order_payment_value, только
     источник данных другой — там card_status берётся из FSM (клиент прошёл
@@ -329,6 +387,8 @@ async def api_order_submit(request: web.Request):
     zone = (body.get("zone") or "").strip()
     point = (body.get("point") or "").strip()
     is_new_point = bool(body.get("is_new_point"))
+    lat = body.get("lat")
+    lon = body.get("lon")
     comment = (body.get("comment") or "").strip()
     payment = (body.get("payment") or "").strip()
     screenshot = (body.get("screenshot_file_id") or "").strip()
@@ -340,6 +400,19 @@ async def api_order_submit(request: web.Request):
     date_str = await _retry_sheets(sheets.get_active_menu_date)
     payment_value = _payment_value(payment, bool(screenshot))
     bot = request.app.get("bot")
+
+    # Новая точка выбрана на карте (поиск адреса или метка вручную) —
+    # сразу же, независимо от модерации самого заказа, пишем её с
+    # координатами в "Точки доставки", чтобы курьерский Mini App "Маршрут"
+    # сразу видел её на карте, а не ждал, пока админ впишет координаты
+    # руками (см. sheets.create_or_update_delivery_point). Сам заказ на
+    # новую точку всё равно уходит на модерацию — координаты тут ни при
+    # чём, это две независимые вещи.
+    if is_new_point and lat and lon:
+        try:
+            await _retry_sheets(sheets.create_or_update_delivery_point, point, point, float(lat), float(lon))
+        except Exception:
+            logger.exception("PAUSE App: не удалось сохранить координаты новой точки (заказ)")
 
     if is_new_point:
         pending_id = await _retry_sheets(
@@ -495,6 +568,8 @@ async def api_profile_edit(request: web.Request):
     zone = (body.get("zone") or "").strip()
     point = (body.get("point") or "").strip()
     is_new_point = bool(body.get("is_new_point"))
+    lat = body.get("lat")
+    lon = body.get("lon")
 
     if name:
         await _retry_sheets(sheets.update_client_field, client["row"], config.COL_NAME, name)
@@ -502,6 +577,11 @@ async def api_profile_edit(request: web.Request):
         await _retry_sheets(sheets.update_client_field, client["row"], config.COL_CONTACT, phone)
     if zone and point:
         await _retry_sheets(sheets.update_client_point, client["row"], zone, point)
+        if is_new_point and lat and lon:
+            try:
+                await _retry_sheets(sheets.create_or_update_delivery_point, point, point, float(lat), float(lon))
+            except Exception:
+                logger.exception("PAUSE App: не удалось сохранить координаты новой точки (профиль)")
         if is_new_point:
             bot = request.app.get("bot")
             if bot and config.ADMIN_IDS:
@@ -822,6 +902,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/menu", api_menu)
     app.router.add_get("/api/zones", api_zones)
     app.router.add_get("/api/points", api_points)
+    app.router.add_get("/api/delivery-points", api_delivery_points)
+    app.router.add_get("/api/geocode", api_geocode)
     app.router.add_post("/api/order", api_order_submit)
     app.router.add_post("/api/order/screenshot", api_upload_screenshot)
     app.router.add_get("/api/profile", api_profile)

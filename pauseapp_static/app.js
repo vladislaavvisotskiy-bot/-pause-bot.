@@ -197,9 +197,12 @@
       "address.save": "Сохранить", "address.saved": "Сохранено",
       "address.pickFirst": "Сначала выберите точку",
       "address.saveFailed": "Не удалось сохранить: {msg}",
-      "address.zone": "Район", "address.otherZone": "Другой район", "address.otherPoint": "Другая точка",
       "address.newPoint": "Новая точка", "address.newPointField": "Адрес / название точки",
       "address.newZoneField": "Район", "address.done": "Готово", "address.fillBoth": "Заполните район и точку",
+      "address.searchPlaceholder": "Введите адрес — например, Malika Plaza",
+      "address.mapHint": "Нажмите на метку — чтобы выбрать место, где уже заказывали, или в любую точку карты — чтобы указать новое",
+      "address.mapUnavailable": "Карта сейчас недоступна — проверьте соединение и попробуйте снова.",
+      "address.confirmHere": "Мне сюда доставлять",
 
       "lang.title": "Язык",
 
@@ -383,9 +386,12 @@
       "address.save": "Saqlash", "address.saved": "Saqlandi",
       "address.pickFirst": "Avval nuqtani tanlang",
       "address.saveFailed": "Saqlab bo'lmadi: {msg}",
-      "address.zone": "Tuman", "address.otherZone": "Boshqa tuman", "address.otherPoint": "Boshqa nuqta",
       "address.newPoint": "Yangi nuqta", "address.newPointField": "Manzil / nuqta nomi",
       "address.newZoneField": "Tuman", "address.done": "Tayyor", "address.fillBoth": "Tuman va nuqtani to'ldiring",
+      "address.searchPlaceholder": "Manzilni kiriting — masalan, Malika Plaza",
+      "address.mapHint": "Allaqachon buyurtma qilingan joyni tanlash uchun metkaga bosing, yoki yangi joyni belgilash uchun xaritaning istalgan nuqtasiga bosing",
+      "address.mapUnavailable": "Xarita hozir mavjud emas — aloqani tekshirib, qayta urinib ko'ring.",
+      "address.confirmHere": "Menga shu yerga yetkazib bering",
 
       "lang.title": "Til",
 
@@ -569,9 +575,12 @@
       "address.save": "Save", "address.saved": "Saved",
       "address.pickFirst": "Choose a point first",
       "address.saveFailed": "Couldn't save: {msg}",
-      "address.zone": "Area", "address.otherZone": "Other area", "address.otherPoint": "Other point",
       "address.newPoint": "New point", "address.newPointField": "Address / point name",
       "address.newZoneField": "Area", "address.done": "Done", "address.fillBoth": "Fill in the area and the point",
+      "address.searchPlaceholder": "Type an address — e.g. Malika Plaza",
+      "address.mapHint": "Tap a pin to pick a place others already order from, or tap anywhere on the map to set a new one",
+      "address.mapUnavailable": "The map isn't available right now — check your connection and try again.",
+      "address.confirmHere": "Deliver here",
 
       "lang.title": "Language",
 
@@ -1605,7 +1614,7 @@
 
   var checkout = {};
   function resetCheckout() {
-    checkout = { zone: "", point: "", isNewPoint: false, comment: "", payment: "", screenshotFileId: null };
+    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", payment: "", screenshotFileId: null };
   }
   resetCheckout();
 
@@ -1718,12 +1727,12 @@
       ptCard.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(checkout.zone) + '</div><div class="option-row-sub">' + escapeHtml(checkout.point) + '</div></div>';
       deliveryField.appendChild(ptCard);
       var change = el("button", "btn-text", t("checkout.change"));
-      change.addEventListener("click", function () { wizardStep(function (b) { renderZonePickerForCheckout(b); }); });
+      change.addEventListener("click", function () { wizardStep(function (b) { renderDeliveryMapPicker(b, applyCheckoutPoint); }); });
       deliveryField.appendChild(change);
     } else {
       var setBtn = el("div", "card option-row");
       setBtn.appendChild(el("div", "option-row-label", t("address.setPoint")));
-      setBtn.addEventListener("click", function () { wizardStep(function (b) { renderZonePickerForCheckout(b); }); });
+      setBtn.addEventListener("click", function () { wizardStep(function (b) { renderDeliveryMapPicker(b, applyCheckoutPoint); }); });
       deliveryField.appendChild(setBtn);
     }
     body.appendChild(deliveryField);
@@ -1795,70 +1804,14 @@
     body.appendChild(confirmBtn);
   }
 
-  // Выбор района → точки при оформлении — та же логика, что уже
-  // используется в боте и в Профиле → Адрес доставки (см.
-  // renderZonePickerForEdit чуть ниже): список районов/точек из тех же
-  // данных (sheets.get_zones/get_points), при выборе существующей точки
-  // запоминаем её как точку по умолчанию (sheets.update_client_point —
-  // см. api_order_submit), вариант вписать новую точку вручную уходит на
-  // модерацию администратору вместо немедленной записи заказа.
-  function renderZonePickerForCheckout(body) {
-    body.appendChild(el("h2", "wizard-title", t("address.zone")));
-    api("/api/zones").then(function (data) {
-      data.zones.forEach(function (z) {
-        var row = el("div", "card option-row");
-        row.appendChild(el("div", "option-row-label", z));
-        row.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderPointPickerForCheckout(b, z); }); });
-        body.appendChild(row);
-      });
-      var otherRow = el("div", "card option-row");
-      otherRow.appendChild(el("div", "option-row-label", t("address.otherZone")));
-      otherRow.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderNewPointFormForCheckout(b, ""); }); });
-      body.appendChild(otherRow);
-    });
-  }
-
-  function renderPointPickerForCheckout(body, zone) {
-    body.appendChild(el("h2", "wizard-title", zone));
-    api("/api/points?zone=" + encodeURIComponent(zone)).then(function (data) {
-      if (!data.points.length) { renderNewPointFormForCheckout(body, zone); return; }
-      data.points.forEach(function (p) {
-        var row = el("div", "card option-row");
-        row.appendChild(el("div", "option-row-label", p));
-        row.addEventListener("click", function () {
-          haptic("select");
-          checkout.zone = zone; checkout.point = p; checkout.isNewPoint = false;
-          backToCheckout();
-        });
-        body.appendChild(row);
-      });
-      var otherRow = el("div", "card option-row");
-      otherRow.appendChild(el("div", "option-row-label", t("address.otherPoint")));
-      otherRow.addEventListener("click", function () { haptic("select"); wizardStep(function (b) { renderNewPointFormForCheckout(b, zone); }); });
-      body.appendChild(otherRow);
-    });
-  }
-
-  function renderNewPointFormForCheckout(body, zone) {
-    body.appendChild(el("h2", "wizard-title", t("address.newPoint")));
-    var field = el("div", "field");
-    field.innerHTML = '<label>' + escapeHtml(t("address.newPointField")) + '</label><input type="text" id="co-new-point">';
-    body.appendChild(field);
-    if (!zone) {
-      var zf = el("div", "field");
-      zf.innerHTML = '<label>' + escapeHtml(t("address.newZoneField")) + '</label><input type="text" id="co-new-zone">';
-      body.insertBefore(zf, field);
-    }
-    var next = el("button", "btn-primary wizard-footer-btn", t("address.done"));
-    next.addEventListener("click", function () {
-      var pointVal = document.getElementById("co-new-point").value.trim();
-      var zoneVal = zone || (document.getElementById("co-new-zone") || {}).value || "";
-      zoneVal = zoneVal.trim();
-      if (!pointVal || !zoneVal) { toast(t("address.fillBoth")); return; }
-      checkout.zone = zoneVal; checkout.point = pointVal; checkout.isNewPoint = true;
-      backToCheckout();
-    });
-    body.appendChild(next);
+  // Точка доставки при оформлении выбирается на карте (см.
+  // renderDeliveryMapPicker — общий пикер, тот же самый, что и в
+  // Профиле → Адрес доставки) — applyCheckoutPoint просто кладёт
+  // результат в черновик оформления и возвращается на сам экран.
+  function applyCheckoutPoint(sel) {
+    checkout.zone = sel.zone; checkout.point = sel.point; checkout.isNewPoint = sel.isNewPoint;
+    checkout.lat = sel.lat || null; checkout.lon = sel.lon || null;
+    backToCheckout();
   }
 
   // --- Отправка — тот же /api/order, что и раньше (см. pauseapp.py:
@@ -1876,6 +1829,7 @@
       body: {
         cart: state.cart.map(function (i) { return { set: i.set, garnish: i.garnish, qty: i.qty }; }),
         zone: checkout.zone, point: checkout.point, is_new_point: checkout.isNewPoint,
+        lat: checkout.lat, lon: checkout.lon,
         comment: checkout.comment, payment: checkout.payment, screenshot_file_id: checkout.screenshotFileId,
       },
     }).then(function (data) {
@@ -2090,7 +2044,7 @@
       var pointBtn = el("div", "card option-row selected");
       pointBtn.innerHTML = '<div class="option-row-label">' + escapeHtml((curZone && curPoint) ? (curZone + ", " + curPoint) : t("address.setPoint")) + '</div>';
       pointBtn.addEventListener("click", function () {
-        wizardStep(function (b) { renderZonePickerForEdit(b); });
+        wizardStep(function (b) { renderDeliveryMapPicker(b, applyEditPoint); });
       });
       pointField.appendChild(pointBtn);
       body.appendChild(pointField);
@@ -2102,6 +2056,7 @@
         save.disabled = true;
         api("/api/profile", { method: "POST", body: {
           zone: editState.zone, point: editState.point, is_new_point: !!editState.isNewPoint,
+          lat: editState.lat || null, lon: editState.lon || null,
         } }).then(function () {
           haptic("success");
           toast(t("address.saved"));
@@ -2566,64 +2521,197 @@
 
   var editState = {};
 
-  function renderZonePickerForEdit(body) {
-    body.appendChild(el("h2", "wizard-title", t("address.zone")));
-    api("/api/zones").then(function (data) {
-      data.zones.forEach(function (z) {
-        var row = el("div", "card option-row");
-        row.appendChild(el("div", "option-row-label", z));
-        row.addEventListener("click", function () { wizardStep(function (b) { renderPointPickerForEdit(b, z); }); });
-        body.appendChild(row);
-      });
-      var otherRow = el("div", "card option-row");
-      otherRow.appendChild(el("div", "option-row-label", t("address.otherZone")));
-      otherRow.addEventListener("click", function () { wizardStep(function (b) { renderNewPointFormForEdit(b, ""); }); });
-      body.appendChild(otherRow);
+  function applyEditPoint(sel) {
+    editState = { zone: sel.zone, point: sel.point, isNewPoint: sel.isNewPoint, lat: sel.lat || null, lon: sel.lon || null };
+    closeWizard();
+    openEditDeliveryAddress();
+  }
+
+  // -------------------------------------------------------------------
+  // Карта выбора точки доставки — общий пикер для Оформления заказа
+  // (checkout.zone/point, см. applyCheckoutPoint) и Профиля → Адрес
+  // доставки (editState, см. applyEditPoint). Три способа выбрать точку:
+  //   1) тап по уже существующей метке на карте (см. loadDeliveryPoints —
+  //      те же координаты, что видит курьерский Mini App "Маршрут", плюс
+  //      подсказка района от sheets.get_point_zones — район того же
+  //      названия у других клиентов);
+  //   2) поиск по адресу (сам вводит текст — геокодер Nominatim/OSM,
+  //      см. api_geocode, без API-ключа) — выбор результата переносит
+  //      карту туда и ставит новую метку;
+  //   3) тап прямо по карте — тоже ставит новую метку в этом месте.
+  // Для новой метки (2 и 3) район подсказывается по ближайшей уже
+  // существующей точке в радиусе NEARBY_ZONE_RADIUS_M, если рядом никого
+  // нет — поле остаётся пустым, вписывается вручную (см. ТЗ: "район не
+  // трогается, если рядом нет точек").
+  // -------------------------------------------------------------------
+
+  var NEARBY_ZONE_RADIUS_M = 700;
+
+  var _deliveryPointsCache = null;
+  function loadDeliveryPoints() {
+    if (_deliveryPointsCache) return Promise.resolve(_deliveryPointsCache);
+    return api("/api/delivery-points").then(function (data) {
+      _deliveryPointsCache = data.points || [];
+      return _deliveryPointsCache;
     });
   }
 
-  function renderPointPickerForEdit(body, zone) {
-    body.appendChild(el("h2", "wizard-title", zone));
-    api("/api/points?zone=" + encodeURIComponent(zone)).then(function (data) {
-      if (!data.points.length) { renderNewPointFormForEdit(body, zone); return; }
-      data.points.forEach(function (pt) {
-        var row = el("div", "card option-row");
-        row.appendChild(el("div", "option-row-label", pt));
-        row.addEventListener("click", function () {
-          editState = { zone: zone, point: pt, isNewPoint: false };
-          closeWizard();
-          openEditDeliveryAddress();
-        });
-        body.appendChild(row);
-      });
-      var otherRow = el("div", "card option-row");
-      otherRow.appendChild(el("div", "option-row-label", t("address.otherPoint")));
-      otherRow.addEventListener("click", function () { wizardStep(function (b) { renderNewPointFormForEdit(b, zone); }); });
-      body.appendChild(otherRow);
+  function haversineMeters(lat1, lon1, lat2, lon2) {
+    var R = 6371000;
+    var toRad = function (d) { return (d * Math.PI) / 180; };
+    var dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function nearestZoneFor(points, lat, lon) {
+    var best = null, bestDist = Infinity;
+    points.forEach(function (p) {
+      var d = haversineMeters(lat, lon, p.lat, p.lon);
+      if (d < bestDist) { bestDist = d; best = p; }
+    });
+    return (best && bestDist <= NEARBY_ZONE_RADIUS_M) ? (best.zone || "") : "";
+  }
+
+  var ICON_MAP_PIN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>';
+
+  function mapMarkerIcon(kind) {
+    var isNew = kind === "new";
+    var color = isNew ? "var(--accent-warm)" : "var(--ink)";
+    var size = isNew ? 16 : 12;
+    return L.divIcon({
+      className: "",
+      html: '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';border:2px solid var(--card);box-shadow:0 1px 4px rgba(43,40,35,.35)"></div>',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
     });
   }
 
-  function renderNewPointFormForEdit(body, zone) {
-    body.appendChild(el("h2", "wizard-title", t("address.newPoint")));
-    var field = el("div", "field");
-    field.innerHTML = '<label>' + escapeHtml(t("address.newPointField")) + '</label><input type="text" id="ep-new-point">';
-    body.appendChild(field);
-    if (!zone) {
-      var zf = el("div", "field");
-      zf.innerHTML = '<label>' + escapeHtml(t("address.newZoneField")) + '</label><input type="text" id="ep-new-zone">';
-      body.insertBefore(zf, field);
+  function renderDeliveryMapPicker(body, onPicked) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", t("address.title")));
+
+    var searchInput = el("input", "map-search-input");
+    searchInput.type = "text";
+    searchInput.placeholder = t("address.searchPlaceholder");
+    body.appendChild(searchInput);
+    var resultsList = el("div", "map-search-results");
+    body.appendChild(resultsList);
+
+    var mapWrap = el("div", "map-picker-map");
+    body.appendChild(mapWrap);
+    body.appendChild(el("p", "map-picker-hint", t("address.mapHint")));
+
+    var sheet = el("div", "map-confirm-sheet");
+    sheet.hidden = true;
+    body.appendChild(sheet);
+
+    if (typeof L === "undefined") {
+      // Leaflet не подгрузился (нет связи с CDN) — без карты пикер
+      // бесполезен, честно говорим об этом вместо пустого серого блока.
+      mapWrap.outerHTML = '<p class="menu-set-closed-note">' + escapeHtml(t("address.mapUnavailable")) + '</p>';
+      return;
     }
-    var next = el("button", "btn-primary wizard-footer-btn", t("address.done"));
-    next.addEventListener("click", function () {
-      var pointVal = document.getElementById("ep-new-point").value.trim();
-      var zoneVal = zone || (document.getElementById("ep-new-zone") || {}).value || "";
-      zoneVal = zoneVal.trim();
-      if (!pointVal || !zoneVal) { toast(t("address.fillBoth")); return; }
-      editState = { zone: zoneVal, point: pointVal, isNewPoint: true };
-      closeWizard();
-      openEditDeliveryAddress();
+
+    var map = L.map(mapWrap, { zoomControl: false, attributionControl: true }).setView([41.311081, 69.240562], 12);
+    L.tileLayer(
+      "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 18, attribution: "Tiles &copy; Esri" }
+    ).addTo(map);
+    L.tileLayer(
+      "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 18 }
+    ).addTo(map);
+    setTimeout(function () { map.invalidateSize(); }, 0);
+
+    var allPoints = [];
+    var newPinMarker = null;
+
+    function renderSheetExisting(p) {
+      sheet.innerHTML = "";
+      sheet.hidden = false;
+      sheet.appendChild(el("div", "map-confirm-title", escapeHtml(p.name)));
+      if (p.address && p.address !== p.name) sheet.appendChild(el("div", "map-confirm-address", escapeHtml(p.address)));
+      var confirmBtn = el("button", "btn-primary", t("address.confirmHere"));
+      confirmBtn.addEventListener("click", function () {
+        haptic("success");
+        onPicked({ zone: p.zone || "", point: p.name, isNewPoint: false, lat: null, lon: null });
+      });
+      sheet.appendChild(confirmBtn);
+    }
+
+    function renderSheetNew(lat, lon, addressGuess) {
+      var zoneGuess = nearestZoneFor(allPoints, lat, lon);
+      sheet.innerHTML = "";
+      sheet.hidden = false;
+      sheet.appendChild(el("div", "map-confirm-title", t("address.newPoint")));
+
+      var field = el("div", "field");
+      field.innerHTML = '<label>' + escapeHtml(t("address.newPointField")) + '</label><input type="text" id="map-point-name">';
+      sheet.appendChild(field);
+      var pointInput = field.querySelector("input");
+      pointInput.value = addressGuess || "";
+
+      var zf = el("div", "field");
+      zf.innerHTML = '<label>' + escapeHtml(t("address.newZoneField")) + '</label><input type="text" id="map-zone-name">';
+      sheet.appendChild(zf);
+      var zoneInput = zf.querySelector("input");
+      zoneInput.value = zoneGuess;
+
+      var confirmBtn = el("button", "btn-primary", t("address.confirmHere"));
+      confirmBtn.addEventListener("click", function () {
+        var pointVal = pointInput.value.trim();
+        var zoneVal = zoneInput.value.trim();
+        if (!pointVal || !zoneVal) { toast(t("address.fillBoth")); return; }
+        haptic("success");
+        onPicked({ zone: zoneVal, point: pointVal, isNewPoint: true, lat: lat, lon: lon });
+      });
+      sheet.appendChild(confirmBtn);
+    }
+
+    function placeNewPin(lat, lon) {
+      if (newPinMarker) map.removeLayer(newPinMarker);
+      newPinMarker = L.marker([lat, lon], { icon: mapMarkerIcon("new") }).addTo(map);
+      map.setView([lat, lon], 16);
+    }
+
+    loadDeliveryPoints().then(function (points) {
+      allPoints = points;
+      points.forEach(function (p) {
+        var marker = L.marker([p.lat, p.lon], { icon: mapMarkerIcon("existing") }).addTo(map);
+        marker.on("click", function () { haptic("select"); renderSheetExisting(p); });
+      });
     });
-    body.appendChild(next);
+
+    map.on("click", function (e) {
+      haptic("select");
+      placeNewPin(e.latlng.lat, e.latlng.lng);
+      renderSheetNew(e.latlng.lat, e.latlng.lng, "");
+    });
+
+    var searchTimer = null;
+    searchInput.addEventListener("input", function () {
+      clearTimeout(searchTimer);
+      var q = searchInput.value.trim();
+      if (q.length < 3) { resultsList.innerHTML = ""; return; }
+      searchTimer = setTimeout(function () {
+        api("/api/geocode?q=" + encodeURIComponent(q)).then(function (data) {
+          resultsList.innerHTML = "";
+          (data.results || []).forEach(function (r) {
+            var row = el("div", "map-search-result", escapeHtml(r.display_name));
+            row.addEventListener("click", function () {
+              haptic("select");
+              resultsList.innerHTML = "";
+              var lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+              placeNewPin(lat, lon);
+              renderSheetNew(lat, lon, r.display_name);
+            });
+            resultsList.appendChild(row);
+          });
+        }).catch(function () {});
+      }, 400);
+    });
   }
 
   // -------------------------------------------------------------------
