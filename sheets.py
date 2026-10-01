@@ -249,8 +249,19 @@ def create_client(tg_id: int, name: str, phone: str, telegram_username: str = ""
         (config.COL_TG_ID, str(tg_id)),
         (config.COL_REG_DATE, today_date_str()),
     ]
-    for col, value in updates:
-        ws.update_cell(new_row_num, col, value)
+    # update_cells(..., value_input_option="RAW") одним вызовом на все
+    # поля — НЕ update_cell() в цикле, как было раньше: у update_cell() в
+    # gspread параметра value_input_option вообще нет, он всегда жёстко
+    # шлёт USER_ENTERED. Номер телефона в новом едином виде
+    # "+998 91 776 34 09" начинается с "+" — Google Таблицы в режиме
+    # USER_ENTERED пытаются понять такую строку как формулу, не могут её
+    # разобрать, и вместо номера в ячейке новой карточки остаётся ошибка
+    # (#ERROR!) прямо при регистрации. Воспроизведено и подтверждено на
+    # реальном аккаунте (см. sheets.update_client_field — тот же баг там).
+    ws.update_cells(
+        [gspread.Cell(new_row_num, col, value) for col, value in updates],
+        value_input_option="RAW",
+    )
 
     _cache["clients"] = None  # сбрасываем кэш
     return new_id
@@ -275,17 +286,37 @@ def get_points(zone: str) -> list:
 
 
 def update_client_point(client_row: int, zone: str, point: str):
-    """Если клиент указал новую точку — сохраняем её ему в карточку."""
+    """Если клиент указал новую точку — сохраняем её ему в карточку.
+
+    update_cells([...], value_input_option="RAW"), а НЕ update_cell() —
+    у update_cell() в gspread нет параметра value_input_option вообще, он
+    всегда шлёт USER_ENTERED "зашитым" (как если бы это вводил человек в
+    интерфейсе Таблиц). Та же ловушка, что уже один раз поймали на ID
+    курьеров (см. set_route_courier_tg_id): текст вроде адреса легко
+    может начинаться с символа, который Таблицы попытаются понять как
+    формулу/число, и в ячейке останется не то, что реально записывали."""
     ws = _ws(config.SHEET_CLIENTS)
-    ws.update_cell(client_row, config.COL_ZONE, zone)
-    ws.update_cell(client_row, config.COL_POINT, point)
+    ws.update_cells([
+        gspread.Cell(client_row, config.COL_ZONE, zone),
+        gspread.Cell(client_row, config.COL_POINT, point),
+    ], value_input_option="RAW")
     _cache["clients"] = None
 
 
 def update_client_field(client_row: int, col: int, value: str):
-    """Правка одного поля клиента (имя/телефон) из личного кабинета."""
+    """Правка одного поля клиента (имя/телефон) из личного кабинета.
+
+    update_cells(..., value_input_option="RAW") — НЕ update_cell(), у
+    которого параметра value_input_option вообще нет, он всегда жёстко
+    шлёт USER_ENTERED. Номер телефона в новом едином виде
+    "+998 91 776 34 09" начинается с "+" — ровно то, что Google Таблицы в
+    режиме USER_ENTERED пытаются понять как формулу; разобрать такую
+    строку как формулу не получается, и вместо номера в ячейке остаётся
+    ошибка (#ERROR! — ровно то, что пользователь увидел вместо телефона
+    в профиле после сохранения). Воспроизведено и подтверждено на
+    реальном аккаунте."""
     ws = _ws(config.SHEET_CLIENTS)
-    ws.update_cell(client_row, col, value)
+    ws.update_cells([gspread.Cell(client_row, col, value)], value_input_option="RAW")
     _cache["clients"] = None
 
 
@@ -1936,12 +1967,19 @@ def create_or_update_delivery_point(name: str, address: str, lat, lon):
             continue
         existing = row[config.DP_NAME - 1].strip() if len(row) >= config.DP_NAME else ""
         if existing == name_clean:
-            ws.update_cell(r, config.DP_ADDRESS, address)
-            ws.update_cell(r, config.DP_LAT, lat)
-            ws.update_cell(r, config.DP_LON, lon)
+            # value_input_option="RAW" — свободный адрес с карты может
+            # начинаться с чего угодно (та же ловушка, что и с "+998..." у
+            # телефона, см. update_client_field); update_cell() у gspread
+            # такого параметра вообще не принимает, он всегда жёстко шлёт
+            # USER_ENTERED, поэтому здесь update_cells() одним вызовом.
+            ws.update_cells([
+                gspread.Cell(r, config.DP_ADDRESS, address),
+                gspread.Cell(r, config.DP_LAT, lat),
+                gspread.Cell(r, config.DP_LON, lon),
+            ], value_input_option="RAW")
             _cache["delivery_points"] = None
             return
-    ws.append_row([name_clean, address, lat, lon, "", ""], value_input_option="USER_ENTERED")
+    ws.append_row([name_clean, address, lat, lon, "", ""], value_input_option="RAW")
     _cache["delivery_points"] = None
 
 
