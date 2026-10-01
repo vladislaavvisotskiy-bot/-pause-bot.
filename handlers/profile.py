@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import logging
+
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -11,6 +13,7 @@ from admin_notify import notify_admins
 from states import EditProfile, Feedback
 
 router = Router()
+logger = logging.getLogger("pause_bot")
 
 
 def _is_card_payment(payment: str) -> bool:
@@ -228,26 +231,42 @@ async def edit_phone_save(message: Message, state: FSMContext, bot: Bot):
 @router.callback_query(F.data == "edit_point")
 async def edit_point_start(callback: CallbackQuery, state: FSMContext):
     zones = sheets.get_zones()
-    await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "editzone", back=True))
+    await state.update_data(zone_options=zones)
+    await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.indexed_options_kb(zones, "editzone", back=True))
     await state.set_state(EditProfile.choosing_zone)
     await callback.answer()
 
 
 @router.callback_query(EditProfile.choosing_zone, F.data.startswith("editzone:"))
 async def edit_point_zone(callback: CallbackQuery, state: FSMContext):
-    zone = callback.data.split(":", 1)[1]
+    idx = callback.data.split(":", 1)[1]
 
-    if zone == "__back__":
+    if idx == "__back__":
         await state.clear()
         await callback.message.answer(texts.EDIT_PROFILE_HEADER, reply_markup=kb.edit_profile_kb())
         await callback.answer()
         return
 
+    data = await state.get_data()
+    zones = data.get("zone_options", [])
+    try:
+        zone = zones[int(idx)]
+    except (ValueError, IndexError):
+        logger.exception("EditProfile: не удалось расшифровать выбранный район (idx=%s)", idx)
+        await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.indexed_options_kb(zones, "editzone", back=True))
+        await callback.answer()
+        return
+
     await state.update_data(edit_zone=zone)
-    points = sheets.get_points(zone)
+    try:
+        points = sheets.get_points(zone)
+    except Exception:
+        logger.exception("EditProfile: не удалось получить точки доставки для района %r", zone)
+        points = []
     if points:
+        await state.update_data(point_options=points)
         await callback.message.answer(texts.CHOOSE_POINT,
-                                       reply_markup=kb.options_kb(points, "editpoint", other=True, back=True))
+                                       reply_markup=kb.indexed_options_kb(points, "editpoint", other=True, back=True))
         await state.set_state(EditProfile.choosing_point)
     else:
         await callback.message.answer(texts.ASK_NEW_POINT)
@@ -257,16 +276,28 @@ async def edit_point_zone(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(EditProfile.choosing_point, F.data.startswith("editpoint:"))
 async def edit_point_point(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    point = callback.data.split(":", 1)[1]
+    idx = callback.data.split(":", 1)[1]
 
-    if point == "__back__":
+    if idx == "__back__":
         zones = sheets.get_zones()
-        await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.options_kb(zones, "editzone", back=True))
+        await state.update_data(zone_options=zones)
+        await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.indexed_options_kb(zones, "editzone", back=True))
         await state.set_state(EditProfile.choosing_zone)
         await callback.answer()
         return
 
-    if point == "__other__":
+    if idx == "__other__":
+        await callback.message.answer(texts.ASK_NEW_POINT)
+        await state.set_state(EditProfile.entering_new_point)
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    points = data.get("point_options", [])
+    try:
+        point = points[int(idx)]
+    except (ValueError, IndexError):
+        logger.exception("EditProfile: не удалось расшифровать выбранную точку (idx=%s)", idx)
         await callback.message.answer(texts.ASK_NEW_POINT)
         await state.set_state(EditProfile.entering_new_point)
         await callback.answer()

@@ -57,6 +57,32 @@ def options_kb(options: list, prefix: str, back: bool = False, other: bool = Fal
     return b.as_markup()
 
 
+def indexed_options_kb(options: list, prefix: str, back: bool = False, other: bool = False, home: bool = True) -> InlineKeyboardMarkup:
+    """Как options_kb, но callback_data = индекс в списке, а не сам текст.
+
+    Для района/точки доставки текст — это то, что когда-то вручную вписал
+    клиент («Впишите адрес») или админ, без ограничения на длину. У
+    Telegram callback_data жёсткий лимит 64 байта; с длинным адресом
+    (кириллица — 2 байта на символ) это легко превышается. Раньше
+    options_kb клала туда сам текст — отправка такой клавиатуры клиенту
+    падала с BUTTON_DATA_INVALID ДО вызова callback.answer(), и клиент
+    видел зависшую кнопку без единого сообщения в ответ (воспроизводилось
+    на районе/точке с длинным названием). Индекс в списке всегда короткий,
+    сам список при этом сохраняется в FSM (см. вызывающий код) и
+    расшифровывается обратно по этому же индексу."""
+    b = InlineKeyboardBuilder()
+    for i, opt in enumerate(options):
+        b.button(text=opt, callback_data=f"{prefix}:{i}")
+    if other:
+        b.button(text=texts.OTHER_BTN, callback_data=f"{prefix}:__other__")
+    if back:
+        b.button(text=texts.BACK_BTN, callback_data=f"{prefix}:__back__")
+    if home:
+        _home(b)
+    b.adjust(1)
+    return b.as_markup()
+
+
 def set_kb(sets: list, back: bool = False) -> InlineKeyboardMarkup:
     """Кнопки выбора сета — показывают клиенту дружелюбное название
     («Пауза дня»/«Для тебя»), а в callback_data и в таблицу по-прежнему

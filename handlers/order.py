@@ -307,7 +307,8 @@ async def _ask_zone(message: Message, state: FSMContext, first_time: bool = Fals
     text = texts.CHOOSE_ZONE
     if first_time:
         text = f"{texts.FIRST_TIME_ZONE_INTRO}\n\n{text}"
-    await message.answer(text, reply_markup=kb.options_kb(zones, "zone", back=True))
+    await state.update_data(zone_options=zones)
+    await message.answer(text, reply_markup=kb.indexed_options_kb(zones, "zone", back=True))
     await state.set_state(Order.choosing_zone)
 
 
@@ -317,23 +318,39 @@ async def _ask_zone(message: Message, state: FSMContext, first_time: bool = Fals
 
 @router.callback_query(Order.choosing_zone, F.data.startswith("zone:"))
 async def chosen_zone(callback: CallbackQuery, state: FSMContext):
-    zone = callback.data.split(":", 1)[1]
+    idx = callback.data.split(":", 1)[1]
 
-    if zone == "__back__":
+    if idx == "__back__":
         await _back_to_asking_more(callback.message, state)
         await callback.answer()
         return
 
+    data = await state.get_data()
+    zones = data.get("zone_options", [])
+    try:
+        zone = zones[int(idx)]
+    except (ValueError, IndexError):
+        logger.exception("Order: не удалось расшифровать выбранный район (idx=%s)", idx)
+        await callback.message.answer(texts.CHOOSE_ZONE, reply_markup=kb.indexed_options_kb(zones, "zone", back=True))
+        await callback.answer()
+        return
+
     await state.update_data(cur_zone=zone)
-    await _ask_point(callback.message, state, zone)
+    try:
+        await _ask_point(callback.message, state, zone)
+    except Exception:
+        logger.exception("Order: не удалось показать точки доставки для района %r", zone)
+        await callback.message.answer(texts.ASK_NEW_POINT)
+        await state.set_state(Order.entering_new_point)
     await callback.answer()
 
 
 async def _ask_point(message: Message, state: FSMContext, zone: str):
     points = sheets.get_points(zone)
     if points:
+        await state.update_data(point_options=points)
         await message.answer(texts.CHOOSE_POINT,
-                              reply_markup=kb.options_kb(points, "point", other=True, back=True))
+                              reply_markup=kb.indexed_options_kb(points, "point", other=True, back=True))
         await state.set_state(Order.choosing_point)
     else:
         await message.answer(texts.ASK_NEW_POINT)
@@ -342,14 +359,25 @@ async def _ask_point(message: Message, state: FSMContext, zone: str):
 
 @router.callback_query(Order.choosing_point, F.data.startswith("point:"))
 async def chosen_point(callback: CallbackQuery, state: FSMContext):
-    point = callback.data.split(":", 1)[1]
+    idx = callback.data.split(":", 1)[1]
 
-    if point == "__back__":
+    if idx == "__back__":
         await _ask_zone(callback.message, state)
         await callback.answer()
         return
 
-    if point == "__other__":
+    if idx == "__other__":
+        await callback.message.answer(texts.ASK_NEW_POINT)
+        await state.set_state(Order.entering_new_point)
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    points = data.get("point_options", [])
+    try:
+        point = points[int(idx)]
+    except (ValueError, IndexError):
+        logger.exception("Order: не удалось расшифровать выбранную точку (idx=%s)", idx)
         await callback.message.answer(texts.ASK_NEW_POINT)
         await state.set_state(Order.entering_new_point)
         await callback.answer()
