@@ -42,6 +42,15 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "pauseapp_static")
 
 MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024
 
+# ВРЕМЕННО, по прямой просьбе пользователя: пока PAUSE App тестирует
+# только он сам (реальных клиентов там ещё нет), приём заказов в самом
+# приложении не закрывается по времени отсечки вообще — можно постоянно
+# тестировать, не упираясь в "приём закрыт". Бота (чат) это НЕ касается —
+# там config.ORDER_CUTOFF_TIME по-прежнему действует как обычно, затронуты
+# только api_menu/api_order_submit ниже. Когда понадобится вернуть
+# отсечку в PAUSE App — поставьте False.
+PAUSEAPP_IGNORE_CUTOFF = True
+
 
 @web.middleware
 async def error_middleware(request: web.Request, handler):
@@ -223,7 +232,7 @@ async def api_menu(request: web.Request):
     # подождать публикации, а не предлагать заказ по потенциально
     # устаревшим данным — см. отчёт пользователю.
     published = bool(photo_ids or caption)
-    cutoff_passed = await _retry_sheets(sheets.is_after_cutoff)
+    cutoff_passed = False if PAUSEAPP_IGNORE_CUTOFF else await _retry_sheets(sheets.is_after_cutoff)
 
     sets_today = await _retry_sheets(sheets.get_today_sets)
     prices = await _retry_sheets(sheets.get_set_prices)
@@ -377,7 +386,7 @@ async def api_order_submit(request: web.Request):
     if not client:
         return web.json_response({"error": "not_registered"}, status=404)
 
-    if await _retry_sheets(sheets.is_after_cutoff):
+    if not PAUSEAPP_IGNORE_CUTOFF and await _retry_sheets(sheets.is_after_cutoff):
         return web.json_response({"error": "cutoff_closed"}, status=409)
 
     body = await request.json()
