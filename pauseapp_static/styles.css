@@ -113,6 +113,11 @@ input, textarea, select { font-family: inherit; font-size: 15px; }
   overflow-y: auto;
   padding: 0 18px calc(90px + var(--safe-bottom));
 }
+/* Пока в заказе есть позиции — внизу ещё и плавающая панель корзины
+   (см. .cart-bar), ей тоже нужен запас места, иначе она перекрывает
+   последнюю карточку меню (особенно кнопку "Добавить в заказ" на
+   раскрытой последней карточке в списке — см. app.js: syncCartBar). */
+#content.cart-bar-space { padding-bottom: calc(170px + var(--safe-bottom)); }
 .screen { animation: fade-in .18s ease; }
 @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
@@ -504,7 +509,11 @@ p { margin: 0; color: var(--ink-soft); }
 .menu-set-fav-btn { background: none; border: none; color: var(--ink); flex: 0 0 auto; padding: 2px; }
 .menu-set-fav-btn.active { color: var(--accent-warm); }
 
-.menu-set-chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 2px; }
+/* Небольшой отступ вокруг рядов с кнопками (варианты/гарнир/счётчик/
+   "Добавить") — безопасная зона: клик рядом с кнопкой, но мимо неё на
+   пару пикселей, всё ещё попадает в этот ряд (см. app.js — ряд сам
+   останавливает всплытие клика), а не сворачивает карточку целиком. */
+.menu-set-chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 2px; padding: 4px 0; }
 .menu-set-chip {
   background: var(--card);
   border: 1px solid var(--line);
@@ -516,7 +525,7 @@ p { margin: 0; color: var(--ink-soft); }
 }
 .menu-set-chip.active { background: var(--ink); border-color: var(--ink); color: var(--ivory); }
 
-.menu-set-qty-row { display: flex; align-items: center; gap: 16px; margin: 16px 0 4px; }
+.menu-set-qty-row { display: flex; align-items: center; gap: 16px; margin: 16px 0 4px; padding: 4px 0; }
 .menu-set-qty-btn {
   width: 34px; height: 34px;
   border-radius: 50%;
@@ -529,7 +538,7 @@ p { margin: 0; color: var(--ink-soft); }
 .menu-set-qty-btn:active { background: var(--ivory-deep); }
 .menu-set-qty-value { font-size: 18px; font-weight: 700; color: var(--ink); min-width: 24px; text-align: center; }
 
-.menu-set-card.expanded .btn-primary { margin-top: 16px; }
+.menu-set-add-wrap { margin-top: 16px; padding: 4px 0; }
 .menu-set-closed-note { color: var(--ink-soft); font-size: 13px; text-align: center; padding: 14px 0 2px; }
 
 /* ------------------------------------------------------------------ */
@@ -835,9 +844,13 @@ p { margin: 0; color: var(--ink-soft); }
 .summary-total-label { color: var(--ink-soft); font-size: 14px; }
 .summary-total-value { font-size: 24px; font-weight: 700; color: var(--ink); }
 
+/* Светлый, не "кнопочный" блок — раньше был залит тем же тёмным тоном,
+   что и .btn-primary, из-за чего реквизиты и "Подтвердить заказ"
+   выглядели одной и той же кнопкой на экране оформления. */
 .requisites-box {
-  background: var(--ink);
-  color: var(--ivory);
+  background: var(--ivory-deep);
+  color: var(--ink);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 16px;
   font-family: var(--font-sans);
@@ -866,28 +879,40 @@ p { margin: 0; color: var(--ink-soft); }
   display: flex;
   flex-direction: column;
 }
+/* Раньше это была сплошная полоса на всю ширину экрана — на экранах без
+   заголовка в самой полосе (Корзина, Оформление и т.п., см. app.js —
+   шаг-индикатор .wizard-steps больше нигде не используется) она
+   оставалась совсем пустой, с одним крестиком в углу, и занимала
+   неожиданно много места сверху (пусто) ещё до начала настоящего
+   контента. Теперь назад/закрыть — две маленькие плавающие кнопки
+   поверх контента, без своей полосы; pointer-events:none на самом
+   контейнере — чтобы пустое место между кнопками не перехватывало
+   клики по контенту под ним. */
 .wizard-head {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 5;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: calc(var(--safe-top) + 14px) 14px 12px;
-  background: var(--ivory);
-  border-bottom: 1px solid var(--line);
+  justify-content: space-between;
+  padding: calc(var(--safe-top) + 10px) 12px 0;
+  pointer-events: none;
 }
 .wizard-back, .wizard-close {
-  background: none; border: none; color: var(--ink);
+  pointer-events: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
   width: 36px; height: 36px; flex: 0 0 auto;
+  border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(43, 40, 35, 0.1);
 }
 .wizard-back svg, .wizard-close svg { width: 20px; height: 20px; }
-.wizard-steps { flex: 1; display: flex; gap: 5px; justify-content: center; }
-.wizard-step-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
-.wizard-step-dot.active { background: var(--ink); width: 18px; border-radius: 4px; }
-.wizard-step-dot.done { background: var(--ink-soft); }
+.wizard-steps { display: none; }
 .wizard-body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 20px 18px calc(30px + var(--safe-bottom));
+  padding: calc(var(--safe-top) + 56px) 18px calc(30px + var(--safe-bottom));
 }
 .wizard-title { margin-bottom: 16px; }
 .wizard-footer-btn { margin-top: 22px; }

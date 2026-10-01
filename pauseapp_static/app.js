@@ -1225,26 +1225,28 @@
       }
 
       // --- развёрнутое состояние ---
-      // Важно: render() пересобирает card.innerHTML и переназначает
-      // card.onclick/head.onclick синхронно, прямо изнутри обработчиков
-      // клика на вложенных элементах (шапка/кнопка "Добавить"). Если не
-      // остановить всплытие, один и тот же клик — уже после того, как
-      // card только что получил новый onclick — продолжает всплывать до
-      // card и немедленно раскрывает её обратно (поймано и подтверждено
-      // тестом: клик "Добавить" сворачивал карточку и тут же сам её
-      // разворачивал снова). Поэтому каждый вложенный интерактивный
-      // элемент останавливает событие сам.
-      head.style.cursor = "pointer";
-      head.onclick = function (e) { e.stopPropagation(); haptic("select"); expanded = false; render(); };
+      // Сворачивание — по клику в ЛЮБОМ пустом месте карточки (фото,
+      // описание, цена, поля вокруг кнопок), см. card.onclick ниже. Сами
+      // интерактивные зоны (варианты/гарнир/счётчик/кнопка "Добавить")
+      // останавливают всплытие на уровне СТРОКИ целиком (не только
+      // отдельной кнопки) — иначе промах на пару пикселей мимо кнопки, но
+      // внутри её ряда, всё равно схлопывал бы карточку. Важно также: при
+      // пересборке card.innerHTML изнутри обработчика клика по вложенному
+      // элементу card получает НОВЫЙ card.onclick ещё до того, как текущий
+      // клик закончил всплытие — без stopPropagation тот же клик долетает
+      // до card и немедленно отменяет то, что только что сделал обработчик
+      // (поймано и подтверждено тестом на кнопке "Добавить").
+      card.onclick = function () { haptic("select"); expanded = false; render(); };
 
       var effSet = currentEffSet();
       body.appendChild(el("div", "menu-set-card-price", fmtSum(effSet.price)));
 
       if (s.is_variant_group) {
         var variantRow = el("div", "menu-set-chip-row");
+        variantRow.addEventListener("click", function (e) { e.stopPropagation(); });
         s.variants.forEach(function (v, idx) {
           var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(v.label));
-          chip.addEventListener("click", function (e) { e.stopPropagation(); sel.variantIdx = idx; sel.garnish = ""; render(); });
+          chip.addEventListener("click", function () { sel.variantIdx = idx; sel.garnish = ""; render(); });
           variantRow.appendChild(chip);
         });
         body.appendChild(variantRow);
@@ -1252,9 +1254,10 @@
 
       if (effSet.has_garnish && effSet.garnish_options.length) {
         var garnishRow = el("div", "menu-set-chip-row");
+        garnishRow.addEventListener("click", function (e) { e.stopPropagation(); });
         effSet.garnish_options.forEach(function (g) {
           var chip = el("button", "menu-set-chip" + (sel.garnish === g.value ? " active" : ""), escapeHtml(g.display));
-          chip.addEventListener("click", function (e) { e.stopPropagation(); sel.garnish = g.value; render(); });
+          chip.addEventListener("click", function () { sel.garnish = g.value; render(); });
           garnishRow.appendChild(chip);
         });
         body.appendChild(garnishRow);
@@ -1264,26 +1267,30 @@
         body.appendChild(el("div", "menu-set-closed-note", t("menu.orderClosedNote")));
       } else {
         var qtyRow = el("div", "menu-set-qty-row");
+        qtyRow.addEventListener("click", function (e) { e.stopPropagation(); });
         var minus = el("button", "menu-set-qty-btn", "–");
         var value = el("div", "menu-set-qty-value", String(sel.qty));
         var plus = el("button", "menu-set-qty-btn", "+");
-        minus.addEventListener("click", function (e) { e.stopPropagation(); if (sel.qty > 1) { sel.qty--; value.textContent = sel.qty; haptic(); } });
-        plus.addEventListener("click", function (e) { e.stopPropagation(); sel.qty++; value.textContent = sel.qty; haptic(); });
+        minus.addEventListener("click", function () { if (sel.qty > 1) { sel.qty--; value.textContent = sel.qty; haptic(); } });
+        plus.addEventListener("click", function () { sel.qty++; value.textContent = sel.qty; haptic(); });
         qtyRow.appendChild(minus); qtyRow.appendChild(value); qtyRow.appendChild(plus);
         body.appendChild(qtyRow);
 
+        var addBtnWrap = el("div", "menu-set-add-wrap");
+        addBtnWrap.addEventListener("click", function (e) { e.stopPropagation(); });
         var addBtn = el("button", "btn-primary", t("menu.addToCart"));
-        addBtn.addEventListener("click", function (e) {
-          e.stopPropagation();
+        addBtn.addEventListener("click", function () {
           if (effSet.has_garnish && effSet.garnish_options.length && !sel.garnish) { toast(t("menu.pickGarnishFirst")); return; }
           addToCart(effSet, sel);
           haptic("success");
           toast(t("menu.addedToCart"));
-          expanded = false;
+          // Карточка остаётся раскрытой (можно сразу добавить ещё одну
+          // порцию с другим гарниром) — сбрасываем только сам выбор.
           sel = { variantIdx: 0, garnish: "", qty: 1 };
           render();
         });
-        body.appendChild(addBtn);
+        addBtnWrap.appendChild(addBtn);
+        body.appendChild(addBtnWrap);
       }
 
       card.appendChild(body);
@@ -1641,9 +1648,11 @@
   // корзины, если в нём убрали последнюю позицию).
   function syncCartBar() {
     var bar = document.getElementById("cart-bar");
+    var content = document.getElementById("content");
     if (!state.cart.length) {
       bar.hidden = true;
       bar.onclick = null;
+      content.classList.remove("cart-bar-space");
       return;
     }
     bar.innerHTML =
@@ -1651,6 +1660,9 @@
       '<button class="cart-bar-btn">' + escapeHtml(t("cart.barButton")) + '</button>';
     bar.hidden = false;
     bar.onclick = openCartScreen;
+    // Запас места внизу экрана Меню, чтобы плавающая панель не перекрывала
+    // последнюю карточку (см. styles.css: #content.cart-bar-space).
+    content.classList.add("cart-bar-space");
   }
 
   function openCartScreen() {
@@ -1772,7 +1784,7 @@
         var attachRow = el("div", "checkout-attach-row");
         var fileInput = el("input");
         fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none";
-        var attachBtn = el("button", "btn-primary", t("checkout.attachScreenshot"));
+        var attachBtn = el("button", "btn-ghost", t("checkout.attachScreenshot"));
         var laterBtn = el("button", "btn-ghost", t("checkout.attachLater"));
         attachBtn.addEventListener("click", function () { fileInput.click(); });
         fileInput.addEventListener("change", function () {
