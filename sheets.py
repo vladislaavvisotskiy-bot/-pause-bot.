@@ -241,7 +241,7 @@ def create_client(tg_id: int, name: str, phone: str, telegram_username: str = ""
     new_row_num = max([c["row"] for c in clients], default=config.CLIENTS_DATA_START_ROW - 1) + 1
 
     updates = [
-        (config.COL_ID, str(new_id)),
+        (config.COL_ID, new_id),
         (config.COL_NAME, name),
         (config.COL_CONTACT, phone),
         (config.COL_TELEGRAM, telegram_username),
@@ -258,6 +258,19 @@ def create_client(tg_id: int, name: str, phone: str, telegram_username: str = ""
     # разобрать, и вместо номера в ячейке новой карточки остаётся ошибка
     # (#ERROR!) прямо при регистрации. Воспроизведено и подтверждено на
     # реальном аккаунте (см. sheets.update_client_field — тот же баг там).
+    #
+    # У RAW есть обратная сторона именно для ID: раньше (через update_cell,
+    # USER_ENTERED) "212" само превращалось в ЧИСЛО 212, как если бы его
+    # вписал человек. RAW строку не трогает — она осталась бы ТЕКСТОМ
+    # "212". Формула в "Заказы" (MATCH по Sheet1!E:E — см. config.COL_ID)
+    # ищет точное совпадение, а текст "212" для неё не равен числу 212 —
+    # имя у таких клиентов просто не находится. Поэтому ID передаём сюда
+    # Python-числом (new_id), а не str(new_id): gspread кладёт число в
+    # JSON как число, и Таблицы сохраняют его числом независимо от
+    # value_input_option — RAW защищает только телефон (строка), на число
+    # вообще не влияет. Воспроизведено и подтверждено: клиенты,
+    # зарегистрированные до этого исправления строкой, перестали находиться
+    # формулой "Имя" в "Заказы".
     ws.update_cells(
         [gspread.Cell(new_row_num, col, value) for col, value in updates],
         value_input_option="RAW",
