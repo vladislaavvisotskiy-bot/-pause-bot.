@@ -162,6 +162,23 @@ def _phone_key(s: str) -> str:
     return digits[-9:] if len(digits) >= 9 else digits
 
 
+def format_uz_phone(raw: str) -> Optional[str]:
+    """Приводит номер к единому виду "+998 XX XXX XX XX" — ровно 9 цифр
+    абонентского номера после кода страны +998 (сам код страны в тексте
+    необязателен: "901234567" и "+998901234567" дают один и тот же
+    результат). Если после вычитания необязательного "998" цифр не ровно
+    9 — номер считается неверным (None), ничего не угадываем. Используется
+    и при регистрации, и при правке телефона в боте (handlers/start.py,
+    handlers/profile.py) — чтобы в "Клиенты" у всех хранился один и тот
+    же формат, а не как кто написал."""
+    digits = _digits_only(raw)
+    if digits.startswith("998") and len(digits) == 12:
+        digits = digits[3:]
+    if len(digits) != 9:
+        return None
+    return "+998 {} {} {} {}".format(digits[0:2], digits[2:5], digits[5:7], digits[7:9])
+
+
 def find_client_by_phone(phone: str) -> Optional[dict]:
     """Ищет существующего клиента (например, добавленного вручную в CRM ещё
     до бота) по номеру телефона — сравниваем только цифры, чтобы разное

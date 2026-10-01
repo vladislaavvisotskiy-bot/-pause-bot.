@@ -38,7 +38,10 @@ async def got_name(message: Message, state: FSMContext):
 
 @router.message(Registration.waiting_phone)
 async def got_phone(message: Message, state: FSMContext):
-    phone = (message.text or "").strip()
+    phone = sheets.format_uz_phone(message.text or "")
+    if not phone:
+        await message.answer(texts.PHONE_INVALID)
+        return
     data = await state.get_data()
     name = data.get("reg_name", message.from_user.full_name)
     username = message.from_user.username or ""

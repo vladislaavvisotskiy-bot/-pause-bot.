@@ -213,9 +213,9 @@ async def edit_phone_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(EditProfile.waiting_phone)
 async def edit_phone_save(message: Message, state: FSMContext, bot: Bot):
-    phone = (message.text or "").strip()
+    phone = sheets.format_uz_phone(message.text or "")
     if not phone:
-        await message.answer(texts.EDIT_PHONE_PROMPT)
+        await message.answer(texts.PHONE_INVALID)
         return
     client = sheets.find_client_by_tg_id(message.from_user.id)
     if client:

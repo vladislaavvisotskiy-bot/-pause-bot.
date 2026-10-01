@@ -571,6 +571,18 @@ async def api_profile_edit(request: web.Request):
     lat = body.get("lat")
     lon = body.get("lon")
 
+    # Приложение само не даёт отправить незаполненный/неверный номер (см.
+    # pauseapp_static/app.js: buildPhoneField), но на сервере тоже
+    # проверяем и приводим к единому виду — та же функция, что у бота
+    # при регистрации/правке телефона (sheets.format_uz_phone), чтобы в
+    # "Клиенты" номер хранился одинаково независимо от того, откуда он
+    # пришёл.
+    if phone:
+        normalized = sheets.format_uz_phone(phone)
+        if not normalized:
+            return web.json_response({"error": "phone_invalid"}, status=400)
+        phone = normalized
+
     if name:
         await _retry_sheets(sheets.update_client_field, client["row"], config.COL_NAME, name)
     if phone:

@@ -191,6 +191,7 @@
       "editProfile.name": "Имя", "editProfile.phone": "Телефон",
       "editProfile.save": "Сохранить", "editProfile.saved": "Сохранено",
       "editProfile.saveFailed": "Не удалось сохранить: {msg}",
+      "editProfile.phoneInvalid": "Введите номер полностью — 9 цифр после +998",
 
       "address.title": "Адрес доставки",
       "address.point": "Точка доставки", "address.setPoint": "Указать точку",
@@ -380,6 +381,7 @@
       "editProfile.name": "Ism", "editProfile.phone": "Telefon",
       "editProfile.save": "Saqlash", "editProfile.saved": "Saqlandi",
       "editProfile.saveFailed": "Saqlab bo'lmadi: {msg}",
+      "editProfile.phoneInvalid": "Raqamni to'liq kiriting — +998 dan keyin 9 ta raqam",
 
       "address.title": "Yetkazib berish manzili",
       "address.point": "Yetkazib berish nuqtasi", "address.setPoint": "Nuqtani belgilash",
@@ -569,6 +571,7 @@
       "editProfile.name": "Name", "editProfile.phone": "Phone",
       "editProfile.save": "Save", "editProfile.saved": "Saved",
       "editProfile.saveFailed": "Couldn't save: {msg}",
+      "editProfile.phoneInvalid": "Enter the full number — 9 digits after +998",
 
       "address.title": "Delivery address",
       "address.point": "Delivery point", "address.setPoint": "Set a point",
@@ -754,17 +757,99 @@
   }
   document.getElementById("info-modal-ok").addEventListener("click", hideInfo);
 
-  // Номер телефона в системе хранится как ввёл клиент (в боте это
-  // свободный текст, см. handlers/start.py: got_phone) — где угодно могут
-  // быть пробелы/дефисы/скобки, код страны может отсутствовать. Здесь
-  // приводим показ к единому виду "+998 XX XXX XX XX" по требованию
-  // пользователя, не трогая то, что реально хранится в таблице.
+  // Новые номера теперь везде сохраняются уже в едином виде
+  // "+998 XX XXX XX XX" (см. buildPhoneField ниже — ввод в самом
+  // приложении, и sheets.format_uz_phone — регистрация/правка телефона
+  // в боте). Но старые записи (внесённые вручную в CRM ещё до этого,
+  // или просто написанные как попало в чат боту до этой правки) могут
+  // быть в любом виде — пробелы/дефисы/без кода страны. Эта функция —
+  // только для ПОКАЗА, сама таблица не трогается.
   function formatPhone(raw) {
     var digits = (raw || "").replace(/\D/g, "");
     if (digits.slice(0, 3) === "998") digits = digits.slice(3);
     digits = digits.slice(-9);
     if (digits.length < 9) return raw || "";
     return "+998 " + digits.slice(0, 2) + " " + digits.slice(2, 5) + " " + digits.slice(5, 7) + " " + digits.slice(7, 9);
+  }
+
+  // Поле ввода телефона с "прикреплённым" +998 и живым форматированием —
+  // используется везде, где телефон редактируется (пока только Профиль →
+  // Редактировать профиль, см. openEditProfileInfo). Код страны выводится
+  // отдельным нередактируемым блоком, человек набирает только 9 цифр
+  // абонентского номера — пробелы между группами (2-3-2-2) расставляются
+  // сами по мере ввода. Если цифр не ровно 9 (в том числе если по
+  // привычке ещё раз набрали "998" или "+998" вместо своего номера —
+  // ровно тот случай, из-за которого это вообще понадобилось) — поле
+  // подсвечивается, кнопка "Сохранить" должна блокироваться вызывающим
+  // кодом, пока isValid() не вернёт true (см. getPhone/isValid ниже).
+  function formatUzPhoneDigits(digits) {
+    var groups = [2, 3, 2, 2];
+    var parts = [];
+    var i = 0;
+    groups.forEach(function (len) {
+      if (i >= digits.length) return;
+      parts.push(digits.slice(i, i + len));
+      i += len;
+    });
+    var out = parts.join(" ");
+    if (i < digits.length) out += " " + digits.slice(i); // лишние цифры — видно, что номер не влезает
+    return out;
+  }
+
+  function buildPhoneField(labelText, initialRaw) {
+    var wrap = el("div", "field");
+    wrap.innerHTML = '<label>' + escapeHtml(labelText) + '</label>';
+
+    var row = el("div", "phone-input-row");
+    row.appendChild(el("span", "phone-input-prefix", "+998"));
+    var input = el("input");
+    input.type = "tel";
+    input.inputMode = "numeric";
+    input.placeholder = "90 123 45 67";
+    wrap.appendChild(row);
+    row.appendChild(input);
+
+    var errorEl = el("div", "phone-input-error", t("editProfile.phoneInvalid"));
+    errorEl.hidden = true;
+    wrap.appendChild(errorEl);
+
+    // Из уже сохранённого значения (любого вида — см. formatPhone выше)
+    // достаём ровно 9 цифр абонентского номера для предзаполнения.
+    var initDigits = (initialRaw || "").replace(/\D/g, "");
+    if (initDigits.slice(0, 3) === "998") initDigits = initDigits.slice(3);
+    initDigits = initDigits.slice(-9);
+    input.value = formatUzPhoneDigits(initDigits);
+
+    // Пустое поле — это "не меняем номер" (у клиента и так уже может не
+    // быть телефона в карточке, это не повод блокировать сохранение
+    // имени), а вот НАЧАТОЕ, но неполное/слишком длинное — уже ошибка.
+    function currentDigits() { return input.value.replace(/\D/g, ""); }
+    function isAcceptable() { var n = currentDigits().length; return n === 0 || n === 9; }
+    function refreshValidity(showError) {
+      var ok = isAcceptable();
+      row.classList.toggle("invalid", showError && !ok);
+      errorEl.hidden = !(showError && !ok);
+      return ok;
+    }
+
+    input.addEventListener("input", function () {
+      var digits = currentDigits();
+      input.value = formatUzPhoneDigits(digits);
+      // Пока цифр меньше 9 — рано ругаться, человек ещё печатает. А вот
+      // больше 9 — однозначно уже слишком длинно (та самая ситуация "ещё
+      // раз набрали 998"), подсвечиваем сразу, не дожидаясь потери фокуса.
+      refreshValidity(digits.length > 9);
+    });
+    input.addEventListener("blur", function () { refreshValidity(currentDigits().length > 0); });
+
+    return {
+      el: wrap,
+      isValid: isAcceptable,
+      // Показать красную ошибку принудительно — для попытки сохранить
+      // незавершённый номер.
+      showErrorIfInvalid: function () { return refreshValidity(true); },
+      getPhone: function () { return currentDigits().length ? ("+998 " + formatUzPhoneDigits(currentDigits())) : ""; },
+    };
   }
 
   // -------------------------------------------------------------------
@@ -2020,16 +2105,19 @@
       nameField.innerHTML = '<label>' + escapeHtml(t("editProfile.name")) + '</label><input type="text" id="edit-name" value="' + escapeHtml(p.name || "") + '">';
       body.appendChild(nameField);
 
-      var phoneField = el("div", "field");
-      phoneField.innerHTML = '<label>' + escapeHtml(t("editProfile.phone")) + '</label><input type="tel" id="edit-phone" value="' + escapeHtml(p.phone || "") + '">';
-      body.appendChild(phoneField);
+      var phoneField = buildPhoneField(t("editProfile.phone"), p.phone);
+      body.appendChild(phoneField.el);
 
       var save = el("button", "btn-primary wizard-footer-btn", t("editProfile.save"));
       save.addEventListener("click", function () {
+        // Номер — либо пустой (не меняли), либо ровно 9 цифр после +998;
+        // ничего среднего сохранить нельзя (см. ТЗ: показать красным и не
+        // дать сохранить, пока не будет правильно).
+        if (!phoneField.isValid()) { phoneField.showErrorIfInvalid(); return; }
         save.disabled = true;
         var reqBody = {
           name: document.getElementById("edit-name").value.trim(),
-          phone: document.getElementById("edit-phone").value.trim(),
+          phone: phoneField.getPhone(),
         };
         api("/api/profile", { method: "POST", body: reqBody }).then(function () {
           haptic("success");

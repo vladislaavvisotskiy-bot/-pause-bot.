@@ -739,6 +739,38 @@ p { margin: 0; color: var(--ink-soft); }
 }
 .field input:focus, .field textarea:focus { outline: none; border-color: var(--ink); }
 
+/* Телефон — +998 "прикреплён" отдельным нередактируемым блоком слева,
+   справа только цифры абонентского номера (см. app.js: buildPhoneField). */
+.phone-input-row {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  overflow: hidden;
+}
+.phone-input-prefix {
+  display: flex;
+  align-items: center;
+  padding: 12px 10px 12px 14px;
+  color: var(--ink-soft);
+  font-weight: 600;
+  border-right: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.phone-input-row input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  padding: 12px 14px 12px 10px;
+  background: transparent;
+  color: var(--ink);
+}
+.phone-input-row input:focus { outline: none; }
+.phone-input-row.invalid { border-color: var(--accent-warm); }
+.phone-input-row.invalid .phone-input-prefix { border-right-color: var(--accent-warm); }
+.phone-input-error { color: var(--accent-warm); font-size: 12px; margin-top: 6px; }
+
 /* ------------------------------------------------------------------ */
 /* Карта выбора точки доставки (см. app.js: renderDeliveryMapPicker) — */
 /* тот же Esri-стиль тайлов, что и в Mini App "Маршрут" (webapp.js),   */
