@@ -195,6 +195,30 @@ async def cmd_webapp_debug(message: Message):
     await message.answer("\n".join(lines))
 
 
+@router.message(Command("fix_client_ids"))
+async def cmd_fix_client_ids(message: Message):
+    """Разовая миграция (не на каждый день, поэтому не в /admin и не в
+    списке команд бота — набирается вручную): у клиентов, которых
+    create_client зарегистрировал до фикса типа ID (см. sheets.py), ID в
+    Sheet1 остался текстом, и формула "Имя" в "Заказы" таких клиентов не
+    находит (репортнуто пользователем — ломалось начиная с ID 212).
+    Перезаписывает ID каждого клиента тем же значением, но числом —
+    идемпотентно, прогонять можно сколько угодно раз без риска."""
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    await message.answer("Проверяю ID всех клиентов и исправляю, где нужно…")
+    try:
+        result = sheets.fix_client_id_types()
+    except Exception:
+        logger.exception("Не удалось исправить типы ID клиентов")
+        await message.answer("Не получилось — подробности в логах.")
+        return
+    await message.answer(
+        f"Готово. Проверено клиентов: {result['total']}, записано числом: {result['fixed']}."
+    )
+
+
 @router.message(Command("chatid"))
 @router.channel_post(Command("chatid"))
 async def cmd_chatid(message: Message):

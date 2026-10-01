@@ -280,6 +280,26 @@ def create_client(tg_id: int, name: str, phone: str, telegram_username: str = ""
     return new_id
 
 
+def fix_client_id_types() -> dict:
+    """Разовая миграция (см. /fix_client_ids в handlers/admin.py): у всех
+    клиентов, кого create_client зарегистрировал ДО фикса выше (писал
+    str(new_id) под value_input_option="RAW"), ID в Sheet1 хранится
+    ТЕКСТОМ — формула "Имя" в "Заказы" (MATCH по числу) таких клиентов не
+    находит. Перезаписывает ID каждого клиента тем же значением, но уже
+    Python-числом — идемпотентна: у кого ID уже число, запись ничего не
+    меняет."""
+    ws = _ws(config.SHEET_CLIENTS)
+    clients = _load_clients(force=True)
+    cells = [
+        gspread.Cell(c["row"], config.COL_ID, int(c["id"]))
+        for c in clients if str(c["id"]).isdigit()
+    ]
+    if cells:
+        ws.update_cells(cells, value_input_option="RAW")
+    _cache["clients"] = None
+    return {"total": len(clients), "fixed": len(cells)}
+
+
 def get_zones() -> list:
     seen, out = set(), []
     for c in _load_clients():
