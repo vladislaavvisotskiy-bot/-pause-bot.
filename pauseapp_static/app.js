@@ -925,9 +925,19 @@
     // (иначе первый заход в неё показывал бы вечный скелетон-плейсхолдер,
     // а повторный — старый текст на старом языке после смены языка в
     // Настройках, см. applyLangToUI ниже).
-    if (name === "home") { if (state.home) renderHomeScreen(); else loadHome(); }
+    //
+    // Главная и Меню — особый случай: меню (сеты/цены/приём закрыт или
+    // нет) правится координатором через бота прямо в течение дня, пока
+    // клиент сидит в уже открытом PAUSE App — Telegram НЕ перезагружает
+    // WebView при переключении вкладок, так что старые state.home/
+    // state.menu просто остаются висеть в памяти сколько угодно (так и
+    // поймали: обновили меню в боте, в уже открытом приложении ничего не
+    // изменилось). Поэтому тут не "или кэш, или загрузка", а ОБА разом:
+    // старое (если есть) показываем сразу, не дожидаясь сети, и тут же
+    // следом грузим свежее — когда придёт, экран перерисуется сам.
+    if (name === "home") { if (state.home) renderHomeScreen(); loadHome(); }
     if (name === "profile") { if (state.profile) renderProfileScreen(); else loadProfile(); }
-    if (name === "menu") { if (state.menu) renderMenuScreen(); else loadMenu(); }
+    if (name === "menu") { if (state.menu) renderMenuScreen(); loadMenu(); }
     if (name === "club") { if (state.feed) renderFeedScreen(); else loadFeed(); }
     if (name === "messages") { if (state.feed) renderMessagesFeedScreen(); else loadFeed(); }
   }
@@ -1050,15 +1060,22 @@
 
   function loadHome() {
     var root = document.getElementById("home-root");
+    var hadCache = !!state.home;
+    // Меню — всегда свежее (см. showScreen: приём/цены/сеты могут
+    // поменяться в течение дня через бота, пока приложение уже открыто);
+    // профиль — можно переиспользовать, он меняется куда реже.
     Promise.all([
       state.profile ? Promise.resolve(state.profile) : api("/api/profile"),
-      state.menu ? Promise.resolve(state.menu) : api("/api/menu"),
+      api("/api/menu"),
     ]).then(function (results) {
       state.profile = results[0];
       state.menu = results[1];
       state.home = true;
       renderHomeScreen();
     }).catch(function (err) {
+      // Уже показан рабочий (пусть и чуть устаревший) экран — разовый сбой
+      // фонового обновления не должен стирать его в пустой экран ошибки.
+      if (hadCache) return;
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", t("home.loadError", { msg: err.message })));
     });
@@ -1124,11 +1141,26 @@
 
   function loadMenu() {
     var root = document.getElementById("menu-root");
-    state.menuCategory = "all";
+    var hadCache = !!state.menu;
+    // Категорию сбрасываем только на самом первом заходе — теперь
+    // loadMenu() вызывается ещё и в фоне при каждом повторном открытии
+    // вкладки (см. showScreen), и сброс фильтра на каждое такое
+    // обновление сносил бы уже выбранную клиентом категорию без всякой
+    // причины, хотя данные под ней просто обновились.
+    if (!hadCache) state.menuCategory = "all";
     api("/api/menu").then(function (data) {
       state.menu = data;
-      renderMenuScreen();
+      // Если человек прямо сейчас выбирает гарнир/количество в раскрытой
+      // карточке — не выдёргиваем её перерисовкой из-под рук. Свежие
+      // данные уже лежат в state.menu и применятся сами на следующий
+      // обычный показ экрана (свернул карточку, ушёл и вернулся и т.п.).
+      if (!document.querySelector("#menu-root .menu-set-card.expanded")) {
+        renderMenuScreen();
+      }
     }).catch(function (err) {
+      // Уже показано рабочее (пусть и чуть устаревшее) меню — разовый сбой
+      // фонового обновления не должен стирать его в пустой экран ошибки.
+      if (hadCache) return;
       root.innerHTML = "";
       root.appendChild(el("div", "menu-state", "<p>" + t("menu.loadErr") + "</p>"));
       var retry = el("button", "btn-ghost", t("menu.retry"));
