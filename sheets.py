@@ -1417,16 +1417,20 @@ def get_club_level(order_count: int) -> dict:
     levels = config.CLUB_LEVELS
     current = levels[0]
     next_level = None
-    for i, (threshold, emoji, label) in enumerate(levels):
+    for i, (key, threshold, emoji, label) in enumerate(levels):
         if order_count >= threshold:
-            current = (threshold, emoji, label)
+            current = (key, threshold, emoji, label)
             next_level = levels[i + 1] if i + 1 < len(levels) else None
         else:
             break
-    _, emoji, label = current
-    result = {"emoji": emoji, "label": label, "order_count": order_count, "next_label": None, "left": 0}
+    key, _, emoji, label = current
+    result = {
+        "key": key, "emoji": emoji, "label": label, "order_count": order_count,
+        "next_key": None, "next_label": None, "left": 0,
+    }
     if next_level:
-        next_threshold, next_emoji, next_label = next_level
+        next_key, next_threshold, next_emoji, next_label = next_level
+        result["next_key"] = next_key
         result["next_label"] = next_label
         result["next_emoji"] = next_emoji
         result["left"] = max(0, next_threshold - order_count)

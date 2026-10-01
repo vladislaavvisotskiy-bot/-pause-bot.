@@ -168,6 +168,8 @@
       "profile.member": "Участник",
       "profile.toNextLevel": "До статуса «{emoji} {label}» осталось заказов: {left}",
       "profile.topLevel": "Вы уже на высшем уровне PAUSE Club 🎉",
+      "club.level.guest": "Гость PAUSE", "club.level.regular": "Свой человек",
+      "club.level.circle": "Круг PAUSE", "club.level.ambassador": "Амбассадор PAUSE",
       "profile.statOrders": "заказов", "profile.statPromo": "акции", "profile.statPosts": "постов",
       "profile.myOrders": "Мои заказы", "profile.favorites": "Избранное", "profile.notifications": "Уведомления",
       "profile.bonuses": "Бонусы и промокоды", "profile.support": "Поддержка",
@@ -358,6 +360,8 @@
       "profile.member": "A'zo",
       "profile.toNextLevel": "«{emoji} {label}» darajasigacha qolgan buyurtmalar: {left}",
       "profile.topLevel": "Siz allaqachon PAUSE Club eng yuqori darajasidasiz 🎉",
+      "club.level.guest": "PAUSE mehmoni", "club.level.regular": "O'z odamimiz",
+      "club.level.circle": "PAUSE doirasi", "club.level.ambassador": "PAUSE elchisi",
       "profile.statOrders": "buyurtma", "profile.statPromo": "aksiya", "profile.statPosts": "post",
       "profile.myOrders": "Buyurtmalarim", "profile.favorites": "Sevimlilar", "profile.notifications": "Bildirishnomalar",
       "profile.bonuses": "Bonus va promokodlar", "profile.support": "Yordam",
@@ -547,6 +551,8 @@
       "profile.noName": "No name",
       "profile.member": "Member",
       "profile.toNextLevel": "{left} orders left to «{emoji} {label}»",
+      "club.level.guest": "PAUSE guest", "club.level.regular": "Regular",
+      "club.level.circle": "PAUSE circle", "club.level.ambassador": "PAUSE ambassador",
       "profile.topLevel": "You're already at the top PAUSE Club level 🎉",
       "profile.statOrders": "orders", "profile.statPromo": "promos", "profile.statPosts": "posts",
       "profile.myOrders": "My orders", "profile.favorites": "Favorites", "profile.notifications": "Notifications",
@@ -638,6 +644,47 @@
       });
     }
     return str;
+  }
+
+  function clubLevelLabel(key, fallback) {
+    return key ? t("club.level." + key) : fallback;
+  }
+
+  // Названия блюд/сетов и варианты ("С компотом"/"Без компота") — это
+  // данные, которые вводит админ через бота (см. config.SET_VARIANTS,
+  // texts.SET_DISPLAY_NAMES), а не интерфейсный текст, поэтому их нет в
+  // I18N выше. Но сам каталог названий фиксирован и меняется редко, так
+  // что для него (в отличие от свободного текста описаний/категорий,
+  // которые админ вводит каждый день заново и которые пока остаются на
+  // русском) есть смысл держать перевод здесь. Ключ — РУССКОЕ клиентское
+  // название (то, что отдаёт texts.display_set_name — см. pauseapp.py:
+  // _serialize_sets и api_orders), а не "сырое" админское имя сета: это
+  // единственное, что приходит одинаково и в карточке Меню (s.display_name),
+  // и в "Мои заказы" (item.set) — там технического/сырого имени наружу
+  // уже не остаётся. Когда админ добавит новый сет, он просто покажется
+  // на русском, пока сюда не добавят перевод — ничего не ломается.
+  var SET_NAME_TRANSLATIONS = {
+    "Пауза дня.": { uz: "Kun taomi.", en: "Dish of the day." },
+    "Для тебя.": { uz: "Sen uchun.", en: "For you." },
+    "Пауза в балансе.": { uz: "Pauza balansda.", en: "Pause in balance." },
+    "Пауза дуо.": { uz: "Pauza duo.", en: "Pause duo." },
+    "Chicken bowl.": { uz: "Chicken bowl.", en: "Chicken bowl." },
+    "Beef bowl.": { uz: "Beef bowl.", en: "Beef bowl." },
+    "Пауза Prime.": { uz: "Pauza Prime.", en: "Pause Prime." },
+  };
+  var VARIANT_LABEL_TRANSLATIONS = {
+    "С компотом": { uz: "Kompot bilan", en: "With compote" },
+    "Без компота": { uz: "Kompotsiz", en: "Without compote" },
+  };
+  function localizedSetName(name) {
+    if (state.lang === "ru" || !name) return name;
+    var entry = SET_NAME_TRANSLATIONS[name];
+    return (entry && entry[state.lang]) || name;
+  }
+  function localizedVariantLabel(label) {
+    if (state.lang === "ru" || !label) return label;
+    var entry = VARIANT_LABEL_TRANSLATIONS[label];
+    return (entry && entry[state.lang]) || label;
   }
 
   var ICON_LANG_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -1263,12 +1310,18 @@
     var card = el("div", "card menu-set-card");
     var expanded = false;
     var sel = { variantIdx: 0, garnish: "", qty: 1 };
+    var localizedName = localizedSetName(s.display_name);
 
     function currentEffSet() {
-      if (!s.is_variant_group) return s;
+      if (!s.is_variant_group) {
+        return {
+          key: s.key, display_name: localizedName, price: s.price,
+          has_garnish: s.has_garnish, garnish_options: s.garnish_options,
+        };
+      }
       var v = s.variants[sel.variantIdx] || s.variants[0];
       return {
-        key: v.technical, display_name: s.display_name + " · " + v.label, price: v.price,
+        key: v.technical, display_name: localizedName + " · " + localizedVariantLabel(v.label), price: v.price,
         has_garnish: v.has_garnish, garnish_options: v.garnish_options,
       };
     }
@@ -1295,7 +1348,7 @@
 
       var body = el("div", "menu-set-card-body");
       var head = el("div", "menu-set-card-head");
-      head.appendChild(el("div", "menu-set-card-name", escapeHtml(s.display_name)));
+      head.appendChild(el("div", "menu-set-card-name", escapeHtml(localizedName)));
 
       if (expanded) {
         var favBtn = el("button", "menu-set-fav-btn", ICON_HEART);
@@ -1362,7 +1415,7 @@
         var variantRow = el("div", "menu-set-chip-row");
         variantRow.addEventListener("click", function (e) { e.stopPropagation(); });
         s.variants.forEach(function (v, idx) {
-          var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(v.label));
+          var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(localizedVariantLabel(v.label)));
           chip.addEventListener("click", function () { sel.variantIdx = idx; sel.garnish = ""; render(); });
           variantRow.appendChild(chip);
         });
@@ -2365,14 +2418,14 @@
     // 0 заказов) — не прячем, пока не наберётся хоть один, как было
     // раньше. По тапу — сколько осталось до следующего уровня (см.
     // sheets.get_club_level — та же самая чистая функция, что и в боте).
-    var badge = el("button", "pill profile-club-badge", p.club.emoji + " " + t("profile.member") + " " + p.club.label);
+    var badge = el("button", "pill profile-club-badge", p.club.emoji + " " + t("profile.member") + " " + clubLevelLabel(p.club.key, p.club.label));
     badge.addEventListener("click", function () {
       haptic("select");
       if (p.club.next_label) {
         var total = p.order_count + p.club.left;
         var pct = total ? Math.min(100, Math.round((p.order_count / total) * 100)) : 0;
         showInfo(
-          '<div class="club-progress-label">' + t("profile.toNextLevel", { emoji: p.club.next_emoji, label: escapeHtml(p.club.next_label), left: p.club.left }) + '</div>' +
+          '<div class="club-progress-label">' + t("profile.toNextLevel", { emoji: p.club.next_emoji, label: escapeHtml(clubLevelLabel(p.club.next_key, p.club.next_label)), left: p.club.left }) + '</div>' +
           '<div class="club-progress-track"><div class="club-progress-fill" style="width:' + pct + '%"></div></div>'
         );
       } else {
@@ -2519,7 +2572,7 @@
   }
 
   function itemsText(items) {
-    return items.map(function (i) { return i.qty + "× " + i.set; }).join(", ");
+    return items.map(function (i) { return i.qty + "× " + localizedSetName(i.set); }).join(", ");
   }
 
   function cancelOrder(ordersRoot) {

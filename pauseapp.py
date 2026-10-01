@@ -519,8 +519,10 @@ async def api_profile(request: web.Request):
         "order_count": client.get("order_count", 0),
         "reg_date": client.get("reg_date", ""),
         "club": {
+            "key": level.get("key"),
             "emoji": level["emoji"],
             "label": level["label"],
+            "next_key": level.get("next_key"),
             "next_emoji": level.get("next_emoji"),
             "next_label": level.get("next_label"),
             "left": level.get("left", 0),
