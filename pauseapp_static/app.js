@@ -2751,6 +2751,22 @@
     { key: "review", label: "На проверке" },
   ];
 
+  // Телефон хранится как "+998 91 776 34 09" (см. sheets.format_uz_phone)
+  // — здесь только визуально отделяем код страны от самого номера, как
+  // попросили: "+998 - 91 776 34 09".
+  function _opsFmtPhone(phone) {
+    var p = (phone || "").trim();
+    if (p.indexOf("+998") !== 0) return p;
+    var rest = p.slice(4).trim();
+    return rest ? "+998 - " + rest : "+998";
+  }
+  function _opsTelHref(phone) {
+    var digits = (phone || "").replace(/[^\d+]/g, "");
+    return digits ? "tel:" + digits : "";
+  }
+  var ICON_OPS_MESSAGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>';
+  var ICON_OPS_CALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4c0 1.1-0.9 2-2 2C9.6 21 3 14.4 3 6c0-1.1 0.9-2 2-2z"/></svg>';
+
   function loadOpsFinance(root) {
     var ops = {
       period: "today",
@@ -3021,17 +3037,38 @@
       var cardBody = el("div");
       cardBody.innerHTML =
         '<div class="ops-debtor-card-name">' + escapeHtml(data.name) + '</div>' +
-        (data.phone ? '<div class="ops-debtor-card-line">' + escapeHtml(data.phone) + '</div>' : "") +
+        (data.phone ? '<div class="ops-debtor-card-line">' + escapeHtml(_opsFmtPhone(data.phone)) + '</div>' : "") +
         (data.telegram ? '<div class="ops-debtor-card-line">@' + escapeHtml(data.telegram.replace(/^@/, "")) + '</div>' : "");
       card.appendChild(cardBody);
-      var writeBtn = el("button", "btn-primary ops-write-btn", "Написать");
+
+      var actionsRow = el("div", "ops-contact-actions");
+      var writeBtn = el("button", "ops-contact-btn ops-contact-btn-primary");
+      writeBtn.innerHTML = ICON_OPS_MESSAGE + '<span>Написать</span>';
       if (data.tg_link) {
         writeBtn.addEventListener("click", function () { window.location.href = data.tg_link; });
       } else {
         writeBtn.disabled = true;
         writeBtn.title = "Телеграм не привязан — юзер скрыт";
       }
-      card.appendChild(writeBtn);
+      // "Позвонить" — обычная <a href="tel:..."> (не window.location.href
+      // программно): именно ссылку с tel: надёжно подхватывает системный
+      // диалер и на Android, и на iOS внутри Telegram WebView, а
+      // программная JS-навигация на tel: на части устройств не срабатывает.
+      var telHref = _opsTelHref(data.phone);
+      var callBtn;
+      if (telHref) {
+        callBtn = document.createElement("a");
+        callBtn.href = telHref;
+        callBtn.className = "ops-contact-btn";
+      } else {
+        callBtn = el("button", "ops-contact-btn");
+        callBtn.disabled = true;
+        callBtn.title = "Номер телефона не указан";
+      }
+      callBtn.innerHTML = ICON_OPS_CALL + '<span>Позвонить</span>';
+      actionsRow.appendChild(writeBtn);
+      actionsRow.appendChild(callBtn);
+      card.appendChild(actionsRow);
       root.appendChild(card);
 
       // --- история долга ---
@@ -3039,10 +3076,45 @@
       var linesCard = el("div", "card");
       if (data.lines.length) {
         data.lines.forEach(function (l, idx) {
-          var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
-          row.innerHTML =
-            '<div class="ops-breakdown-name">' + l.date + ' — ' + escapeHtml(l.display_name) + (l.qty ? ' ×' + l.qty : '') + '</div>' +
-            '<div class="ops-breakdown-nums"><span>' + fmtSum(l.sum) + '</span></div>';
+          var row = el("div", "ops-debt-line" + (idx ? " ops-breakdown-row-sep" : "") + (l.resolved ? " ops-debt-line-resolved" : ""));
+          var info = el("div", "ops-debt-line-info");
+          info.innerHTML =
+            '<div class="ops-breakdown-name">' + l.date + ' — ' + escapeHtml(l.display_name) + (l.qty ? ' ×' + l.qty : '') + '</div>';
+          var sumBtn = el("button", "ops-debt-line-sum", fmtSum(l.sum));
+          if (l.resolved) {
+            sumBtn.disabled = true;
+          } else {
+            sumBtn.addEventListener("click", function () {
+              showConfirm(
+                "Отметить " + l.date + " (" + fmtSum(l.sum) + ") оплаченным?",
+                "Оплатил",
+                function () {
+                  hideConfirm();
+                  api("/api/ops/debtors/" + encodeURIComponent(clientId) + "/line/pay", { method: "POST", body: { row: l.row } })
+                    .then(function () { load(); })
+                    .catch(function (err) { toast("Не удалось сохранить: " + err.message); });
+                }
+              );
+            });
+          }
+          row.appendChild(info);
+          row.appendChild(sumBtn);
+          if (l.resolved) {
+            var unpayBtn = el("button", "btn-text ops-debt-line-unpay", "Отменить оплату");
+            unpayBtn.addEventListener("click", function () {
+              showConfirm(
+                "Отменить отметку оплаты за " + l.date + "?",
+                "Отменить",
+                function () {
+                  hideConfirm();
+                  api("/api/ops/debtors/" + encodeURIComponent(clientId) + "/line/unpay", { method: "POST", body: { row: l.row } })
+                    .then(function () { load(); })
+                    .catch(function (err) { toast("Не удалось отменить: " + err.message); });
+                }
+              );
+            });
+            row.appendChild(unpayBtn);
+          }
           linesCard.appendChild(row);
         });
       } else {
@@ -3053,12 +3125,13 @@
 
       // --- комментарии ---
       root.appendChild(el("h3", "ops-section-title", "Комментарии"));
+      var commentBox = el("div", "ops-input-box ops-input-box-comment");
       var commentField = el("div", "field");
       var commentInput = el("textarea");
       commentInput.rows = 2;
-      commentInput.placeholder = "Например: обещал отдать 5 числа";
       commentField.appendChild(commentInput);
-      root.appendChild(commentField);
+      commentBox.appendChild(commentField);
+      commentBox.appendChild(el("div", "ops-field-hint", "Пример: обещал отдать 5 числа"));
       var addCommentBtn = el("button", "btn-ghost", "Добавить комментарий");
       addCommentBtn.addEventListener("click", function () {
         var text = commentInput.value.trim();
@@ -3068,7 +3141,8 @@
           .then(function () { load(); })
           .catch(function (err) { addCommentBtn.disabled = false; toast("Не удалось сохранить: " + err.message); });
       });
-      root.appendChild(addCommentBtn);
+      commentBox.appendChild(addCommentBtn);
+      root.appendChild(commentBox);
 
       if (data.comments.length) {
         var commentsCard = el("div", "card");
@@ -3082,6 +3156,7 @@
 
       // --- напоминание ---
       root.appendChild(el("h3", "ops-section-title", "Напоминание"));
+      var remBox = el("div", "ops-input-box ops-input-box-reminder");
       var remRow = el("div", "ops-select-row");
       var dateField = el("div", "field");
       dateField.innerHTML = '<label>Дата</label>';
@@ -3089,10 +3164,11 @@
       dateField.appendChild(dateInput);
       var noteField = el("div", "field");
       noteField.innerHTML = '<label>Заметка (необязательно)</label>';
-      var noteInput = el("input"); noteInput.type = "text"; noteInput.placeholder = "Например: перезвонить";
+      var noteInput = el("input"); noteInput.type = "text";
       noteField.appendChild(noteInput);
       remRow.appendChild(dateField); remRow.appendChild(noteField);
-      root.appendChild(remRow);
+      remBox.appendChild(remRow);
+      remBox.appendChild(el("div", "ops-field-hint", "Пример: перезвонить"));
       var setReminderBtn = el("button", "btn-ghost", "Установить напоминание");
       setReminderBtn.addEventListener("click", function () {
         if (!dateInput.value) { toast("Выберите дату"); return; }
@@ -3103,7 +3179,8 @@
           setReminderBtn.disabled = false; toast("Не удалось сохранить: " + err.message);
         });
       });
-      root.appendChild(setReminderBtn);
+      remBox.appendChild(setReminderBtn);
+      root.appendChild(remBox);
 
       if (data.reminders.length) {
         var remCard = el("div", "card");
@@ -3123,6 +3200,25 @@
           remCard.appendChild(row);
         });
         root.appendChild(remCard);
+      }
+
+      // --- удалить историю долгов (только когда всё погашено) ---
+      if (data.all_resolved) {
+        var deleteBtn = el("button", "ops-delete-history-btn", "Удалить историю долгов");
+        deleteBtn.addEventListener("click", function () {
+          showConfirm(
+            "Удалить всю историю долгов " + data.name + "? Комментарии и напоминания пропадут, человек исчезнет из списка должников.",
+            "Удалить",
+            function () {
+              hideConfirm();
+              deleteBtn.disabled = true;
+              api("/api/ops/debtors/" + encodeURIComponent(clientId) + "/delete-history", { method: "POST", body: {} })
+                .then(function () { haptic("success"); wizardBack(); })
+                .catch(function (err) { deleteBtn.disabled = false; toast("Не удалось удалить: " + err.message); });
+            }
+          );
+        });
+        root.appendChild(deleteBtn);
       }
     }
 

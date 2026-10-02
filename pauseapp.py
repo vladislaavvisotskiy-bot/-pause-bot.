@@ -1056,7 +1056,11 @@ async def api_ops_debtor_detail(request: web.Request):
     reminders = await _retry_sheets(sheets.get_debt_reminders, client_id)
 
     lines_out = [
-        {"date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]), "qty": l["qty"], "sum": l["sum"]}
+        {
+            "row": l["row"], "date": l["date"], "set": l["set"],
+            "display_name": texts.display_set_name(l["set"]), "qty": l["qty"],
+            "sum": l["sum"], "resolved": l["resolved"],
+        }
         for l in lines
     ]
     # "Написать" — по tg_id (настоящий Telegram ID клиента), когда он
@@ -1081,7 +1085,11 @@ async def api_ops_debtor_detail(request: web.Request):
         "phone": (client or {}).get("contact", ""),
         "telegram": (client or {}).get("telegram", ""),
         "tg_link": tg_link,
-        "total": sum(l["sum"] for l in lines),
+        # Итог — только НЕпогашенные строки (та же сумма, что покажет
+        # список должников), погашенные дни остаются в lines для истории,
+        # но в долг больше не идут.
+        "total": sum(l["sum"] for l in lines if not l["resolved"]),
+        "all_resolved": bool(lines) and all(l["resolved"] for l in lines),
         "lines": lines_out,
         "comments": comments,
         "reminders": reminders,
@@ -1124,6 +1132,52 @@ async def api_ops_debtor_reminder_delete(request: web.Request):
     return web.json_response({"reminders": reminders})
 
 
+async def api_ops_debtor_line_pay(request: web.Request):
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    row = body.get("row")
+    if not isinstance(row, int):
+        return web.json_response({"error": "row_required"}, status=400)
+    await _retry_sheets(sheets.mark_debt_line_paid, row)
+    lines = await _retry_sheets(sheets.get_debtor_lines, client_id)
+    return web.json_response({
+        "lines": [
+            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]),
+             "qty": l["qty"], "sum": l["sum"], "resolved": l["resolved"]}
+            for l in lines
+        ],
+        "total": sum(l["sum"] for l in lines if not l["resolved"]),
+        "all_resolved": bool(lines) and all(l["resolved"] for l in lines),
+    })
+
+
+async def api_ops_debtor_line_unpay(request: web.Request):
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    row = body.get("row")
+    if not isinstance(row, int):
+        return web.json_response({"error": "row_required"}, status=400)
+    await _retry_sheets(sheets.unmark_debt_line_paid, row)
+    lines = await _retry_sheets(sheets.get_debtor_lines, client_id)
+    return web.json_response({
+        "lines": [
+            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]),
+             "qty": l["qty"], "sum": l["sum"], "resolved": l["resolved"]}
+            for l in lines
+        ],
+        "total": sum(l["sum"] for l in lines if not l["resolved"]),
+        "all_resolved": bool(lines) and all(l["resolved"] for l in lines),
+    })
+
+
+async def api_ops_debtor_delete_history(request: web.Request):
+    client_id = request.match_info.get("client_id", "")
+    ok = await _retry_sheets(sheets.delete_debtor_history, client_id)
+    if not ok:
+        return web.json_response({"error": "still_has_debt"}, status=409)
+    return web.json_response({"ok": True})
+
+
 # ---------------------------------------------------------------------------
 
 def create_app(bot=None) -> web.Application:
@@ -1162,4 +1216,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/debtors/{client_id}/comment", api_ops_debtor_comment)
     app.router.add_post("/api/ops/debtors/{client_id}/reminder", api_ops_debtor_reminder_set)
     app.router.add_post("/api/ops/debtors/{client_id}/reminder/delete", api_ops_debtor_reminder_delete)
+    app.router.add_post("/api/ops/debtors/{client_id}/line/pay", api_ops_debtor_line_pay)
+    app.router.add_post("/api/ops/debtors/{client_id}/line/unpay", api_ops_debtor_line_unpay)
+    app.router.add_post("/api/ops/debtors/{client_id}/delete-history", api_ops_debtor_delete_history)
     return app

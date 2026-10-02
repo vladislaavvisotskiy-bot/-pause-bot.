@@ -371,6 +371,12 @@ def is_canceled(comment: str) -> bool:
     return config.CANCEL_MARKER in (comment or "")
 
 
+def is_debt_paid_marked(comment: str) -> bool:
+    """Долг по этой строке погашен через карточку должника (PAUSE App) —
+    см. config.DEBT_PAID_MARKER и mark_debt_line_paid ниже."""
+    return config.DEBT_PAID_MARKER in (comment or "")
+
+
 def get_client_debt(client_id) -> int:
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
@@ -383,7 +389,7 @@ def get_client_debt(client_id) -> int:
         eid = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
         payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
-        if eid == str(client_id) and payment == "В долг" and not is_canceled(comment):
+        if eid == str(client_id) and payment == "В долг" and not is_canceled(comment) and not is_debt_paid_marked(comment):
             total += _row_amount(row, prices)
     return total
 
@@ -399,7 +405,7 @@ def get_client_debt_from_orders(orders: list) -> int:
     prices = get_set_prices()
     total = 0
     for o in orders:
-        if o["payment"].strip() != "В долг" or o["canceled"]:
+        if o["payment"].strip() != "В долг" or o["canceled"] or o.get("debt_paid"):
             continue
         try:
             qty = int(str(o["qty"]).strip() or 0)
@@ -432,7 +438,7 @@ def get_all_debtors() -> list:
         if payment != "В долг":
             continue
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
-        if is_canceled(comment):
+        if is_canceled(comment) or is_debt_paid_marked(comment):
             continue
         eid = row[config.O_CLIENT_ID - 1].strip()
         name = (clients.get(eid) or {}).get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or eid
@@ -446,10 +452,12 @@ def get_all_debtors() -> list:
 
 def get_debtor_lines(client_id) -> list:
     """Строки-позиции долга ОДНОГО клиента — "за какое число, какой сет,
-    какая сумма" для карточки должника в Операционном центре. Та же
-    фильтрация, что и в get_all_debtors (payment == "В долг", не
-    отменено), но на одного клиента и с датой/сетом по каждой строке, а
-    не только суммой."""
+    какая сумма" для карточки должника в Операционном центре. payment ==
+    "В долг", не отменено — но, в отличие от get_all_debtors, строки,
+    погашенные через карточку должника (resolved=True, см.
+    config.DEBT_PAID_MARKER), ОСТАЮТСЯ в списке (просто не считаются в
+    сумму долга) — по прямой просьбе: погашенный день не пропадает из
+    истории, а просто помечается иначе."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
     prices = get_set_prices()
@@ -468,13 +476,65 @@ def get_debtor_lines(client_id) -> list:
         if is_canceled(comment):
             continue
         out.append({
+            "row": r,
             "date": row[config.O_DATE - 1].strip(),
             "set": row[config.O_SET - 1].strip(),
             "qty": row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else "",
             "sum": _row_amount(row, prices),
+            "resolved": is_debt_paid_marked(comment),
         })
     out.sort(key=lambda o: dt.datetime.strptime(o["date"], "%d.%m.%Y") if _is_valid_date(o["date"]) else dt.datetime.min, reverse=True)
     return out
+
+
+def mark_debt_line_paid(row: int):
+    """Админ отметил конкретный день долга оплаченным прямо на карточке
+    должника — см. config.DEBT_PAID_MARKER. payment в столбце K НЕ
+    трогаем (строка остаётся "В долг" технически), только добавляем
+    маркер в комментарий — той же техникой, что и cancel_order_rows
+    добавляет CANCEL_MARKER, не затирая остальной текст комментария."""
+    ws = _ws(config.SHEET_ORDERS)
+    cur = ws.cell(row, config.O_COMMENT).value or ""
+    if is_debt_paid_marked(cur):
+        return
+    new = f"{cur} | {config.DEBT_PAID_MARKER}" if cur else config.DEBT_PAID_MARKER
+    ws.update_cell(row, config.O_COMMENT, new)
+
+
+def unmark_debt_line_paid(row: int):
+    """Отмена mark_debt_line_paid — убирает именно маркер из
+    комментария, остальной текст (если он там был до пометки) не
+    трогает."""
+    ws = _ws(config.SHEET_ORDERS)
+    cur = ws.cell(row, config.O_COMMENT).value or ""
+    parts = [p.strip() for p in cur.split("|")]
+    parts = [p for p in parts if p and config.DEBT_PAID_MARKER not in p]
+    ws.update_cell(row, config.O_COMMENT, " | ".join(parts))
+
+
+def delete_debtor_history(client_id):
+    """"Удалить историю долгов" на карточке должника — только когда у
+    клиента не осталось НЕпогашенных долгов (проверяем тут же, а не
+    полагаемся на фронт): иначе get_all_debtors ещё бы считал его
+    должником, а комментарии/напоминания уже исчезли бы — рассинхрон.
+    Чистит только комментарии/напоминания (см. cleanup_resolved_debtors)
+    — сами строки "Заказы" не трогаем, маркер в них остаётся как есть,
+    он не мешает ни одному отчёту."""
+    if get_client_debt(client_id) > 0:
+        return False
+    for sheet_name, header, client_col in (
+        (config.SHEET_DEBT_COMMENTS, ["client_id", "date", "text"], config.DC_CLIENT_ID),
+        (config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"], config.DR_CLIENT_ID),
+    ):
+        ws = _ws_or_create(sheet_name, header)
+        rows = ws.get_all_values()
+        stale_rows = [
+            i + 1 for i, row in enumerate(rows)
+            if i + 1 != 1 and len(row) >= client_col and row[client_col - 1].strip() == str(client_id)
+        ]
+        for r in sorted(stale_rows, reverse=True):
+            ws.delete_rows(r)
+    return True
 
 
 def _is_valid_date(s: str) -> bool:
@@ -628,6 +688,7 @@ def get_client_orders(client_id, limit=10) -> list:
                 "status": row[config.O_STATUS - 1].strip() if len(row) >= config.O_STATUS else "",
                 "comment": comment,
                 "canceled": is_canceled(comment),
+                "debt_paid": is_debt_paid_marked(comment),
                 "batch": row[config.O_ORDER_BATCH - 1].strip() if len(row) >= config.O_ORDER_BATCH else "",
                 "sum": row[config.O_SUM - 1] if len(row) >= config.O_SUM else "",
             })

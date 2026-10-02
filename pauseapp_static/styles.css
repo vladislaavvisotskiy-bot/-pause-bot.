@@ -1053,13 +1053,60 @@ p { margin: 0; color: var(--ink-soft); }
 
 .ops-debtor-card-name { font-size: 18px; font-weight: 700; color: var(--ink); }
 .ops-debtor-card-line { font-size: 13.5px; color: var(--ink-soft); margin-top: 3px; }
-.ops-write-btn { margin-top: 12px; }
+
+.ops-contact-actions { display: flex; gap: 10px; margin-top: 12px; }
+.ops-contact-btn {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 12px 14px;
+  font-weight: 600;
+  font-size: 13.5px;
+  text-decoration: none;
+}
+.ops-contact-btn:active { opacity: .7; }
+.ops-contact-btn[disabled] { opacity: .4; pointer-events: none; }
+.ops-contact-btn-primary { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
 
 .ops-debtor-total { text-align: right; font-size: 15px; font-weight: 700; color: var(--accent-warm); padding: 10px 2px; }
 
 .ops-comment-row { padding: 10px 0; }
 .ops-comment-date { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .ops-comment-text { font-size: 14px; color: var(--ink); margin-top: 3px; white-space: pre-wrap; }
+
+/* Поле добавления комментария/напоминания — разные тёплые/нейтральные
+   подложки, чтобы два блока снизу визуально не сливались в одно и то же
+   (по прямой просьбе: "сейчас оно всё почти одного цвета"). */
+.ops-input-box { border-radius: var(--radius-md); padding: 14px 14px 4px; margin-bottom: 10px; }
+.ops-input-box .field { margin-bottom: 10px; }
+.ops-input-box-comment { background: var(--ink-soft-bg); }
+.ops-input-box-reminder { background: var(--accent-warm-soft); }
+.ops-field-hint { font-size: 11.5px; color: var(--ink-soft); font-style: italic; margin: -4px 0 10px 2px; }
+
+.ops-debt-line { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 10px; padding: 10px 0; }
+.ops-debt-line-info { flex: 1 1 auto; min-width: 140px; }
+.ops-debt-line-sum {
+  background: none; border: none; padding: 4px 2px;
+  font-size: 14px; font-weight: 700; color: var(--accent-warm);
+  text-decoration: underline; text-decoration-style: dotted;
+}
+.ops-debt-line-sum[disabled] { text-decoration: none; }
+.ops-debt-line-resolved .ops-breakdown-name { color: var(--ink-soft); }
+.ops-debt-line-resolved .ops-debt-line-sum { color: var(--success); text-decoration: none; }
+.ops-debt-line-unpay { flex: 0 0 100%; text-align: right; }
+
+.ops-delete-history-btn {
+  display: block; width: 100%;
+  background: none; border: none;
+  color: var(--accent-warm);
+  font-weight: 700; font-size: 14px;
+  padding: 16px 2px 4px;
+  text-align: center;
+}
+.ops-delete-history-btn:active { opacity: .7; }
 
 .ops-reminder-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; }
 
