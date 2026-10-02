@@ -77,17 +77,29 @@ def _verify_init_data(init_data: str):
     return result
 
 
-def _extract_tg_id(request: web.Request):
+def _extract_tg_user(request: web.Request):
+    """(tg_id, display_name) по подписанному initData — display_name нужен
+    только для справки в листе "Режим Маршрута" (см. sheets.set_route_admin_mode),
+    ни на какую логику прав не влияет."""
     init_data = request.headers.get("X-Telegram-Init-Data", "")
     parsed = _verify_init_data(init_data)
     if not parsed:
-        return None
+        return None, ""
     user = parsed.get("user") or {}
     tg_id = user.get("id")
     try:
-        return int(tg_id) if tg_id is not None else None
+        tg_id = int(tg_id) if tg_id is not None else None
     except (TypeError, ValueError):
-        return None
+        tg_id = None
+    name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")])).strip() or user.get("username") or ""
+    return tg_id, name
+
+
+def _extract_tg_id(request: web.Request):
+    """Только ID, без имени — для pauseapp.py (см. импорт в pauseapp.py),
+    которому имя не нужно."""
+    tg_id, _ = _extract_tg_user(request)
+    return tg_id
 
 
 _RETRYABLE_API_CODES = {429, 500, 502, 503, 504}
@@ -138,12 +150,25 @@ async def _retry_sheets(fn, *args, retries: int = 2, delay: float = 1.2, **kwarg
     raise last_exc
 
 
-async def _role_for(tg_id) -> str:
+async def _role_for(tg_id):
+    """Возвращает (role, is_route_admin). role — что показывает раздел
+    "Заказы": "admin" (управление точками/курьерами) или "courier" (меню
+    "Поехали"/"Сдал"). is_route_admin — видит ли человек админский
+    "Профиль" (видимость маршрута, расходы на логистику) — true и для
+    основного админа бота (ADMIN_IDS), и для админов этого Mini App
+    (ROUTE_ADMIN_IDS), и остаётся true даже когда ROUTE_ADMIN_IDS-админ
+    переключился в режим "Курьер" (иначе он не смог бы вернуться обратно —
+    "Профиль" в этом режиме показывал бы courier-экран без переключателя).
+    Основному админу самого переключения режима не показываем (см.
+    api_route_admin_mode_set) — у него role всегда "admin"."""
     if tg_id in config.ADMIN_IDS:
-        return "admin"
+        return "admin", True
+    if tg_id in config.ROUTE_ADMIN_IDS:
+        mode = await _retry_sheets(sheets.get_route_admin_mode, tg_id)
+        return mode, True
     if await _retry_sheets(sheets.is_courier, tg_id):
-        return "courier"
-    return ""
+        return "courier", False
+    return "", False
 
 
 # Каждая из sheets.get_route_for_date/reorder_route/add_route_point/
@@ -186,14 +211,19 @@ async def error_middleware(request: web.Request, handler):
 @web.middleware
 async def auth_middleware(request: web.Request, handler):
     if request.path.startswith("/api/"):
-        tg_id = _extract_tg_id(request)
+        tg_id, tg_name = _extract_tg_user(request)
         if tg_id is None:
             return web.json_response({"error": "unauthorized"}, status=401)
-        role = await _role_for(tg_id)
+        role, is_route_admin = await _role_for(tg_id)
         if not role:
             return web.json_response({"error": "forbidden"}, status=403)
         request["tg_id"] = tg_id
+        request["tg_name"] = tg_name
         request["role"] = role
+        request["is_route_admin"] = is_route_admin
+        # Переключатель "Режим" (admin/courier) — только у админов ЭТОГО
+        # Mini App (ROUTE_ADMIN_IDS), не у основного админа бота.
+        request["can_toggle_mode"] = tg_id in config.ROUTE_ADMIN_IDS
     return await handler(request)
 
 
@@ -210,6 +240,8 @@ async def api_me(request: web.Request):
         "role": request["role"],
         "tg_id": request["tg_id"],
         "route_split_view": config.ROUTE_SPLIT_VIEW,
+        "is_route_admin": request["is_route_admin"],
+        "can_toggle_mode": request["can_toggle_mode"],
     })
 
 
@@ -283,6 +315,65 @@ async def _notify_couriers_route_ready(bot, date_str: str) -> int:
         except Exception:
             logger.exception("Не удалось отправить пуш о готовности маршрута курьеру ID %s", tg_id)
     return sent
+
+
+async def api_route_admin_mode_set(request: web.Request):
+    """Переключает "Режим" (admin/courier) для админа ЭТОГО Mini App (см.
+    config.ROUTE_ADMIN_IDS) — определяет, что человек увидит в разделе
+    "Заказы" при следующем заходе. Основному админу бота (ADMIN_IDS)
+    запрещено — у него can_toggle_mode всегда False."""
+    if not request["can_toggle_mode"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    mode = (body.get("mode") or "").strip()
+    if mode not in (config.ROUTE_ADMIN_MODE_ADMIN, config.ROUTE_ADMIN_MODE_COURIER):
+        return web.json_response({"error": "bad_mode"}, status=400)
+    await _retry_sheets(sheets.set_route_admin_mode, request["tg_id"], request["tg_name"], mode)
+    return web.json_response({"ok": True, "mode": mode})
+
+
+async def api_logistics_get(request: web.Request):
+    """Расходы на логистику за один день — список действующих курьеров с
+    уже сохранённой (если есть) суммой оплаты за смену + сумма, потраченная
+    в этот день на доставку через сторонние сервисы (см. "Профиль" →
+    "Расходы на логистику")."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    date_str = request.query.get("date") or _today()
+    couriers = await _retry_sheets(sheets.get_couriers)
+    shift_pay = await _retry_sheets(sheets.get_logistics_expenses, date_str)
+    delivery_expense = await _retry_sheets(sheets.get_delivery_expense, date_str)
+    return web.json_response({
+        "date": date_str,
+        "couriers": [
+            {"tg_id": c["tg_id"], "name": c["name"], "shift_pay": shift_pay.get(c["tg_id"], 0)}
+            for c in couriers
+        ],
+        "delivery_expense": delivery_expense,
+    })
+
+
+async def api_logistics_set(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or _today()
+    shifts = body.get("shifts") or []
+    for item in shifts:
+        tg_id = str(item.get("tg_id") or "").strip()
+        if not tg_id:
+            continue
+        try:
+            amount = int(item.get("amount") or 0)
+        except (TypeError, ValueError):
+            amount = 0
+        await _retry_sheets(sheets.set_logistics_expense, date_str, tg_id, item.get("name") or "", amount)
+    try:
+        delivery_expense = int(body.get("delivery_expense") or 0)
+    except (TypeError, ValueError):
+        delivery_expense = 0
+    await _retry_sheets(sheets.set_delivery_expense, date_str, delivery_expense)
+    return web.json_response({"ok": True})
 
 
 async def api_route_dates(request: web.Request):
@@ -446,6 +537,9 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/route/dates", api_route_dates)
     app.router.add_get("/api/route/visibility", api_route_visibility_get)
     app.router.add_post("/api/route/visibility", api_route_visibility_set)
+    app.router.add_post("/api/route_admin/mode", api_route_admin_mode_set)
+    app.router.add_get("/api/logistics", api_logistics_get)
+    app.router.add_post("/api/logistics", api_logistics_set)
     app.router.add_get("/api/delivery_points", api_delivery_points)
     app.router.add_get("/api/couriers", api_couriers)
     app.router.add_post("/api/route/reorder", api_route_reorder)

@@ -3098,3 +3098,160 @@ def delete_feed_post(post_id: str):
             return
 
 
+
+
+# ---------------------------------------------------------------------------
+# Mini App "Маршрут" — режим админов (config.ROUTE_ADMIN_IDS) и расходы на
+# логистику. Оба листа — новые, не часть исходной таблицы PAUSE, поэтому
+# заводятся автоматически (см. _ws_or_create), как и листы долгов выше.
+# ---------------------------------------------------------------------------
+
+def get_route_admin_mode(tg_id) -> str:
+    """В каком режиме сейчас открывается "Заказы" у этого админа Mini App
+    "Маршрут" — "admin" или "courier" (см. config.ROUTE_ADMIN_MODE_*). Нет
+    строки — значит ни разу не переключался, по умолчанию "admin"."""
+    ws = _ws_or_create(config.SHEET_ROUTE_ADMIN_MODE, ["tg_id", "name", "mode"])
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.RAM_DATA_START_ROW:
+            continue
+        if len(row) >= config.RAM_MODE and row[config.RAM_TG_ID - 1].strip() == target:
+            mode = row[config.RAM_MODE - 1].strip()
+            return mode if mode in (config.ROUTE_ADMIN_MODE_ADMIN, config.ROUTE_ADMIN_MODE_COURIER) else config.ROUTE_ADMIN_MODE_ADMIN
+    return config.ROUTE_ADMIN_MODE_ADMIN
+
+
+def set_route_admin_mode(tg_id, name: str, mode: str):
+    ws = _ws_or_create(config.SHEET_ROUTE_ADMIN_MODE, ["tg_id", "name", "mode"])
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.RAM_DATA_START_ROW:
+            continue
+        if len(row) >= config.RAM_TG_ID and row[config.RAM_TG_ID - 1].strip() == target:
+            ws.update_cell(r, config.RAM_NAME, name or "")
+            ws.update_cell(r, config.RAM_MODE, mode)
+            return
+    ws.append_row([target, name or "", mode], value_input_option="RAW")
+
+
+def get_logistics_expenses(date_str: str) -> dict:
+    """{courier_tg_id: сумма оплаты за смену} на дату — для экрана "Расходы
+    на логистику" в Mini App "Маршрут"."""
+    ws = _ws_or_create(
+        config.SHEET_LOGISTICS_EXPENSES,
+        ["date", "courier_tg_id", "courier_name", "shift_pay", "updated"],
+    )
+    rows = ws.get_all_values()
+    out = {}
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.LOG_DATA_START_ROW:
+            continue
+        if len(row) < config.LOG_SHIFT_PAY:
+            continue
+        if row[config.LOG_DATE - 1].strip() != date_str:
+            continue
+        tg_id = row[config.LOG_COURIER_TG_ID - 1].strip()
+        raw = row[config.LOG_SHIFT_PAY - 1].strip()
+        try:
+            out[tg_id] = int(raw) if raw else 0
+        except ValueError:
+            out[tg_id] = 0
+    return out
+
+
+def set_logistics_expense(date_str: str, courier_tg_id, courier_name: str, amount: int):
+    ws = _ws_or_create(
+        config.SHEET_LOGISTICS_EXPENSES,
+        ["date", "courier_tg_id", "courier_name", "shift_pay", "updated"],
+    )
+    rows = ws.get_all_values()
+    target = str(courier_tg_id)
+    now_str = _now().strftime("%d.%m.%Y %H:%M")
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.LOG_DATA_START_ROW:
+            continue
+        if len(row) < config.LOG_COURIER_TG_ID:
+            continue
+        if row[config.LOG_DATE - 1].strip() == date_str and row[config.LOG_COURIER_TG_ID - 1].strip() == target:
+            ws.update_cell(r, config.LOG_COURIER_NAME, courier_name or "")
+            ws.update_cell(r, config.LOG_SHIFT_PAY, amount)
+            ws.update_cell(r, config.LOG_UPDATED, now_str)
+            return
+    ws.append_row([date_str, target, courier_name or "", amount, now_str], value_input_option="RAW")
+
+
+def get_delivery_expense(date_str: str) -> int:
+    """Сумма, потраченная на доставку через сторонние сервисы (Яндекс,
+    Uklon и т.п.) за один день — то, что вводит админ в Mini App "Маршрут"
+    на экране "Расходы на логистику"."""
+    ws = _ws_or_create(config.SHEET_DELIVERY_EXPENSE, ["date", "sum", "updated"])
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.DEL_DATA_START_ROW:
+            continue
+        if len(row) < config.DEL_SUM:
+            continue
+        if row[config.DEL_DATE - 1].strip() != date_str:
+            continue
+        raw = row[config.DEL_SUM - 1].strip()
+        try:
+            return int(raw) if raw else 0
+        except ValueError:
+            return 0
+    return 0
+
+
+def set_delivery_expense(date_str: str, amount: int):
+    ws = _ws_or_create(config.SHEET_DELIVERY_EXPENSE, ["date", "sum", "updated"])
+    rows = ws.get_all_values()
+    now_str = _now().strftime("%d.%m.%Y %H:%M")
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.DEL_DATA_START_ROW:
+            continue
+        if len(row) < config.DEL_DATE:
+            continue
+        if row[config.DEL_DATE - 1].strip() == date_str:
+            ws.update_cell(r, config.DEL_SUM, amount)
+            ws.update_cell(r, config.DEL_UPDATED, now_str)
+            return
+    ws.append_row([date_str, amount, now_str], value_input_option="RAW")
+
+
+def get_delivery_expense_total(date_from: str, date_to: str) -> int:
+    """Сумма расходов на доставку через сторонние сервисы за период
+    [date_from, date_to] включительно — для "Чистая прибыль" в PAUSE App
+    (см. pauseapp.api_ops_summary)."""
+    try:
+        d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
+        d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
+    except ValueError:
+        return 0
+    ws = _ws_or_create(config.SHEET_DELIVERY_EXPENSE, ["date", "sum", "updated"])
+    rows = ws.get_all_values()
+    total = 0
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.DEL_DATA_START_ROW:
+            continue
+        if len(row) < config.DEL_SUM:
+            continue
+        try:
+            d = dt.datetime.strptime(row[config.DEL_DATE - 1].strip(), "%d.%m.%Y")
+        except ValueError:
+            continue
+        if not (d_from <= d <= d_to):
+            continue
+        raw = row[config.DEL_SUM - 1].strip()
+        try:
+            total += int(raw) if raw else 0
+        except ValueError:
+            pass
+    return total

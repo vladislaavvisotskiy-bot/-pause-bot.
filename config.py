@@ -30,6 +30,16 @@ ADMIN_IDS = _parse_admin_ids(os.getenv("ADMIN_CHAT_ID", ""))
 # список), например BotCommandScopeChat для одного конкретного чата задаётся
 # отдельно на каждого админа (см. bot.py:setup_commands), а не через это поле.
 ADMIN_CHAT_ID = ADMIN_IDS[0] if ADMIN_IDS else 0
+
+# Админы ТОЛЬКО для Mini App "Маршрут" (webapp.py) — видят там то же самое,
+# что и обычный админ (ADMIN_IDS): управление точками/курьерами, видимость
+# маршрута, расходы на логистику. Нигде за пределами этого Mini App доступа
+# не получают — ни в самом боте, ни в PAUSE App (см. webapp._role_for). В
+# отличие от ADMIN_IDS, могут сами переключаться в режим "Курьер" прямо в
+# приложении (см. "Режим" в Профиле) — основному админу это переключение не
+# показывается. ID по умолчанию — Влад и Давир, можно дополнить/поменять
+# через переменную окружения, не трогая код.
+ROUTE_ADMIN_IDS = _parse_admin_ids(os.getenv("ROUTE_ADMIN_IDS", "7118369020,740847695"))
 ORDER_CUTOFF_TIME = os.getenv("ORDER_CUTOFF_TIME", "10:00")
 CANCEL_CUTOFF_TIME = os.getenv("CANCEL_CUTOFF_TIME", "09:00")
 ORDER_COMPLETE_TIME = os.getenv("ORDER_COMPLETE_TIME", "13:00")
@@ -407,6 +417,44 @@ RV_HEADER_ROW = 1
 RV_DATA_START_ROW = 2
 RV_DATE = 1     # A
 RV_VISIBLE = 2  # B  "Да" — курьер видит маршрут на эту дату
+
+# --- Режим для админов Mini App "Маршрут" (см. config.ROUTE_ADMIN_IDS) ---
+# Одна строка на человека: в каком режиме ("Администратор"/"Курьер") у него
+# сейчас открывается раздел "Заказы" в Mini App. Основному админу (ADMIN_IDS)
+# эта возможность не показывается, строка для него никогда не создаётся.
+SHEET_ROUTE_ADMIN_MODE = "Режим Маршрута"
+RAM_HEADER_ROW = 1
+RAM_DATA_START_ROW = 2
+RAM_TG_ID = 1    # A
+RAM_NAME = 2     # B
+RAM_MODE = 3     # C  "admin" / "courier"
+ROUTE_ADMIN_MODE_ADMIN = "admin"
+ROUTE_ADMIN_MODE_COURIER = "courier"
+
+# --- Расходы на логистику (Mini App "Маршрут", только для админов) ---
+# Оплата за смену — по дню и курьеру (один человек может получать разные
+# суммы в разные дни, поэтому строка на (дата, курьер), не просто на
+# курьера). Нигде в код не подставляется автоматически — админ вводит сам.
+SHEET_LOGISTICS_EXPENSES = "Расходы на логистику"
+LOG_HEADER_ROW = 1
+LOG_DATA_START_ROW = 2
+LOG_DATE = 1            # A  ДД.ММ.ГГГГ
+LOG_COURIER_TG_ID = 2   # B
+LOG_COURIER_NAME = 3    # C
+LOG_SHIFT_PAY = 4        # D  сумма оплаты за смену в этот день
+LOG_UPDATED = 5          # E  когда в последний раз правили, для справки
+
+# Расходы на доставку через сторонние сервисы (Яндекс, Uklon и т.п.) — одна
+# сумма на день, не привязана к конкретному курьеру. Эти суммы и только они
+# подтягиваются в PAUSE App ("Финансы" → "Чистая прибыль" = валовая прибыль
+# минус эта сумма за выбранный период, см. pauseapp.api_ops_summary и
+# sheets.get_delivery_expense_total).
+SHEET_DELIVERY_EXPENSE = "Расходы на доставку"
+DEL_HEADER_ROW = 1
+DEL_DATA_START_ROW = 2
+DEL_DATE = 1     # A  ДД.ММ.ГГГГ
+DEL_SUM = 2      # B
+DEL_UPDATED = 3  # C
 
 # --- PAUSE Club: лента (PAUSE App) ---
 # Фото ленты хранятся не на сервере и не в самой таблице — только в

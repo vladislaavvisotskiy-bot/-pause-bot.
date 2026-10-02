@@ -26,6 +26,13 @@
     splitView: false,   // флаг ROUTE_SPLIT_VIEW с сервера (см. /api/me) — пробное разделение
                          // курьеров на экране "Маршрут"; при false всё как было раньше
     courierTab: "all",  // "all" | tg_id курьера — какая вкладка сейчас активна (только админ)
+    isRouteAdmin: false, // видит ли "Профиль" как у админа (видимость, режим, логистика) —
+                          // true и для основного админа бота, и для админов Mini App
+                          // "Маршрут" (см. config.ROUTE_ADMIN_IDS), не меняется при
+                          // переключении "Режима" (иначе некому было бы его переключить назад)
+    canToggleMode: false, // может ли менять "Режим" ("Администратор"/"Курьер") — только у
+                           // админов именно этого Mini App, не у основного админа бота
+    logisticsDateISO: null,
   };
 
   // Тёплая палитра для цветов курьеров на вкладке "Все" (см. renderMap,
@@ -1264,6 +1271,129 @@
   }
 
   // -------------------------------------------------------------------
+  // "Режим" (Администратор/Курьер) — только у админов этого Mini App
+  // (см. config.ROUTE_ADMIN_IDS, state.canToggleMode), экран "Профиль"
+  // -------------------------------------------------------------------
+
+  function initModeSwitch() {
+    var block = document.getElementById("mode-switch-block");
+    block.hidden = !state.canToggleMode;
+    if (!state.canToggleMode) return;
+    Array.prototype.forEach.call(document.querySelectorAll(".mode-switch-btn"), function (btn) {
+      btn.classList.toggle("active", btn.dataset.mode === state.role);
+      btn.onclick = function () {
+        if (btn.dataset.mode === state.role || btn.disabled) return;
+        setRouteAdminMode(btn.dataset.mode);
+      };
+    });
+  }
+
+  function setRouteAdminMode(mode) {
+    Array.prototype.forEach.call(document.querySelectorAll(".mode-switch-btn"), function (btn) { btn.disabled = true; });
+    api("/api/route_admin/mode", { method: "POST", body: { mode: mode } })
+      .then(function () {
+        toast(mode === "courier" ? "Режим «Курьер» включён" : "Режим «Администратор» включён");
+        // Проще и надёжнее перезагрузить экран целиком, чем вручную
+        // пересобирать весь кэш состояния (точки, курьеры, вкладки,
+        // карту) под новую роль — переключение происходит нечасто.
+        window.location.reload();
+      })
+      .catch(function (err) {
+        toast("Не удалось переключить режим: " + err.message);
+        Array.prototype.forEach.call(document.querySelectorAll(".mode-switch-btn"), function (btn) { btn.disabled = false; });
+      });
+  }
+
+  // -------------------------------------------------------------------
+  // Расходы на логистику (только is_route_admin, экран "Профиль")
+  // -------------------------------------------------------------------
+
+  function openLogisticsModal() {
+    document.getElementById("logistics-modal").hidden = false;
+    if (!state.logisticsDateISO) {
+      state.logisticsDateISO = new Date().toISOString().slice(0, 10);
+    }
+    document.getElementById("logistics-date").value = state.logisticsDateISO;
+    loadLogisticsForDate(state.logisticsDateISO);
+  }
+
+  function closeLogisticsModal() {
+    document.getElementById("logistics-modal").hidden = true;
+  }
+
+  function renderLogisticsCouriers(couriers) {
+    var container = document.getElementById("logistics-couriers-list");
+    container.innerHTML = "";
+    if (!couriers.length) {
+      container.innerHTML = "<div class=\"modal-list-empty\">Нет действующих курьеров</div>";
+      return;
+    }
+    couriers.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "logistics-field-row logistics-courier-row";
+      var label = document.createElement("div");
+      label.className = "logistics-courier-name";
+      label.textContent = c.name || c.tg_id;
+      var input = document.createElement("input");
+      input.type = "number";
+      input.inputMode = "numeric";
+      input.min = "0";
+      input.placeholder = "0";
+      input.value = c.shift_pay ? c.shift_pay : "";
+      input.dataset.tgId = c.tg_id;
+      input.dataset.name = c.name || "";
+      row.appendChild(label);
+      row.appendChild(input);
+      var suffix = document.createElement("span");
+      suffix.className = "logistics-field-suffix";
+      suffix.textContent = "сум";
+      row.appendChild(suffix);
+      container.appendChild(row);
+    });
+  }
+
+  function loadLogisticsForDate(iso) {
+    var container = document.getElementById("logistics-couriers-list");
+    container.innerHTML = "<div class=\"modal-list-empty\">Загрузка…</div>";
+    api("/api/logistics?date=" + encodeURIComponent(isoToRu(iso))).then(function (data) {
+      renderLogisticsCouriers(data.couriers);
+      document.getElementById("logistics-delivery-expense").value = data.delivery_expense ? data.delivery_expense : "";
+    }).catch(function (err) {
+      container.innerHTML = "";
+      toast("Не удалось загрузить расходы: " + err.message);
+    });
+  }
+
+  function shiftLogisticsDate(days) {
+    var d = new Date(state.logisticsDateISO + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    var iso = d.toISOString().slice(0, 10);
+    state.logisticsDateISO = iso;
+    document.getElementById("logistics-date").value = iso;
+    loadLogisticsForDate(iso);
+  }
+
+  function saveLogistics() {
+    var saveBtn = document.getElementById("logistics-save");
+    saveBtn.disabled = true;
+    var shifts = [];
+    Array.prototype.forEach.call(document.querySelectorAll("#logistics-couriers-list input[type=number]"), function (input) {
+      shifts.push({ tg_id: input.dataset.tgId, name: input.dataset.name, amount: parseInt(input.value, 10) || 0 });
+    });
+    var deliveryExpense = parseInt(document.getElementById("logistics-delivery-expense").value, 10) || 0;
+    api("/api/logistics", {
+      method: "POST",
+      body: { date: isoToRu(state.logisticsDateISO), shifts: shifts, delivery_expense: deliveryExpense },
+    }).then(function () {
+      toast("Расходы сохранены");
+    }).catch(function (err) {
+      toast("Не удалось сохранить: " + err.message);
+    }).then(function () {
+      saveBtn.disabled = false;
+    });
+  }
+
+  // -------------------------------------------------------------------
   // Инициализация / навигация
   // -------------------------------------------------------------------
 
@@ -1273,7 +1403,12 @@
   function showScreen(name) {
     state.screen = name;
     var isProfile = name === "profile";
-    var isAdmin = state.role === "admin";
+    // "Профиль" показывает админский экран по is_route_admin, НЕ по
+    // текущему state.role — у админа этого Mini App (см.
+    // config.ROUTE_ADMIN_IDS) role может сейчас быть "courier" (переключил
+    // "Режим"), но "Профиль" всё равно должен остаться админским, иначе
+    // человек не смог бы вернуться в режим "Администратор" обратно.
+    var isAdmin = state.isRouteAdmin;
 
     document.getElementById("route-screen").hidden = isProfile;
     document.getElementById("earnings-screen").hidden = !isProfile || isAdmin;
@@ -1369,6 +1504,19 @@
       startApp();
     });
 
+    document.getElementById("logistics-btn").addEventListener("click", openLogisticsModal);
+    document.getElementById("logistics-close").addEventListener("click", closeLogisticsModal);
+    document.getElementById("logistics-modal").addEventListener("click", function (e) {
+      if (e.target.id === "logistics-modal") closeLogisticsModal();
+    });
+    document.getElementById("logistics-save").addEventListener("click", saveLogistics);
+    document.getElementById("logistics-date").addEventListener("change", function (e) {
+      state.logisticsDateISO = e.target.value;
+      loadLogisticsForDate(e.target.value);
+    });
+    document.getElementById("logistics-prev-day").addEventListener("click", function () { shiftLogisticsDate(-1); });
+    document.getElementById("logistics-next-day").addEventListener("click", function () { shiftLogisticsDate(1); });
+
     startApp();
   }
 
@@ -1382,6 +1530,9 @@
       state.role = me.role;
       state.tgId = me.tg_id;
       state.splitView = !!me.route_split_view;
+      state.isRouteAdmin = !!me.is_route_admin;
+      state.canToggleMode = !!me.can_toggle_mode;
+      initModeSwitch();
       showScreen("orders");
       loadRouteDates();
       if (state.role === "admin") loadCouriers();

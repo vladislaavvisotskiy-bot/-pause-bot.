@@ -46,9 +46,21 @@
   </div>
 
   <div id="admin-profile-screen" class="screen" hidden>
+    <div id="mode-switch-block" hidden>
+      <div class="section-title">Режим</div>
+      <p class="section-hint">«Администратор» — обычное управление точками и курьерами в разделе «Заказы». «Курьер» — в «Заказы» открывается ваше личное меню точек, как у курьера.</p>
+      <div id="mode-switch" class="mode-switch">
+        <button type="button" class="mode-switch-btn" data-mode="admin">Администратор</button>
+        <button type="button" class="mode-switch-btn" data-mode="courier">Курьер</button>
+      </div>
+    </div>
+
     <div class="section-title">Видимость маршрута для курьера</div>
     <p class="section-hint">Пока выключено для даты — курьер видит «маршрут готовится» вместо карты и точек. Включите, когда список готов — курьеру придёт уведомление.</p>
     <div id="visibility-list"></div>
+
+    <div class="section-title">Расходы</div>
+    <button id="logistics-btn" class="ghost-btn logistics-btn">💰 Расходы на логистику</button>
   </div>
 
   <div id="earnings-screen" class="screen" hidden>
@@ -88,6 +100,30 @@
       <div class="modal-title">Назначить курьеров</div>
       <div id="courier-picker-list" class="modal-list"></div>
       <button id="courier-picker-cancel" class="ghost-btn">Готово</button>
+    </div>
+  </div>
+
+  <div id="logistics-modal" class="modal" hidden>
+    <div class="modal-sheet logistics-sheet">
+      <div class="modal-title">Расходы на логистику</div>
+
+      <div class="date-picker-row">
+        <button id="logistics-prev-day" class="icon-btn">‹</button>
+        <input id="logistics-date" type="date">
+        <button id="logistics-next-day" class="icon-btn">›</button>
+      </div>
+
+      <div class="section-title">Оплата за смену</div>
+      <div id="logistics-couriers-list" class="modal-list"></div>
+
+      <div class="section-title">Доставка через сервисы (Яндекс, Uklon и др.)</div>
+      <div class="logistics-field-row">
+        <input id="logistics-delivery-expense" type="number" inputmode="numeric" placeholder="0" min="0">
+        <span class="logistics-field-suffix">сум</span>
+      </div>
+
+      <button id="logistics-save" class="primary-btn">Сохранить</button>
+      <button id="logistics-close" class="ghost-btn">Закрыть</button>
     </div>
   </div>
 

@@ -2815,20 +2815,19 @@
   }
 
   // Детальный экран "Чистая прибыль" — валовая прибыль минус расходы на
-  // доставку. Расходы на доставку пока всегда 0 (их будет заполнять
-  // другой человек в отдельном месте таблицы — подключим позже), экран
-  // уже готов показать реальную цифру, когда источник появится.
+  // доставку через сторонние сервисы (вводятся в Mini App "Маршрут",
+  // "Профиль" → "Расходы на логистику", см. sheets.get_delivery_expense_total).
   function renderOpsNetProfitDetail(body, summary) {
     var card = el("div", "card");
-    var row = function (label, value, hint, sep) {
+    var row = function (label, value, sep) {
       var r = el("div", "ops-breakdown-row" + (sep ? " ops-breakdown-row-sep" : ""));
       r.innerHTML =
-        '<div class="ops-breakdown-name">' + escapeHtml(label) + (hint ? ' <span class="ops-hint-inline">' + escapeHtml(hint) + '</span>' : '') + '</div>' +
+        '<div class="ops-breakdown-name">' + escapeHtml(label) + '</div>' +
         '<div class="ops-breakdown-nums"><span>' + fmtSum(value) + '</span></div>';
       return r;
     };
-    card.appendChild(row("Валовая прибыль", summary.profit, null, false));
-    card.appendChild(row("Доставка", summary.delivery_cost, "подключим позже", true));
+    card.appendChild(row("Валовая прибыль", summary.profit, false));
+    card.appendChild(row("Доставка", summary.delivery_cost, true));
     body.appendChild(card);
     body.appendChild(el("div", "ops-debtor-total", "Чистая прибыль: " + fmtSum(summary.net_profit)));
   }

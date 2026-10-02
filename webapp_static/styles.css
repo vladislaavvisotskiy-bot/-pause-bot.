@@ -621,4 +621,66 @@ header h1 {
 .switch input:checked + .switch-slider { background: var(--sage-dark); }
 .switch input:checked + .switch-slider::before { transform: translateX(19px); }
 
+/* "Режим" (Администратор/Курьер) — только у админов Mini App "Маршрут",
+   см. config.ROUTE_ADMIN_IDS, экран "Профиль" */
+.mode-switch {
+  display: flex;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 18px;
+}
+.mode-switch-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.mode-switch-btn.active {
+  background: var(--rose-deep);
+  color: var(--on-accent);
+}
+.mode-switch-btn:disabled { opacity: .6; }
+
+/* Кнопка "Расходы на логистику" в "Профиле" — та же "призрачная" кнопка,
+   что и остальные второстепенные действия, но с рамкой, чтобы не терялась
+   под списком видимости маршрута. */
+.logistics-btn {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 13px 14px;
+  width: 100%;
+  text-align: center;
+}
+
+/* Модалка "Расходы на логистику" */
+.logistics-sheet { max-height: 85vh; }
+.logistics-field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.logistics-courier-row:last-child { border-bottom: none; }
+.logistics-courier-name { flex: 1; font-weight: 600; color: var(--ink); min-width: 0; }
+.logistics-field-row input[type="number"] {
+  width: 110px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  text-align: right;
+}
+.logistics-field-suffix { color: var(--ink-soft); font-size: 13px; flex: 0 0 auto; }
+
 [hidden] { display: none !important; }

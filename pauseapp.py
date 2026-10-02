@@ -1013,7 +1013,11 @@ async def api_ops_summary(request: web.Request):
     )
 
     kitchen = revenue - profit
-    delivery_cost = 0  # расходы на доставку — подключим отдельным источником позже
+    # Расходы на доставку через сторонние сервисы (Яндекс, Uklon и т.п.) —
+    # вводятся в Mini App "Маршрут" ("Профиль" → "Расходы на логистику", см.
+    # webapp.api_logistics_set / sheets.set_delivery_expense), тут только
+    # читаем сумму за тот же период.
+    delivery_cost = await _retry_sheets(sheets.get_delivery_expense_total, date_from, date_to)
     net_profit = profit - delivery_cost
 
     return web.json_response({
