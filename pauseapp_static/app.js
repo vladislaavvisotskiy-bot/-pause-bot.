@@ -171,8 +171,8 @@
       "profile.member": "Участник",
       "profile.toNextLevel": "До статуса «{emoji} {label}» осталось заказов: {left}",
       "profile.topLevel": "Вы уже на высшем уровне PAUSE Club 🎉",
-      "club.level.guest": "Гость PAUSE", "club.level.regular": "Свой человек",
-      "club.level.circle": "Круг PAUSE", "club.level.ambassador": "Амбассадор PAUSE",
+      "club.level.guest": "Гость PAUSE", "club.level.regular": "Своя пауза",
+      "club.level.circle": "Внутренний круг", "club.level.ambassador": "VIP Pause Club",
       "profile.statOrders": "заказов", "profile.statPromo": "акции", "profile.statPosts": "постов",
       "profile.myOrders": "Мои заказы", "profile.favorites": "Избранное", "profile.notifications": "Уведомления",
       "profile.bonuses": "Бонусы и промокоды", "profile.support": "Поддержка",
@@ -363,8 +363,8 @@
       "profile.member": "A'zo",
       "profile.toNextLevel": "«{emoji} {label}» darajasigacha qolgan buyurtmalar: {left}",
       "profile.topLevel": "Siz allaqachon PAUSE Club eng yuqori darajasidasiz 🎉",
-      "club.level.guest": "PAUSE mehmoni", "club.level.regular": "O'z odamimiz",
-      "club.level.circle": "PAUSE doirasi", "club.level.ambassador": "PAUSE elchisi",
+      "club.level.guest": "PAUSE mehmoni", "club.level.regular": "Shaxsiy pauza",
+      "club.level.circle": "Ichki doira", "club.level.ambassador": "VIP Pause Club",
       "profile.statOrders": "buyurtma", "profile.statPromo": "aksiya", "profile.statPosts": "post",
       "profile.myOrders": "Buyurtmalarim", "profile.favorites": "Sevimlilar", "profile.notifications": "Bildirishnomalar",
       "profile.bonuses": "Bonus va promokodlar", "profile.support": "Yordam",
@@ -554,8 +554,8 @@
       "profile.noName": "No name",
       "profile.member": "Member",
       "profile.toNextLevel": "{left} orders left to «{emoji} {label}»",
-      "club.level.guest": "PAUSE guest", "club.level.regular": "Regular",
-      "club.level.circle": "PAUSE circle", "club.level.ambassador": "PAUSE ambassador",
+      "club.level.guest": "PAUSE guest", "club.level.regular": "My Pause",
+      "club.level.circle": "Inner Circle", "club.level.ambassador": "VIP Pause Club",
       "profile.topLevel": "You're already at the top PAUSE Club level 🎉",
       "profile.statOrders": "orders", "profile.statPromo": "promos", "profile.statPosts": "posts",
       "profile.myOrders": "My orders", "profile.favorites": "Favorites", "profile.notifications": "Notifications",
@@ -651,6 +651,25 @@
 
   function clubLevelLabel(key, fallback) {
     return key ? t("club.level." + key) : fallback;
+  }
+
+  // Значки статусов PAUSE Club — ПОЛНОЦЕННЫЕ иконки (по метафоре
+  // приближения к финальному статусу: дверь → росток → ключ → корона),
+  // не текстовые эмодзи. Ключ ("guest"/"regular"/"circle"/"ambassador")
+  // — тот же стабильный key, что и в config.CLUB_LEVELS/sheets.get_club_level,
+  // emoji/next_emoji из ответа сервера тут сознательно не используются
+  // (они остаются только для текста бота в чате, где своих иконок нет).
+  // Единый визуальный язык: viewBox 24×24, одна толщина линии (1.6),
+  // только обводка — ни один из четырёх не залит, чтобы не смешивать
+  // стили внутри одного набора.
+  var CLUB_LEVEL_ICONS = {
+    guest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><rect x="6" y="3" width="12" height="18" rx="1.5"/><path d="M14.3 12h.01"/></svg>',
+    regular: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><path d="M12 4c4 2 6 6 6 10a6 6 0 0 1-12 0c0-4 2-8 6-10z"/><path d="M12 7v13"/></svg>',
+    circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><circle cx="7" cy="12" r="3.3"/><path d="M10.1 12H20"/><path d="M17 12v3M20 12v3"/></svg>',
+    ambassador: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><path d="M4 18L6 8L9 13L12 6L15 13L18 8L20 18Z"/></svg>',
+  };
+  function clubLevelIcon(key) {
+    return CLUB_LEVEL_ICONS[key] || "";
   }
 
   // Названия блюд/сетов и варианты ("С компотом"/"Без компота") — это
@@ -2417,18 +2436,18 @@
     head.appendChild(el("div", "profile-name", p.name || t("profile.noName")));
     head.appendChild(el("div", "profile-contact", formatPhone(p.phone)));
 
-    // Статус клуба виден сразу, с первого заказа (даже на "🕊 Гость PAUSE",
+    // Статус клуба виден сразу, с первого заказа (даже на "Гость PAUSE",
     // 0 заказов) — не прячем, пока не наберётся хоть один, как было
     // раньше. По тапу — сколько осталось до следующего уровня (см.
     // sheets.get_club_level — та же самая чистая функция, что и в боте).
-    var badge = el("button", "pill profile-club-badge", p.club.emoji + " " + t("profile.member") + " " + clubLevelLabel(p.club.key, p.club.label));
+    var badge = el("button", "pill profile-club-badge", clubLevelIcon(p.club.key) + "<span>" + t("profile.member") + " " + clubLevelLabel(p.club.key, p.club.label) + "</span>");
     badge.addEventListener("click", function () {
       haptic("select");
       if (p.club.next_label) {
         var total = p.order_count + p.club.left;
         var pct = total ? Math.min(100, Math.round((p.order_count / total) * 100)) : 0;
         showInfo(
-          '<div class="club-progress-label">' + t("profile.toNextLevel", { emoji: p.club.next_emoji, label: escapeHtml(clubLevelLabel(p.club.next_key, p.club.next_label)), left: p.club.left }) + '</div>' +
+          '<div class="club-progress-label">' + t("profile.toNextLevel", { emoji: clubLevelIcon(p.club.next_key), label: escapeHtml(clubLevelLabel(p.club.next_key, p.club.next_label)), left: p.club.left }) + '</div>' +
           '<div class="club-progress-track"><div class="club-progress-fill" style="width:' + pct + '%"></div></div>'
         );
       } else {

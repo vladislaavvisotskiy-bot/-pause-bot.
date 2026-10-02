@@ -325,7 +325,7 @@ SUPPORT_INFO = (
 # --- Раздел «Pause Club» ---
 CLUB_STATUS_TEMPLATE = "{emoji} Статус: {label}\nЗаказов сделано: {order_count}"
 CLUB_NEXT_LEVEL_LINE = "\nЕщё {left} до уровня «{next_emoji} {next_label}»"
-CLUB_MAX_LEVEL_LINE = "\nВы на максимальном уровне 🌄"
+CLUB_MAX_LEVEL_LINE = "\nВы на максимальном уровне 👑"
 CLUB_NEWS_HEADER = "\n\n🗞 Новости и события\n"
 
 # --- Ежедневный розыгрыш "Пауза в подарок" ---
