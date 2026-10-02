@@ -3386,11 +3386,19 @@
       }
       var card = el("div", "card");
       admins.forEach(function (a, idx) {
-        var row = el("div", "ops-debtor-row" + (idx ? " ops-breakdown-row-sep" : ""));
+        // ops-breakdown-row (не ops-debtor-row) — тут несколько строк в
+        // ОДНОЙ общей карточке, как у строк долга/комментариев, а не
+        // отдельная карточка на каждую запись (там своя роль у
+        // ops-debtor-row, трогать её не нужно — список должников
+        // по-прежнему использует её как задумано, с собственным
+        // отступом от каждой карточки). У ops-debtor-row нет внутреннего
+        // padding/gap — рядом друг с другом внутри одной карточки строки
+        // были видны почти слитыми.
+        var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
         var badges = '<span class="pill ' + (a.finance ? "paid" : "muted") + '">Финансы</span>' +
           '<span class="pill ' + (a.debtors ? "paid" : "muted") + '">Должники</span>';
         row.innerHTML =
-          '<div class="ops-debtor-name">' + escapeHtml(a.name || a.tg_id) + '</div>' +
+          '<div class="ops-breakdown-name">' + escapeHtml(a.name || a.tg_id) + '</div>' +
           '<div class="ops-pa-badges">' + badges + '</div>';
         row.addEventListener("click", function () {
           haptic("select");
