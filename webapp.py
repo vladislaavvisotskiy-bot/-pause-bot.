@@ -518,8 +518,31 @@ async def api_earnings_month(request: web.Request):
     return web.json_response({"year": year, "month": month, "total": total})
 
 
+def _static_version() -> str:
+    """Короткая "версия" статики — по времени последнего изменения
+    app.js/styles.css. Подставляется в index.html как ?v=... у ссылок на
+    эти файлы (см. index_page) исключительно для того, чтобы WebView
+    Telegram, который иногда держит старый app.js в кэше даже после
+    редеплоя (воспроизведено на практике: человек заходит в Mini App
+    "Маршрут" сразу после обновления кода и видит старый интерфейс, пока
+    не закроет и не откроет Telegram заново), сам увидел новый URL файла
+    и скачал его, а не отдавал кэш из прошлого раза."""
+    try:
+        ts = max(
+            os.path.getmtime(os.path.join(STATIC_DIR, "app.js")),
+            os.path.getmtime(os.path.join(STATIC_DIR, "styles.css")),
+        )
+        return str(int(ts))
+    except OSError:
+        return "0"
+
+
 async def index_page(request: web.Request):
-    return web.FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    path = os.path.join(STATIC_DIR, "index.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    html = html.replace("__STATIC_VERSION__", _static_version())
+    return web.Response(text=html, content_type="text/html")
 
 
 def create_app(bot=None) -> web.Application:
