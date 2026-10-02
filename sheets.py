@@ -1912,6 +1912,10 @@ def get_client_ticket_counts(date_str: str) -> dict:
 # диапазон дат и с суммой/статусом оплаты вместо "piece"-строки для кухни.
 # ---------------------------------------------------------------------------
 
+_ops_orders_cache = {"key": None, "items": None, "ts": 0}
+_OPS_ORDERS_CACHE_TTL = 5  # секунд
+
+
 def get_orders_in_range(date_from: str, date_to: str) -> list:
     """Заказы (без отменённых) за период [date_from, date_to] включительно,
     обе границы — ДД.ММ.ГГГГ. Имя и сумма — тем же способом, что и
@@ -1922,7 +1926,22 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
     проверке" от "ещё не прислал"): "Картой"/"Наличными" — админ уже
     подтвердил (оплачено); "На проверке" — ждёт подтверждения; всё
     остальное (пусто, "В долг") — не оплачено. Та же трёхходовая логика,
-    что и в get_payments_for_date/pauseapp._payment_value."""
+    что и в get_payments_for_date/pauseapp._payment_value.
+
+    Короткий (5с) кэш по (date_from, date_to): экран "Финансы" в PAUSE App
+    на один показ дёргает эту функцию ДВАЖДЫ почти одновременно —
+    api_ops_summary и api_ops_orders оба читают "Заказы" за тот же период
+    параллельно (см. pauseapp.py, Promise.all на фронте) — без кэша это
+    двойное чтение всего листа "Заказы" на каждое открытие экрана, что
+    лишний раз приближает к лимиту запросов Google Sheets API (воспроизведено
+    на практике — "Финансы" иногда падает с server_error сразу после
+    активного тестирования). TTL короткий специально, чтобы админ, меняющий
+    фильтры/период, не видел устаревшие данные дольше нескольких секунд."""
+    key = (date_from, date_to)
+    now = time.time()
+    if _ops_orders_cache["key"] == key and now - _ops_orders_cache["ts"] < _OPS_ORDERS_CACHE_TTL:
+        return _ops_orders_cache["items"]
+
     try:
         d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
         d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
@@ -1981,6 +2000,9 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
             "sum": _row_amount(row, prices),
             "batch": row[config.O_ORDER_BATCH - 1].strip(),
         })
+    _ops_orders_cache["key"] = key
+    _ops_orders_cache["items"] = out
+    _ops_orders_cache["ts"] = now
     return out
 
 

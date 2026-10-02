@@ -952,8 +952,12 @@ async def api_ops_summary(request: web.Request):
     if not rng:
         return web.json_response({"error": "bad_range"}, status=400)
     date_from, date_to = rng
-    items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to)
-    margins = await _retry_sheets(sheets.get_set_margins)
+    # "Финансы" — самый "тяжёлый" экран по числу обращений к Sheets за один
+    # показ (несколько листов разом, см. ниже) — retries/delay подняты
+    # против дефолтных (2/1.2с), чтобы пережить кратковременный 429 от
+    # Google (лимит запросов в минуту) не падая в server_error у админа.
+    items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to, retries=3, delay=1.5)
+    margins = await _retry_sheets(sheets.get_set_margins, retries=3, delay=1.5)
 
     revenue = 0
     profit = 0
@@ -1019,8 +1023,8 @@ async def api_ops_summary(request: web.Request):
     # Uklon и т.п.) + оплата за смену всем курьерам. Раньше учитывалась
     # только первая часть — поймано на реальном примере (оплата курьеру
     # не прибавлялась к расходу на доставку) и исправлено.
-    delivery_services_cost = await _retry_sheets(sheets.get_delivery_expense_total, date_from, date_to)
-    couriers_cost = await _retry_sheets(sheets.get_logistics_expense_total, date_from, date_to)
+    delivery_services_cost = await _retry_sheets(sheets.get_delivery_expense_total, date_from, date_to, retries=3, delay=1.5)
+    couriers_cost = await _retry_sheets(sheets.get_logistics_expense_total, date_from, date_to, retries=3, delay=1.5)
     delivery_cost = delivery_services_cost + couriers_cost
     net_profit = profit - delivery_cost
 
@@ -1053,7 +1057,10 @@ async def api_ops_orders(request: web.Request):
     status_filter = (request.query.get("status") or "").strip()  # "" | paid | unpaid | review
     q = (request.query.get("q") or "").strip().lower()
 
-    items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to)
+    # retries/delay подняты, как и в api_ops_summary (см. там) — тот же
+    # "тяжёлый" экран "Финансы", этот запрос обычно уходит почти
+    # одновременно с ним (см. pauseapp_static/app.js: Promise.all).
+    items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to, retries=3, delay=1.5)
 
     groups = {}
     order = []
