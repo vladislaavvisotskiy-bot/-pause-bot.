@@ -2463,6 +2463,14 @@
     rows.appendChild(buildProfileRow(ICON_SUPPORT, t("profile.support"), openSupportSubscreen));
     root.appendChild(rows);
 
+    // Операционный центр — пока отдельная карточка под основным списком,
+    // не строка внутри него: это админский инструмент, а не часть
+    // клиентского профиля, визуально не путаем одно с другим (хотя
+    // доступ к ЛЮБОЙ части PAUSE App сейчас и так только у админа).
+    var adminRows = el("div", "card profile-nav-list");
+    adminRows.appendChild(buildProfileRow(ICON_OPS, "Операционный центр", function () { openProfileSubscreen("Операционный центр", loadOpsCenter); }));
+    root.appendChild(adminRows);
+
     if (tg) {
       var exitBtn = el("button", "btn-ghost profile-exit-btn", t("profile.logout"));
       // Отдельного "логина" в системе нет — личность приходит из Telegram
@@ -2677,6 +2685,244 @@
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", t("favorites.loadFailed")));
     });
+  }
+
+  // --- Операционный центр (админ, этап 1: обзор и заказы) ------------------
+  // Текст экрана — на русском без i18n-ключей, как и остальные
+  // admin-only части проекта (бот, /admin и т.п. тоже не переведены):
+  // смысла переводить внутренний инструмент для одного русскоязычного
+  // админа нет. Доступ не проверяется отдельно здесь — весь PAUSE App уже
+  // закрыт admin_auth_middleware на сервере (см. pauseapp.py), этот
+  // экран ничем не отличается от остальных.
+
+  var ICON_OPS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10M12 19V5M20 19v-6"/></svg>';
+
+  function _opsFmtDate(d) {
+    var dd = String(d.getDate()).padStart(2, "0");
+    var mm = String(d.getMonth() + 1).padStart(2, "0");
+    return dd + "." + mm + "." + d.getFullYear();
+  }
+  function _opsRuToIso(ru) {
+    var p = (ru || "").split(".");
+    return p.length === 3 ? (p[2] + "-" + p[1] + "-" + p[0]) : "";
+  }
+  function _opsIsoToRu(iso) {
+    var p = (iso || "").split("-");
+    return p.length === 3 ? (p[2] + "." + p[1] + "." + p[0]) : "";
+  }
+  var OPS_PAY_FILTERS = [
+    { key: "", label: "Все" },
+    { key: "paid", label: "Оплачено" },
+    { key: "unpaid", label: "Не оплачено" },
+    { key: "review", label: "На проверке" },
+  ];
+
+  function loadOpsCenter(root) {
+    var ops = {
+      period: "today",
+      customFrom: _opsFmtDate(new Date()),
+      customTo: _opsFmtDate(new Date()),
+      status: "", set: "", zone: "", q: "",
+    };
+    var reqId = 0;
+    var searchTimer = null;
+
+    function range() {
+      var today = new Date();
+      if (ops.period === "custom") return { from: ops.customFrom, to: ops.customTo };
+      var from = new Date(today);
+      if (ops.period === "7d") from.setDate(from.getDate() - 6);
+      else if (ops.period === "30d") from.setDate(from.getDate() - 29);
+      return { from: _opsFmtDate(from), to: _opsFmtDate(today) };
+    }
+
+    function qs(obj) {
+      return Object.keys(obj).filter(function (k) { return obj[k]; })
+        .map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(obj[k]); })
+        .join("&");
+    }
+
+    function payStatusLabel(key) {
+      var f = OPS_PAY_FILTERS.filter(function (x) { return x.key === key; })[0];
+      return f ? f.label : key;
+    }
+    function payPillClass(key) {
+      if (key === "paid") return "pill paid";
+      if (key === "review") return "pill gold";
+      return "pill unpaid";
+    }
+
+    function render() {
+      var r = range();
+      var myReq = ++reqId;
+      root.innerHTML = "";
+
+      // --- период ---
+      var periodChips = el("div", "feed-filters");
+      [["today", "Сегодня"], ["7d", "7 дней"], ["30d", "30 дней"], ["custom", "Свой период"]].forEach(function (p) {
+        var chip = el("button", "filter-chip" + (ops.period === p[0] ? " active" : ""), p[1]);
+        chip.addEventListener("click", function () { ops.period = p[0]; render(); });
+        periodChips.appendChild(chip);
+      });
+      root.appendChild(periodChips);
+
+      if (ops.period === "custom") {
+        var rangeRow = el("div", "ops-range-row");
+        var fromField = el("div", "field");
+        fromField.innerHTML = '<label>С</label>';
+        var fromInput = el("input"); fromInput.type = "date"; fromInput.value = _opsRuToIso(ops.customFrom);
+        fromInput.addEventListener("change", function () { ops.customFrom = _opsIsoToRu(fromInput.value) || ops.customFrom; render(); });
+        fromField.appendChild(fromInput);
+        var toField = el("div", "field");
+        toField.innerHTML = '<label>По</label>';
+        var toInput = el("input"); toInput.type = "date"; toInput.value = _opsRuToIso(ops.customTo);
+        toInput.addEventListener("change", function () { ops.customTo = _opsIsoToRu(toInput.value) || ops.customTo; render(); });
+        toField.appendChild(toInput);
+        rangeRow.appendChild(fromField); rangeRow.appendChild(toField);
+        root.appendChild(rangeRow);
+      }
+
+      var body = el("div");
+      body.appendChild(el("div", "skeleton-block"));
+      body.appendChild(el("div", "skeleton-block"));
+      root.appendChild(body);
+
+      Promise.all([
+        api("/api/ops/summary?" + qs({ from: r.from, to: r.to })),
+        api("/api/ops/orders?" + qs({ from: r.from, to: r.to, status: ops.status, set: ops.set, zone: ops.zone, q: ops.q })),
+      ]).then(function (results) {
+        if (myReq !== reqId) return;
+        renderBody(body, results[0], results[1]);
+      }).catch(function (err) {
+        if (myReq !== reqId) return;
+        body.innerHTML = "";
+        body.appendChild(el("div", "empty-note", "Не удалось загрузить данные: " + err.message));
+      });
+    }
+
+    function renderBody(body, summary, ordersData) {
+      body.innerHTML = "";
+
+      // --- сводка ---
+      var statRow = el("div", "profile-stat-row");
+      var s1 = el("div", "profile-stat");
+      s1.innerHTML = '<div class="profile-stat-value">' + summary.order_count + '</div><div class="profile-stat-label">заказов</div>';
+      var s2 = el("div", "profile-stat");
+      s2.innerHTML = '<div class="profile-stat-value">' + fmtSum(summary.revenue) + '</div><div class="profile-stat-label">выручка</div>';
+      statRow.appendChild(s1); statRow.appendChild(s2);
+      body.appendChild(statRow);
+
+      // --- разбивка по сетам ---
+      body.appendChild(el("h3", "ops-section-title", "По сетам"));
+      if (summary.by_set.length) {
+        var setsCard = el("div", "card");
+        summary.by_set.forEach(function (s, idx) {
+          var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          row.innerHTML =
+            '<div class="ops-breakdown-name">' + escapeHtml(s.display_name) + '</div>' +
+            '<div class="ops-breakdown-nums"><span>' + s.qty + ' шт</span><span>' + fmtSum(s.revenue) + '</span></div>';
+          setsCard.appendChild(row);
+        });
+        body.appendChild(setsCard);
+      } else {
+        body.appendChild(el("div", "empty-note", "За этот период заказов нет."));
+      }
+
+      // --- разбивка по районам ---
+      body.appendChild(el("h3", "ops-section-title", "По районам"));
+      if (summary.by_zone.length) {
+        var zonesCard = el("div", "card");
+        summary.by_zone.forEach(function (z, idx) {
+          var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          row.innerHTML =
+            '<div class="ops-breakdown-name">' + escapeHtml(z.zone) + '</div>' +
+            '<div class="ops-breakdown-nums"><span>' + z.order_count + ' зак.</span><span>' + fmtSum(z.revenue) + '</span></div>';
+          zonesCard.appendChild(row);
+        });
+        body.appendChild(zonesCard);
+      }
+
+      // --- фильтры списка заказов ---
+      body.appendChild(el("h3", "ops-section-title", "Заказы"));
+
+      var statusChips = el("div", "feed-filters");
+      OPS_PAY_FILTERS.forEach(function (f) {
+        var chip = el("button", "filter-chip" + (ops.status === f.key ? " active" : ""), f.label);
+        chip.addEventListener("click", function () { ops.status = f.key; render(); });
+        statusChips.appendChild(chip);
+      });
+      body.appendChild(statusChips);
+
+      var selectRow = el("div", "ops-select-row");
+      var setField = el("div", "field");
+      setField.innerHTML = '<label>Сет</label>';
+      var setSelect = el("select");
+      setSelect.appendChild(el("option", null, "Все"));
+      summary.by_set.forEach(function (s) {
+        var opt = document.createElement("option");
+        opt.value = s.set;
+        opt.textContent = s.display_name;
+        setSelect.appendChild(opt);
+      });
+      setSelect.value = ops.set;
+      setSelect.addEventListener("change", function () { ops.set = setSelect.value; render(); });
+      setField.appendChild(setSelect);
+
+      var zoneField = el("div", "field");
+      zoneField.innerHTML = '<label>Район</label>';
+      var zoneSelect = el("select");
+      zoneSelect.appendChild(el("option", null, "Все"));
+      summary.by_zone.forEach(function (z) {
+        var opt = document.createElement("option");
+        opt.value = z.zone;
+        opt.textContent = z.zone;
+        zoneSelect.appendChild(opt);
+      });
+      zoneSelect.value = ops.zone;
+      zoneSelect.addEventListener("change", function () { ops.zone = zoneSelect.value; render(); });
+      zoneField.appendChild(zoneSelect);
+
+      selectRow.appendChild(setField); selectRow.appendChild(zoneField);
+      body.appendChild(selectRow);
+
+      var searchField = el("div", "field");
+      searchField.innerHTML = '<label>Поиск по имени клиента</label>';
+      var searchInput = el("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "Введите имя…";
+      searchInput.value = ops.q;
+      searchInput.addEventListener("input", function () {
+        clearTimeout(searchTimer);
+        var val = searchInput.value;
+        searchTimer = setTimeout(function () { ops.q = val; render(); }, 400);
+      });
+      searchField.appendChild(searchInput);
+      body.appendChild(searchField);
+
+      // --- список заказов ---
+      if (!ordersData.orders.length) {
+        body.appendChild(el("div", "empty-note", "Ничего не нашлось по этим фильтрам."));
+        return;
+      }
+      ordersData.orders.forEach(function (o) {
+        var card = el("div", "card");
+        var itemsText = o.items.map(function (it) {
+          return it.qty + "× " + it.display_name + (it.garnish ? " (" + it.garnish + ")" : "");
+        }).join(", ");
+        card.innerHTML =
+          '<div class="order-card-head">' +
+            '<span class="order-card-date">' + o.date + '</span>' +
+            '<span class="order-card-pills"><span class="' + payPillClass(o.pay_status) + '">' + payStatusLabel(o.pay_status) + '</span></span>' +
+          '</div>' +
+          '<div class="ops-order-name">' + escapeHtml(o.name) + '</div>' +
+          '<div class="ops-order-zone">' + escapeHtml(o.zone) + (o.point ? ", " + escapeHtml(o.point) : "") + '</div>' +
+          '<div class="order-card-items">' + escapeHtml(itemsText) + '</div>' +
+          '<div class="ops-order-sum">' + fmtSum(o.sum) + '</div>';
+        body.appendChild(card);
+      });
+    }
+
+    render();
   }
 
   // --- Мои послания --------------------------------------------------------

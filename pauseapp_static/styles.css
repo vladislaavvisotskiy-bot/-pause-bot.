@@ -729,7 +729,7 @@ p { margin: 0; color: var(--ink-soft); }
   letter-spacing: 0.04em;
   margin-bottom: 6px;
 }
-.field input, .field textarea {
+.field input, .field textarea, .field select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -737,7 +737,7 @@ p { margin: 0; color: var(--ink-soft); }
   background: var(--card);
   color: var(--ink);
 }
-.field input:focus, .field textarea:focus { outline: none; border-color: var(--ink); }
+.field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--ink); }
 
 /* Телефон — +998 "прикреплён" отдельным нередактируемым блоком слева,
    справа только цифры абонентского номера (см. app.js: buildPhoneField). */
@@ -1024,6 +1024,27 @@ p { margin: 0; color: var(--ink-soft); }
 }
 .toggle-switch.on { background: var(--ink); }
 .toggle-switch.on::after { transform: translateX(18px); }
+
+/* ------------------------------------------------------------------ */
+/* Операционный центр (админ)                                          */
+/* ------------------------------------------------------------------ */
+
+.ops-range-row { display: flex; gap: 10px; }
+.ops-range-row .field { flex: 1; margin-bottom: 14px; }
+
+.ops-section-title { font-size: 13px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin: 18px 0 8px; }
+
+.ops-breakdown-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; }
+.ops-breakdown-row-sep { border-top: 1px solid var(--line); }
+.ops-breakdown-name { font-size: 14.5px; color: var(--ink); min-width: 0; }
+.ops-breakdown-nums { display: flex; gap: 12px; flex: 0 0 auto; font-size: 13px; color: var(--ink-soft); white-space: nowrap; }
+
+.ops-select-row { display: flex; gap: 10px; }
+.ops-select-row .field { flex: 1; margin-bottom: 14px; }
+
+.ops-order-name { font-size: 15px; font-weight: 600; color: var(--ink); margin-top: 8px; }
+.ops-order-zone { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.ops-order-sum { font-size: 14px; font-weight: 700; color: var(--ink); margin-top: 8px; }
 
 @media (min-width: 480px) {
   #content { max-width: 480px; margin: 0 auto; }

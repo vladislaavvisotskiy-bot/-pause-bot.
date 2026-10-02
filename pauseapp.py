@@ -17,6 +17,7 @@ webapp.run_webapp(extra_subapps=...), bot.py) вместо создания вт
 handlers/club.py в самом боте. Где сравнить с оригиналом, отмечено в
 комментариях у каждой функции.
 """
+import datetime as dt
 import logging
 import os
 import random
@@ -914,6 +915,124 @@ async def api_feed_image(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# Операционный центр — экран "Профиль → Операционный центр", пока только
+# обзор/заказы (этап 1). Отдельного гейта на доступ НЕТ и не нужен — весь
+# PAUSE App уже закрыт admin_auth_middleware (см. начало файла), этот
+# раздел ничем не отличается от остальных /api/* в этом плане.
+# ---------------------------------------------------------------------------
+
+def _ops_date_range(request: web.Request):
+    """?from=ДД.ММ.ГГГГ&to=ДД.ММ.ГГГГ — обе обязательны (экран сам всегда
+    их шлёт, готовые под выбранный период/диапазон). None, если формат не
+    распознан; переставляет местами, если from случайно позже to."""
+    date_from = (request.query.get("from") or "").strip()
+    date_to = (request.query.get("to") or "").strip()
+    try:
+        d1 = dt.datetime.strptime(date_from, "%d.%m.%Y")
+        d2 = dt.datetime.strptime(date_to, "%d.%m.%Y")
+    except ValueError:
+        return None
+    if d1 > d2:
+        date_from, date_to = date_to, date_from
+    return date_from, date_to
+
+
+def _ops_order_key(item: dict):
+    """Один заказ — (дата, batch); у строк без batch (дооформленные до
+    появления batch_id) группируем по (дата, клиент) — та же идея, что и
+    sheets.get_client_order_groups, только не на одного клиента, а на
+    весь лист сразу."""
+    if item["batch"]:
+        return ("b", item["date"], item["batch"])
+    return ("c", item["date"], item["client_id"])
+
+
+async def api_ops_summary(request: web.Request):
+    rng = _ops_date_range(request)
+    if not rng:
+        return web.json_response({"error": "bad_range"}, status=400)
+    date_from, date_to = rng
+    items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to)
+
+    order_keys = set()
+    revenue = 0
+    by_set = {}
+    by_zone = {}
+    for i in items:
+        order_keys.add(_ops_order_key(i))
+        revenue += i["sum"]
+
+        s = by_set.setdefault(i["set"], {"set": i["set"], "display_name": texts.display_set_name(i["set"]), "qty": 0, "revenue": 0})
+        s["qty"] += i["qty"]
+        s["revenue"] += i["sum"]
+
+        zone = i["zone"] or "—"
+        z = by_zone.setdefault(zone, {"zone": zone, "revenue": 0, "_orders": set()})
+        z["_orders"].add(_ops_order_key(i))
+        z["revenue"] += i["sum"]
+
+    by_set_list = sorted(by_set.values(), key=lambda x: -x["qty"])
+    by_zone_list = sorted(
+        [{"zone": z["zone"], "order_count": len(z["_orders"]), "revenue": z["revenue"]} for z in by_zone.values()],
+        key=lambda x: -x["revenue"],
+    )
+
+    return web.json_response({
+        "date_from": date_from, "date_to": date_to,
+        "order_count": len(order_keys), "revenue": revenue,
+        "by_set": by_set_list, "by_zone": by_zone_list,
+    })
+
+
+async def api_ops_orders(request: web.Request):
+    rng = _ops_date_range(request)
+    if not rng:
+        return web.json_response({"error": "bad_range"}, status=400)
+    date_from, date_to = rng
+    set_filter = (request.query.get("set") or "").strip()
+    zone_filter = (request.query.get("zone") or "").strip()
+    status_filter = (request.query.get("status") or "").strip()  # "" | paid | unpaid | review
+    q = (request.query.get("q") or "").strip().lower()
+
+    items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to)
+
+    groups = {}
+    order = []
+    for i in items:
+        key = _ops_order_key(i)
+        if key not in groups:
+            groups[key] = {
+                "date": i["date"], "zone": i["zone"], "point": i["point"],
+                "client_id": i["client_id"], "name": i["name"],
+                "payment_raw": i["payment_raw"], "pay_status": i["pay_status"],
+                "items": [], "sum": 0,
+            }
+            order.append(key)
+        g = groups[key]
+        g["items"].append({"set": i["set"], "display_name": texts.display_set_name(i["set"]), "qty": i["qty"], "garnish": i["garnish"]})
+        g["sum"] += i["sum"]
+
+    out = []
+    for key in order:
+        g = groups[key]
+        if zone_filter and g["zone"] != zone_filter:
+            continue
+        if status_filter and g["pay_status"] != status_filter:
+            continue
+        if set_filter and not any(it["set"] == set_filter for it in g["items"]):
+            continue
+        if q and q not in g["name"].lower():
+            continue
+        out.append(g)
+
+    # От новых к старым — по дате (ДД.ММ.ГГГГ сортируется только через
+    # разбор, не лексикографически).
+    out.sort(key=lambda g: dt.datetime.strptime(g["date"], "%d.%m.%Y"), reverse=True)
+
+    return web.json_response({"date_from": date_from, "date_to": date_to, "orders": out})
+
+
+# ---------------------------------------------------------------------------
 
 def create_app(bot=None) -> web.Application:
     app = web.Application(middlewares=[error_middleware, admin_auth_middleware])
@@ -944,4 +1063,6 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/feed", api_feed_publish)
     app.router.add_post("/api/feed/delete", api_feed_delete)
     app.router.add_get("/api/feed/image/{file_id}", api_feed_image)
+    app.router.add_get("/api/ops/summary", api_ops_summary)
+    app.router.add_get("/api/ops/orders", api_ops_orders)
     return app

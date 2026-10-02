@@ -1586,6 +1586,87 @@ def get_client_ticket_counts(date_str: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Операционный центр (PAUSE App, админ-раздел) — сводка/разбивки/список
+# заказов за произвольный период. Один проход по "Заказы", строки-позиции
+# (один сет заказа — одна запись), группировку по заказу делает вызывающий
+# код (см. pauseapp.py: api_ops_summary/api_ops_orders) — та же идея, что
+# и get_kitchen_line_items для одной даты, здесь то же самое, но на
+# диапазон дат и с суммой/статусом оплаты вместо "piece"-строки для кухни.
+# ---------------------------------------------------------------------------
+
+def get_orders_in_range(date_from: str, date_to: str) -> list:
+    """Заказы (без отменённых) за период [date_from, date_to] включительно,
+    обе границы — ДД.ММ.ГГГГ. Имя и сумма — тем же способом, что и
+    get_kitchen_line_items/_row_amount, чтобы не считать дважды по-разному.
+
+    Статус оплаты — по сырому значению столбца K (а не по формуле
+    "ОПЛАЧЕНО"/"НЕ ОПЛАЧЕНО" столбца L, которая не различает "на
+    проверке" от "ещё не прислал"): "Картой"/"Наличными" — админ уже
+    подтвердил (оплачено); "На проверке" — ждёт подтверждения; всё
+    остальное (пусто, "В долг") — не оплачено. Та же трёхходовая логика,
+    что и в get_payments_for_date/pauseapp._payment_value."""
+    try:
+        d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
+        d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
+    except ValueError:
+        return []
+
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    clients = _clients_index()
+    prices = get_set_prices()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_ORDER_BATCH:
+            row = row + [""] * (config.O_ORDER_BATCH - len(row))
+        date_cell = row[config.O_DATE - 1].strip()
+        try:
+            d = dt.datetime.strptime(date_cell, "%d.%m.%Y")
+        except ValueError:
+            continue
+        if not (d_from <= d <= d_to):
+            continue
+        comment = row[config.O_COMMENT - 1].strip()
+        if is_canceled(comment):
+            continue
+
+        client_id = row[config.O_CLIENT_ID - 1].strip()
+        name = (clients.get(client_id) or {}).get("name") or row[config.O_NAME - 1].strip() or client_id or "—"
+        qty_raw = row[config.O_QTY - 1].strip()
+        try:
+            qty = int(qty_raw)
+        except ValueError:
+            qty = 0
+        payment_raw = row[config.O_PAYMENT - 1].strip()
+        if payment_raw in ("Картой", "Наличными"):
+            pay_status = "paid"
+        elif payment_raw == "На проверке":
+            pay_status = "review"
+        else:
+            pay_status = "unpaid"
+
+        out.append({
+            "row": r,
+            "date": date_cell,
+            "zone": row[config.O_ZONE - 1].strip(),
+            "point": row[config.O_POINT - 1].strip(),
+            "client_id": client_id,
+            "name": name,
+            "set": row[config.O_SET - 1].strip(),
+            "qty": qty,
+            "garnish": row[config.O_GARNISH - 1].strip(),
+            "payment_raw": payment_raw,
+            "pay_status": pay_status,
+            "sum": _row_amount(row, prices),
+            "batch": row[config.O_ORDER_BATCH - 1].strip(),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Отчёты для кухни / курьера — те же формулы, что и в самой таблице,
 # просто пересчитанные тут, чтобы бот мог прислать их сам
 # ---------------------------------------------------------------------------
