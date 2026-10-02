@@ -3317,3 +3317,89 @@ def get_logistics_expense_total(date_from: str, date_to: str) -> int:
         except ValueError:
             pass
     return total
+
+
+# ---------------------------------------------------------------------------
+# Делегированные админы PAUSE App (см. config.SHEET_PAUSE_ADMINS) —
+# "Операционный центр" → "Администраторы", управляет только главный админ
+# (config.ADMIN_IDS). Новый лист, поэтому через _ws_or_create, как и
+# остальные листы, появившиеся вместе с фичами (долги, логистика).
+# ---------------------------------------------------------------------------
+
+_PA_HEADER = ["tg_id", "name", "finance", "debtors", "added"]
+
+
+def get_pause_admins() -> list:
+    """[{"tg_id","name","finance","debtors","added"}] — все делегированные
+    админы (не включает главного — ADMIN_IDS, тот не хранится здесь)."""
+    ws = _ws_or_create(config.SHEET_PAUSE_ADMINS, _PA_HEADER)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.PA_DATA_START_ROW:
+            continue
+        if len(row) < config.PA_TG_ID or not row[config.PA_TG_ID - 1].strip():
+            continue
+        out.append({
+            "tg_id": row[config.PA_TG_ID - 1].strip(),
+            "name": row[config.PA_NAME - 1].strip() if len(row) >= config.PA_NAME else "",
+            "finance": row[config.PA_FINANCE - 1].strip().lower() == "да" if len(row) >= config.PA_FINANCE else False,
+            "debtors": row[config.PA_DEBTORS - 1].strip().lower() == "да" if len(row) >= config.PA_DEBTORS else False,
+            "added": row[config.PA_ADDED - 1].strip() if len(row) >= config.PA_ADDED else "",
+        })
+    return out
+
+
+def get_pause_admin(tg_id) -> dict:
+    """Одна запись по tg_id либо None — для проверки прав на каждый
+    запрос (см. pauseapp.admin_auth_middleware)."""
+    target = str(tg_id)
+    for a in get_pause_admins():
+        if a["tg_id"] == target:
+            return a
+    return None
+
+
+def add_pause_admin(tg_id, name: str):
+    """Не дублирует строку, если такой tg_id уже есть — функции у
+    существующей записи трогать не нужно, "Добавить" на уже добавленном
+    человеке просто ничего не меняет."""
+    ws = _ws_or_create(config.SHEET_PAUSE_ADMINS, _PA_HEADER)
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.PA_DATA_START_ROW:
+            continue
+        if len(row) >= config.PA_TG_ID and row[config.PA_TG_ID - 1].strip() == target:
+            return
+    ws.append_row([target, name or "", "", "", today_date_str()], value_input_option="RAW")
+
+
+def set_pause_admin_feature(tg_id, feature: str, allowed: bool):
+    """feature: "finance" | "debtors"."""
+    col = config.PA_FINANCE if feature == "finance" else config.PA_DEBTORS
+    ws = _ws_or_create(config.SHEET_PAUSE_ADMINS, _PA_HEADER)
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.PA_DATA_START_ROW:
+            continue
+        if len(row) >= config.PA_TG_ID and row[config.PA_TG_ID - 1].strip() == target:
+            ws.update_cell(r, col, "да" if allowed else "")
+            return
+
+
+def remove_pause_admin(tg_id):
+    ws = _ws_or_create(config.SHEET_PAUSE_ADMINS, _PA_HEADER)
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.PA_DATA_START_ROW:
+            continue
+        if len(row) >= config.PA_TG_ID and row[config.PA_TG_ID - 1].strip() == target:
+            ws.delete_rows(r)
+            return

@@ -1116,6 +1116,39 @@ p { margin: 0; color: var(--ink-soft); }
 
 .ops-reminder-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; }
 
+/* "Операционный центр" → "Администраторы" */
+.ops-pa-badges { display: flex; gap: 6px; flex: 0 0 auto; }
+.pa-switch {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 27px;
+}
+.pa-switch input { opacity: 0; width: 0; height: 0; }
+.pa-switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--line);
+  border-radius: 999px;
+  transition: background .15s ease;
+}
+.pa-switch-slider::before {
+  content: "";
+  position: absolute;
+  height: 21px;
+  width: 21px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .15s ease;
+  box-shadow: 0 1px 3px rgba(58, 46, 34, 0.35);
+}
+.pa-switch input:checked + .pa-switch-slider { background: var(--ink); }
+.pa-switch input:checked + .pa-switch-slider::before { transform: translateX(19px); }
+.pa-switch input:disabled + .pa-switch-slider { opacity: .6; }
+
 @media (min-width: 480px) {
   #content { max-width: 480px; margin: 0 auto; }
   #bottom-nav { max-width: 480px; margin: 0 auto; left: 50%; transform: translateX(-50%); }

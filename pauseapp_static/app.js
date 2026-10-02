@@ -46,6 +46,9 @@
     messagesFilter: "all", // тот же принцип, отдельный фильтр экрана Послания
     favoriteKeys: null,    // null — ещё не грузили; иначе Set(s.key) избранных блюд клиента
     cart: [],              // корзина заказа — переживает закрытие визарда, см. addToCart/syncCartBar
+    isMainAdmin: false,    // главный админ бота (config.ADMIN_IDS) — доступ ко всем функциям всегда
+    paFinance: false,      // видит "Финансы" в Операционном центре (главному админу — всегда true)
+    paDebtors: false,      // видит "Должники" в Операционном центре (главному админу — всегда true)
   };
 
   // -------------------------------------------------------------------
@@ -2467,9 +2470,14 @@
     // не строка внутри него: это админский инструмент, а не часть
     // клиентского профиля, визуально не путаем одно с другим (хотя
     // доступ к ЛЮБОЙ части PAUSE App сейчас и так только у админа).
-    var adminRows = el("div", "card profile-nav-list");
-    adminRows.appendChild(buildProfileRow(ICON_OPS, "Операционный центр", function () { openProfileSubscreen("Операционный центр", loadOpsHub); }));
-    root.appendChild(adminRows);
+    // У делегированного админа без единой выданной функции (см.
+    // "Операционный центр" → "Администраторы") скрываем саму карточку —
+    // незачем вести в пустой хаб без единой доступной кнопки.
+    if (state.isMainAdmin || state.paFinance || state.paDebtors) {
+      var adminRows = el("div", "card profile-nav-list");
+      adminRows.appendChild(buildProfileRow(ICON_OPS, "Операционный центр", function () { openProfileSubscreen("Операционный центр", loadOpsHub); }));
+      root.appendChild(adminRows);
+    }
 
     if (tg) {
       var exitBtn = el("button", "btn-ghost profile-exit-btn", t("profile.logout"));
@@ -2702,6 +2710,7 @@
   var ICON_OPS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10M12 19V5M20 19v-6"/></svg>';
   var ICON_OPS_FINANCE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1.4 1.1-2.5 2.5-2.5s2.5 1 2.5 2.2c0 2.8-5 1.6-5 4.4 0 1.2 1.1 2.2 2.5 2.2s2.5-1.1 2.5-2.5"/></svg>';
   var ICON_OPS_DEBTORS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0.9-3.6 3.2-5.4 6-5.4s5.1 1.8 6 5.4"/><path d="M17 4.5c1.6 0.4 2.8 1.8 2.8 3.5s-1.2 3.1-2.8 3.5M21 20c-0.6-2.4-1.8-4-3.5-4.8"/></svg>';
+  var ICON_OPS_ADMINS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-2.9 8-7 10-4.1-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>';
 
   function opsStepHeader(body, title) {
     body.appendChild(el("h2", "wizard-title", title));
@@ -2710,24 +2719,42 @@
   function loadOpsHub(root) {
     root.innerHTML = "";
     var rows = el("div", "card profile-nav-list");
-    rows.appendChild(buildProfileRow(ICON_OPS_FINANCE, "Финансы", function () {
-      wizardStep(function (body) {
-        opsStepHeader(body, "Финансы");
-        var sub = el("div");
-        sub.appendChild(el("div", "skeleton-block"));
-        body.appendChild(sub);
-        loadOpsFinance(sub);
-      });
-    }));
-    rows.appendChild(buildProfileRow(ICON_OPS_DEBTORS, "Должники", function () {
-      wizardStep(function (body) {
-        opsStepHeader(body, "Должники");
-        var sub = el("div");
-        sub.appendChild(el("div", "skeleton-block"));
-        body.appendChild(sub);
-        loadOpsDebtorsList(sub);
-      });
-    }));
+    // Кнопки — по факту выданных функций (state.paFinance/paDebtors,
+    // см. /api/me), "Администраторы" — ТОЛЬКО у главного админа, всегда
+    // последней кнопкой, не выдаётся и не отзывается как функция.
+    if (state.isMainAdmin || state.paFinance) {
+      rows.appendChild(buildProfileRow(ICON_OPS_FINANCE, "Финансы", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "Финансы");
+          var sub = el("div");
+          sub.appendChild(el("div", "skeleton-block"));
+          body.appendChild(sub);
+          loadOpsFinance(sub);
+        });
+      }));
+    }
+    if (state.isMainAdmin || state.paDebtors) {
+      rows.appendChild(buildProfileRow(ICON_OPS_DEBTORS, "Должники", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "Должники");
+          var sub = el("div");
+          sub.appendChild(el("div", "skeleton-block"));
+          body.appendChild(sub);
+          loadOpsDebtorsList(sub);
+        });
+      }));
+    }
+    if (state.isMainAdmin) {
+      rows.appendChild(buildProfileRow(ICON_OPS_ADMINS, "Администраторы", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "Администраторы");
+          var sub = el("div");
+          sub.appendChild(el("div", "skeleton-block"));
+          body.appendChild(sub);
+          loadOpsAdminsList(sub);
+        });
+      }));
+    }
     root.appendChild(rows);
   }
 
@@ -3309,6 +3336,146 @@
     load();
   }
 
+  // --- Операционный центр → Администраторы (только главный админ) ---------
+
+  function loadOpsAdminsList(root) {
+    function load() {
+      root.innerHTML = "";
+      root.appendChild(el("div", "skeleton-block"));
+      api("/api/pause-admins").then(function (data) {
+        render(data.admins);
+      }).catch(function (err) {
+        root.innerHTML = "";
+        root.appendChild(el("div", "empty-note", "Не удалось загрузить список: " + err.message));
+      });
+    }
+
+    function render(admins) {
+      root.innerHTML = "";
+
+      // --- добавить человека ---
+      var addBox = el("div", "ops-input-box ops-input-box-comment");
+      var addRow = el("div", "ops-select-row");
+      var idField = el("div", "field");
+      idField.innerHTML = '<label>Telegram ID</label>';
+      var idInput = el("input"); idInput.type = "text"; idInput.inputMode = "numeric"; idInput.placeholder = "7118369020";
+      idField.appendChild(idInput);
+      var nameField = el("div", "field");
+      nameField.innerHTML = '<label>Имя (необязательно)</label>';
+      var nameInput = el("input"); nameInput.type = "text"; nameInput.placeholder = "Имя";
+      nameField.appendChild(nameInput);
+      addRow.appendChild(idField); addRow.appendChild(nameField);
+      addBox.appendChild(addRow);
+      var addBtn = el("button", "btn-ghost", "Добавить человека");
+      addBtn.addEventListener("click", function () {
+        var tgId = idInput.value.trim();
+        if (!tgId || !/^-?\d+$/.test(tgId)) { toast("Введите Telegram ID числом"); return; }
+        addBtn.disabled = true;
+        api("/api/pause-admins", { method: "POST", body: { tg_id: tgId, name: nameInput.value.trim() } })
+          .then(function () { haptic("success"); load(); })
+          .catch(function (err) { addBtn.disabled = false; toast("Не удалось добавить: " + err.message); });
+      });
+      addBox.appendChild(addBtn);
+      root.appendChild(addBox);
+
+      // --- уже добавленные ---
+      root.appendChild(el("h3", "ops-section-title", "Уже добавлены"));
+      if (!admins.length) {
+        root.appendChild(el("div", "empty-note", "Пока никого не добавили."));
+        return;
+      }
+      var card = el("div", "card");
+      admins.forEach(function (a, idx) {
+        var row = el("div", "ops-debtor-row" + (idx ? " ops-breakdown-row-sep" : ""));
+        var badges = '<span class="pill ' + (a.finance ? "paid" : "muted") + '">Финансы</span>' +
+          '<span class="pill ' + (a.debtors ? "paid" : "muted") + '">Должники</span>';
+        row.innerHTML =
+          '<div class="ops-debtor-name">' + escapeHtml(a.name || a.tg_id) + '</div>' +
+          '<div class="ops-pa-badges">' + badges + '</div>';
+        row.addEventListener("click", function () {
+          haptic("select");
+          wizardStep(function (body) {
+            opsStepHeader(body, a.name || a.tg_id);
+            var sub = el("div");
+            sub.appendChild(el("div", "skeleton-block"));
+            body.appendChild(sub);
+            loadOpsAdminDetail(sub, a);
+          });
+        });
+        card.appendChild(row);
+      });
+      root.appendChild(card);
+    }
+
+    load();
+  }
+
+  function loadOpsAdminDetail(root, admin) {
+    function renderToggle(label, feature, allowed) {
+      var row = el("div", "ops-breakdown-row ops-breakdown-row-sep");
+      var left = el("div", "ops-breakdown-name", label);
+      var switchLabel = document.createElement("label");
+      switchLabel.className = "pa-switch";
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = allowed;
+      var slider = document.createElement("span");
+      slider.className = "pa-switch-slider";
+      switchLabel.appendChild(input);
+      switchLabel.appendChild(slider);
+      input.addEventListener("change", function () {
+        input.disabled = true;
+        api("/api/pause-admins/" + encodeURIComponent(admin.tg_id) + "/feature", {
+          method: "POST", body: { feature: feature, allowed: input.checked },
+        }).then(function (data) {
+          admin.finance = data.admin.finance;
+          admin.debtors = data.admin.debtors;
+          input.disabled = false;
+          toast(input.checked ? "Функция включена" : "Функция выключена");
+        }).catch(function (err) {
+          input.checked = !input.checked;
+          input.disabled = false;
+          toast("Не удалось сохранить: " + err.message);
+        });
+      });
+      row.appendChild(left);
+      row.appendChild(switchLabel);
+      return row;
+    }
+
+    root.innerHTML = "";
+    var card = el("div", "card");
+    var head = el("div");
+    head.innerHTML =
+      '<div class="ops-debtor-card-name">' + escapeHtml(admin.name || "Без имени") + '</div>' +
+      '<div class="ops-debtor-card-line">Telegram ID: ' + escapeHtml(admin.tg_id) + '</div>' +
+      (admin.added ? '<div class="ops-debtor-card-line">Добавлен: ' + escapeHtml(admin.added) + '</div>' : "");
+    card.appendChild(head);
+    root.appendChild(card);
+
+    root.appendChild(el("h3", "ops-section-title", "Функции"));
+    var featuresCard = el("div", "card");
+    featuresCard.appendChild(renderToggle("Финансы", "finance", admin.finance));
+    featuresCard.appendChild(renderToggle("Должники", "debtors", admin.debtors));
+    root.appendChild(featuresCard);
+
+    var removeBtn = el("button", "ops-delete-history-btn", "Удалить администратора");
+    removeBtn.addEventListener("click", function () {
+      showConfirm(
+        "Удалить " + (admin.name || admin.tg_id) + " из администраторов? Доступ к PAUSE App пропадёт полностью.",
+        "Удалить",
+        function () {
+          hideConfirm();
+          removeBtn.disabled = true;
+          api("/api/pause-admins/" + encodeURIComponent(admin.tg_id) + "/remove", { method: "POST", body: {} })
+            .then(function () { haptic("success"); wizardBack(); })
+            .catch(function (err) { removeBtn.disabled = false; toast("Не удалось удалить: " + err.message); });
+        }
+      );
+    });
+    root.appendChild(removeBtn);
+  }
+
   // --- Мои послания --------------------------------------------------------
 
   function loadMessages(root) {
@@ -3601,7 +3768,10 @@
     editState = {};
     initNav();
     initBottomNavScroll();
-    api("/api/me").then(function () {
+    api("/api/me").then(function (me) {
+      state.isMainAdmin = !!me.is_main_admin;
+      state.paFinance = !!me.pa_finance;
+      state.paDebtors = !!me.pa_debtors;
       showScreen("home");
     }).catch(function (err) {
       var root = document.getElementById("home-root");

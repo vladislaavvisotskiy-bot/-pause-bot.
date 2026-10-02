@@ -71,14 +71,33 @@ async def admin_auth_middleware(request: web.Request, handler):
     """Доступ — ТОЛЬКО админам, проверяется на КАЖДОМ запросе к /api/* по
     подписи initData (см. webapp._verify_init_data — та же HMAC-проверка,
     что и у Mini App курьера, тот же секрет BOT_TOKEN), а не только тем,
-    что кнопка входа скрыта в интерфейсе бота."""
+    что кнопка входа скрыта в интерфейсе бота.
+
+    Два уровня: главный админ (config.ADMIN_IDS) — доступ ко всему всегда;
+    делегированный админ (лист "Админы PAUSE App", см. "Операционный
+    центр" → "Администраторы") — базовый доступ к приложению плюс только
+    те функции Операционного центра, что ему явно выданы (request["pa_finance"]/
+    ["pa_debtors"], см. проверки в соответствующих api_ops_* ниже).
+    request["is_main_admin"] решает доступ к самому экрану "Администраторы"
+    (api_pause_admins_*) — делегированному админу он никогда не
+    показывается, не выдаётся как "функция" и не может быть включён отсюда."""
     if "/api/" in request.path:
         tg_id = _extract_tg_id(request)
         if tg_id is None:
             return web.json_response({"error": "unauthorized"}, status=401)
-        if tg_id not in config.ADMIN_IDS:
-            return web.json_response({"error": "forbidden"}, status=403)
-        request["tg_id"] = tg_id
+        if tg_id in config.ADMIN_IDS:
+            request["tg_id"] = tg_id
+            request["is_main_admin"] = True
+            request["pa_finance"] = True
+            request["pa_debtors"] = True
+        else:
+            pa = await _retry_sheets(sheets.get_pause_admin, tg_id)
+            if not pa:
+                return web.json_response({"error": "forbidden"}, status=403)
+            request["tg_id"] = tg_id
+            request["is_main_admin"] = False
+            request["pa_finance"] = pa["finance"]
+            request["pa_debtors"] = pa["debtors"]
     return await handler(request)
 
 
@@ -117,6 +136,9 @@ async def api_me(request: web.Request):
         "tg_id": tg_id,
         "registered": bool(client),
         "name": (client or {}).get("name", ""),
+        "is_main_admin": request["is_main_admin"],
+        "pa_finance": request["pa_finance"],
+        "pa_debtors": request["pa_debtors"],
     })
 
 
@@ -948,6 +970,8 @@ def _ops_order_key(item: dict):
 
 
 async def api_ops_summary(request: web.Request):
+    if not request["pa_finance"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     rng = _ops_date_range(request)
     if not rng:
         return web.json_response({"error": "bad_range"}, status=400)
@@ -1048,6 +1072,8 @@ async def api_ops_summary(request: web.Request):
 
 
 async def api_ops_orders(request: web.Request):
+    if not request["pa_finance"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     rng = _ops_date_range(request)
     if not rng:
         return web.json_response({"error": "bad_range"}, status=400)
@@ -1106,6 +1132,8 @@ async def api_ops_orders(request: web.Request):
 # ---------------------------------------------------------------------------
 
 async def api_ops_debtors(request: web.Request):
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     # Ленивая уборка: кто закрыл все долги с прошлого открытия этого
     # экрана — его комментарии/напоминания больше не нужны (прямая
     # просьба пользователя), чистим перед каждым показом списка.
@@ -1115,6 +1143,8 @@ async def api_ops_debtors(request: web.Request):
 
 
 async def api_ops_debtor_detail(request: web.Request):
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     client_id = request.match_info.get("client_id", "")
     client = await _retry_sheets(sheets.get_client_by_id, client_id)
     lines = await _retry_sheets(sheets.get_debtor_lines, client_id)
@@ -1163,6 +1193,8 @@ async def api_ops_debtor_detail(request: web.Request):
 
 
 async def api_ops_debtor_comment(request: web.Request):
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     client_id = request.match_info.get("client_id", "")
     body = await request.json()
     text = (body.get("text") or "").strip()
@@ -1174,6 +1206,8 @@ async def api_ops_debtor_comment(request: web.Request):
 
 
 async def api_ops_debtor_reminder_set(request: web.Request):
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     client_id = request.match_info.get("client_id", "")
     body = await request.json()
     date_str = (body.get("date") or "").strip()
@@ -1188,6 +1222,8 @@ async def api_ops_debtor_reminder_set(request: web.Request):
 
 
 async def api_ops_debtor_reminder_delete(request: web.Request):
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     client_id = request.match_info.get("client_id", "")
     body = await request.json()
     row = body.get("row")
@@ -1199,6 +1235,8 @@ async def api_ops_debtor_reminder_delete(request: web.Request):
 
 
 async def api_ops_debtor_line_pay(request: web.Request):
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     client_id = request.match_info.get("client_id", "")
     body = await request.json()
     row = body.get("row")
@@ -1218,6 +1256,8 @@ async def api_ops_debtor_line_pay(request: web.Request):
 
 
 async def api_ops_debtor_line_unpay(request: web.Request):
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     client_id = request.match_info.get("client_id", "")
     body = await request.json()
     row = body.get("row")
@@ -1237,10 +1277,62 @@ async def api_ops_debtor_line_unpay(request: web.Request):
 
 
 async def api_ops_debtor_delete_history(request: web.Request):
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
     client_id = request.match_info.get("client_id", "")
     ok = await _retry_sheets(sheets.delete_debtor_history, client_id)
     if not ok:
         return web.json_response({"error": "still_has_debt"}, status=409)
+    return web.json_response({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Операционный центр → Администраторы (только главный админ — ADMIN_IDS).
+# Даёт/забирает делегированным админам доступ к "Финансы"/"Должники" —
+# см. admin_auth_middleware (request["is_main_admin"]/["pa_finance"]/
+# ["pa_debtors"]) и sheets.get_pause_admins/add_pause_admin/
+# set_pause_admin_feature/remove_pause_admin.
+# ---------------------------------------------------------------------------
+
+async def api_pause_admins_list(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    admins = await _retry_sheets(sheets.get_pause_admins)
+    return web.json_response({"admins": admins})
+
+
+async def api_pause_admins_add(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    tg_id = (str(body.get("tg_id") or "")).strip()
+    name = (body.get("name") or "").strip()
+    if not tg_id or not tg_id.lstrip("-").isdigit():
+        return web.json_response({"error": "bad_tg_id"}, status=400)
+    await _retry_sheets(sheets.add_pause_admin, tg_id, name)
+    admins = await _retry_sheets(sheets.get_pause_admins)
+    return web.json_response({"admins": admins})
+
+
+async def api_pause_admins_feature(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    feature = (body.get("feature") or "").strip()
+    if feature not in ("finance", "debtors"):
+        return web.json_response({"error": "bad_feature"}, status=400)
+    allowed = bool(body.get("allowed"))
+    await _retry_sheets(sheets.set_pause_admin_feature, tg_id, feature, allowed)
+    admin = await _retry_sheets(sheets.get_pause_admin, tg_id)
+    return web.json_response({"admin": admin})
+
+
+async def api_pause_admins_remove(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    await _retry_sheets(sheets.remove_pause_admin, tg_id)
     return web.json_response({"ok": True})
 
 
@@ -1285,4 +1377,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/debtors/{client_id}/line/pay", api_ops_debtor_line_pay)
     app.router.add_post("/api/ops/debtors/{client_id}/line/unpay", api_ops_debtor_line_unpay)
     app.router.add_post("/api/ops/debtors/{client_id}/delete-history", api_ops_debtor_delete_history)
+    app.router.add_get("/api/pause-admins", api_pause_admins_list)
+    app.router.add_post("/api/pause-admins", api_pause_admins_add)
+    app.router.add_post("/api/pause-admins/{tg_id}/feature", api_pause_admins_feature)
+    app.router.add_post("/api/pause-admins/{tg_id}/remove", api_pause_admins_remove)
     return app
