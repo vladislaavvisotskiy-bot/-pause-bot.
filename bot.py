@@ -44,6 +44,35 @@ async def send_morning_reports(bot: Bot):
             logger.exception("Не удалось отправить утренний отчёт админу ID %s", admin_id)
 
 
+async def send_debt_reminders(bot: Bot):
+    """Напоминания "Должники → Напоминание" из PAUSE App (Операционный
+    центр), которые должны сработать сегодня — см. sheets.
+    get_due_debt_reminders/set_debt_reminder. Одна напоминалка — одно
+    сообщение каждому админу, сразу помечаем отправленной (mark_debt_
+    reminder_sent), чтобы не прислать второй раз завтра."""
+    if not config.ADMIN_IDS:
+        return
+    date_str = sheets.today_date_str()
+    try:
+        due = sheets.get_due_debt_reminders(date_str)
+    except Exception:
+        logger.exception("Не удалось получить напоминания по должникам на %s", date_str)
+        return
+    for r in due:
+        text = texts.ADMIN_DEBT_REMINDER.format(name=r["name"])
+        if r["note"]:
+            text += f"\n{r['note']}"
+        for admin_id in config.ADMIN_IDS:
+            try:
+                await bot.send_message(admin_id, text)
+            except Exception:
+                logger.exception("Не удалось отправить напоминание о должнике админу ID %s", admin_id)
+        try:
+            sheets.mark_debt_reminder_sent(r["row"])
+        except Exception:
+            logger.exception("Не удалось отметить напоминание отправленным (row=%s)", r["row"])
+
+
 async def send_warm_broadcast(bot: Bot):
     """Ежедневная тёплая рассылка всем зарегистрированным клиентам —
     персональное приветствие по имени + общая фраза дня. Тем, кто уже
@@ -136,6 +165,7 @@ async def main():
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
     h, m = map(int, config.MORNING_REPORT_TIME.split(":"))
     scheduler.add_job(send_morning_reports, "cron", hour=h, minute=m, args=[bot])
+    scheduler.add_job(send_debt_reminders, "cron", hour=h, minute=m, args=[bot])
     wh, wm = map(int, config.WARM_BROADCAST_TIME.split(":"))
     scheduler.add_job(send_warm_broadcast, "cron", hour=wh, minute=wm, args=[bot])
     prh, prm = map(int, config.PAYMENT_REMINDER_TIME.split(":"))

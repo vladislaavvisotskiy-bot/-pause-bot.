@@ -70,6 +70,23 @@ SHEET_CLIENTS = "Sheet1"
 SHEET_ORDERS = "Заказы"
 SHEET_REFERENCE = "Справочники"
 
+# Операционный центр (PAUSE App) → Должники — два НОВЫХ листа, бот сам
+# создаёт их при первом обращении (см. sheets._ws_or_create), если их ещё
+# нет в таблице — вручную заводить не нужно. Долг сам по себе по-прежнему
+# считается из "Заказы" (payment == "В долг", см. get_all_debtors) — эти
+# два листа хранят только то, чего в "Заказы" нет: комментарии админа и
+# напоминания, оба привязаны к client_id.
+SHEET_DEBT_COMMENTS = "Комментарии долгов"
+SHEET_DEBT_REMINDERS = "Напоминания долгов"
+DC_CLIENT_ID = 1   # A
+DC_DATE = 2        # B — дата, когда комментарий написан (бот ставит сам)
+DC_TEXT = 3        # C
+DR_CLIENT_ID = 1   # A
+DR_CREATED = 2     # B — дата, когда напоминание поставили
+DR_DATE = 3        # C — дата, на которую напоминание сработает
+DR_NOTE = 4        # D
+DR_SENT = 5        # E — "Да" после отправки, чтобы не прислать дважды
+
 # Sheet1 (CRM): header row 5, data starts row 6
 CLIENTS_HEADER_ROW = 5
 CLIENTS_DATA_START_ROW = 6

@@ -1033,6 +1033,91 @@ async def api_ops_orders(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# Операционный центр → Должники. Сам долг по-прежнему из "Заказы"
+# (sheets.get_all_debtors/get_debtor_lines) — комментарии и напоминания
+# в отдельных листах, бот заводит их сам при первом обращении
+# (см. sheets._ws_or_create).
+# ---------------------------------------------------------------------------
+
+async def api_ops_debtors(request: web.Request):
+    # Ленивая уборка: кто закрыл все долги с прошлого открытия этого
+    # экрана — его комментарии/напоминания больше не нужны (прямая
+    # просьба пользователя), чистим перед каждым показом списка.
+    await _retry_sheets(sheets.cleanup_resolved_debtors)
+    debtors = await _retry_sheets(sheets.get_all_debtors)
+    return web.json_response({"debtors": debtors})
+
+
+async def api_ops_debtor_detail(request: web.Request):
+    client_id = request.match_info.get("client_id", "")
+    client = await _retry_sheets(sheets.get_client_by_id, client_id)
+    lines = await _retry_sheets(sheets.get_debtor_lines, client_id)
+    comments = await _retry_sheets(sheets.get_debt_comments, client_id)
+    reminders = await _retry_sheets(sheets.get_debt_reminders, client_id)
+
+    lines_out = [
+        {"date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]), "qty": l["qty"], "sum": l["sum"]}
+        for l in lines
+    ]
+    # "Написать" — по tg_id (настоящий Telegram ID клиента, известен для
+    # любого, кто хоть раз писал боту), а не по вписанному вручную
+    # "юзернейму" в Sheet1: тот — свободный текст (см. config.COL_TELEGRAM
+    # — "Instagram/Telegram username"), не всегда вообще про Telegram и
+    # может быть устаревшим. tg://user?id=... открывает диалог даже у
+    # клиента без публичного @username; есть только у тех, кто хоть раз
+    # писал боту (старые карточки, заведённые вручную, — без tg_id, см.
+    # config.COL_TG_ID) — для них кнопка на фронте будет неактивна.
+    tg_id = (client or {}).get("tg_id", "")
+    return web.json_response({
+        "client_id": client_id,
+        "name": (client or {}).get("name") or client_id,
+        "phone": (client or {}).get("contact", ""),
+        "telegram": (client or {}).get("telegram", ""),
+        "tg_link": f"tg://user?id={tg_id}" if tg_id else "",
+        "total": sum(l["sum"] for l in lines),
+        "lines": lines_out,
+        "comments": comments,
+        "reminders": reminders,
+    })
+
+
+async def api_ops_debtor_comment(request: web.Request):
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        return web.json_response({"error": "text_required"}, status=400)
+    await _retry_sheets(sheets.add_debt_comment, client_id, text)
+    comments = await _retry_sheets(sheets.get_debt_comments, client_id)
+    return web.json_response({"comments": comments})
+
+
+async def api_ops_debtor_reminder_set(request: web.Request):
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    date_str = (body.get("date") or "").strip()
+    note = (body.get("note") or "").strip()
+    try:
+        dt.datetime.strptime(date_str, "%d.%m.%Y")
+    except ValueError:
+        return web.json_response({"error": "bad_date"}, status=400)
+    await _retry_sheets(sheets.set_debt_reminder, client_id, date_str, note)
+    reminders = await _retry_sheets(sheets.get_debt_reminders, client_id)
+    return web.json_response({"reminders": reminders})
+
+
+async def api_ops_debtor_reminder_delete(request: web.Request):
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    row = body.get("row")
+    if not isinstance(row, int):
+        return web.json_response({"error": "row_required"}, status=400)
+    await _retry_sheets(sheets.delete_debt_reminder, row)
+    reminders = await _retry_sheets(sheets.get_debt_reminders, client_id)
+    return web.json_response({"reminders": reminders})
+
+
+# ---------------------------------------------------------------------------
 
 def create_app(bot=None) -> web.Application:
     app = web.Application(middlewares=[error_middleware, admin_auth_middleware])
@@ -1065,4 +1150,9 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/feed/image/{file_id}", api_feed_image)
     app.router.add_get("/api/ops/summary", api_ops_summary)
     app.router.add_get("/api/ops/orders", api_ops_orders)
+    app.router.add_get("/api/ops/debtors", api_ops_debtors)
+    app.router.add_get("/api/ops/debtors/{client_id}", api_ops_debtor_detail)
+    app.router.add_post("/api/ops/debtors/{client_id}/comment", api_ops_debtor_comment)
+    app.router.add_post("/api/ops/debtors/{client_id}/reminder", api_ops_debtor_reminder_set)
+    app.router.add_post("/api/ops/debtors/{client_id}/reminder/delete", api_ops_debtor_reminder_delete)
     return app

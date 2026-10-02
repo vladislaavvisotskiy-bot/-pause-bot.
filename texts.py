@@ -421,6 +421,8 @@ ADMIN_SETS_USE_BUTTONS = "Выбирайте сеты кнопками выше 
 ADMIN_DEBTORS_EMPTY = "Долгов нет — приятная новость 🪴"
 ADMIN_DEBTORS_HEADER = "Текущие долги:"
 
+ADMIN_DEBT_REMINDER = "🔔 Напоминание по должнику: {name}"
+
 ADMIN_MORNING_HEADER = "☘️ Доброе утро! Отчёты на сегодня готовы."
 
 ADMIN_CARD_PAYMENT_ALERT = (

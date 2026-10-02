@@ -84,6 +84,20 @@ def _ws(name):
     return _connect().worksheet(name)
 
 
+def _ws_or_create(name: str, header: list) -> gspread.Worksheet:
+    """Как _ws, но сама заводит лист с заголовком, если его ещё нет —
+    для листов, которые не часть исходной таблицы PAUSE, а появились
+    вместе с фичей (см. config.SHEET_DEBT_COMMENTS/SHEET_DEBT_REMINDERS):
+    админу не нужно вручную готовить структуру в Google Таблице."""
+    sh = _connect()
+    try:
+        return sh.worksheet(name)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=name, rows=200, cols=max(len(header), 1))
+        ws.update([header], "A1")
+        return ws
+
+
 # ---------------------------------------------------------------------------
 # Клиенты (Sheet1 / CRM)
 # ---------------------------------------------------------------------------
@@ -428,6 +442,168 @@ def get_all_debtors() -> list:
             debts[key] = {"name": name, "id": eid, "sum": 0}
         debts[key]["sum"] += amount
     return sorted(debts.values(), key=lambda d: -d["sum"])
+
+
+def get_debtor_lines(client_id) -> list:
+    """Строки-позиции долга ОДНОГО клиента — "за какое число, какой сет,
+    какая сумма" для карточки должника в Операционном центре. Та же
+    фильтрация, что и в get_all_debtors (payment == "В долг", не
+    отменено), но на одного клиента и с датой/сетом по каждой строке, а
+    не только суммой."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    prices = get_set_prices()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_PAYMENT:
+            continue
+        if row[config.O_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        if row[config.O_PAYMENT - 1].strip() != "В долг":
+            continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
+            continue
+        out.append({
+            "date": row[config.O_DATE - 1].strip(),
+            "set": row[config.O_SET - 1].strip(),
+            "qty": row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else "",
+            "sum": _row_amount(row, prices),
+        })
+    out.sort(key=lambda o: dt.datetime.strptime(o["date"], "%d.%m.%Y") if _is_valid_date(o["date"]) else dt.datetime.min, reverse=True)
+    return out
+
+
+def _is_valid_date(s: str) -> bool:
+    try:
+        dt.datetime.strptime(s, "%d.%m.%Y")
+        return True
+    except ValueError:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Должники — комментарии и напоминания (см. config.SHEET_DEBT_COMMENTS/
+# SHEET_DEBT_REMINDERS). Оба листа бот заводит сам при первом обращении
+# (см. _ws_or_create) и хранит там только то, чего нет в "Заказы" —
+# сам долг по-прежнему считается оттуда (get_all_debtors/get_debtor_lines).
+# ---------------------------------------------------------------------------
+
+def get_debt_comments(client_id) -> list:
+    ws = _ws_or_create(config.SHEET_DEBT_COMMENTS, ["client_id", "date", "text"])
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r == 1:  # заголовок
+            continue
+        if len(row) < config.DC_TEXT or row[config.DC_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        out.append({"row": r, "date": row[config.DC_DATE - 1].strip(), "text": row[config.DC_TEXT - 1].strip()})
+    out.sort(key=lambda c: c["row"], reverse=True)  # новые сверху
+    return out
+
+
+def add_debt_comment(client_id, text: str):
+    ws = _ws_or_create(config.SHEET_DEBT_COMMENTS, ["client_id", "date", "text"])
+    ws.append_row([str(client_id), today_date_str(), text], value_input_option="RAW")
+
+
+def get_debt_reminders(client_id, only_pending: bool = True) -> list:
+    ws = _ws_or_create(config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"])
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r == 1:
+            continue
+        if len(row) < config.DR_SENT or row[config.DR_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        sent = row[config.DR_SENT - 1].strip().lower() == "да"
+        if only_pending and sent:
+            continue
+        out.append({
+            "row": r,
+            "created": row[config.DR_CREATED - 1].strip(),
+            "date": row[config.DR_DATE - 1].strip(),
+            "note": row[config.DR_NOTE - 1].strip(),
+            "sent": sent,
+        })
+    out.sort(key=lambda r: r["row"])
+    return out
+
+
+def set_debt_reminder(client_id, reminder_date: str, note: str = ""):
+    ws = _ws_or_create(config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"])
+    ws.append_row([str(client_id), today_date_str(), reminder_date, note or "", ""], value_input_option="RAW")
+
+
+def delete_debt_reminder(row: int):
+    ws = _ws_or_create(config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"])
+    ws.delete_rows(row)
+
+
+def get_due_debt_reminders(date_str: str) -> list:
+    """Напоминания, которые должны сработать СЕГОДНЯ (date_str) и ещё не
+    отправлены — источник для утренней рассылки (см. bot.py:
+    send_debt_reminders). Имя клиента резолвим тут же, чтобы вызывающему
+    коду не нужно было отдельно ходить в Sheet1."""
+    ws = _ws_or_create(config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"])
+    rows = ws.get_all_values()
+    clients = _clients_index()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r == 1:
+            continue
+        if len(row) < config.DR_SENT:
+            continue
+        if row[config.DR_DATE - 1].strip() != date_str:
+            continue
+        if row[config.DR_SENT - 1].strip().lower() == "да":
+            continue
+        client_id = row[config.DR_CLIENT_ID - 1].strip()
+        name = (clients.get(client_id) or {}).get("name") or client_id
+        out.append({"row": r, "client_id": client_id, "name": name, "note": row[config.DR_NOTE - 1].strip()})
+    return out
+
+
+def mark_debt_reminder_sent(row: int):
+    ws = _ws_or_create(config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"])
+    ws.update_cell(row, config.DR_SENT, "Да")
+
+
+def cleanup_resolved_debtors():
+    """Клиент закрыл все долги — его комментарии/напоминания больше не
+    нужны (по прямой просьбе: "нам не нужна такая информация больше").
+    Сверяем client_id в обоих служебных листах с текущим списком реальных
+    должников (get_all_debtors, считается из "Заказы" заново) — чей ID
+    туда не попал, у того долгов больше нет, удаляем все его строки.
+    Вызывается лениво при каждом открытии списка должников (см.
+    pauseapp.py: api_ops_debtors) — отдельного фонового задания не нужно."""
+    active_ids = {str(d["id"]) for d in get_all_debtors() if d["id"]}
+
+    for sheet_name, header, client_col in (
+        (config.SHEET_DEBT_COMMENTS, ["client_id", "date", "text"], config.DC_CLIENT_ID),
+        (config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"], config.DR_CLIENT_ID),
+    ):
+        ws = _ws_or_create(sheet_name, header)
+        rows = ws.get_all_values()
+        stale_rows = []
+        for i, row in enumerate(rows):
+            r = i + 1
+            if r == 1:
+                continue
+            if len(row) < client_col:
+                continue
+            client_id = row[client_col - 1].strip()
+            if client_id and client_id not in active_ids:
+                stale_rows.append(r)
+        for r in sorted(stale_rows, reverse=True):
+            ws.delete_rows(r)
 
 
 def get_client_orders(client_id, limit=10) -> list:

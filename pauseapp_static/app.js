@@ -2468,7 +2468,7 @@
     // клиентского профиля, визуально не путаем одно с другим (хотя
     // доступ к ЛЮБОЙ части PAUSE App сейчас и так только у админа).
     var adminRows = el("div", "card profile-nav-list");
-    adminRows.appendChild(buildProfileRow(ICON_OPS, "Операционный центр", function () { openProfileSubscreen("Операционный центр", loadOpsCenter); }));
+    adminRows.appendChild(buildProfileRow(ICON_OPS, "Операционный центр", function () { openProfileSubscreen("Операционный центр", loadOpsHub); }));
     root.appendChild(adminRows);
 
     if (tg) {
@@ -2687,15 +2687,49 @@
     });
   }
 
-  // --- Операционный центр (админ, этап 1: обзор и заказы) ------------------
+  // --- Операционный центр (админ) -------------------------------------------
   // Текст экрана — на русском без i18n-ключей, как и остальные
   // admin-only части проекта (бот, /admin и т.п. тоже не переведены):
   // смысла переводить внутренний инструмент для одного русскоязычного
   // админа нет. Доступ не проверяется отдельно здесь — весь PAUSE App уже
   // закрыт admin_auth_middleware на сервере (см. pauseapp.py), этот
   // экран ничем не отличается от остальных.
+  //
+  // Подразделы — отдельные шаги того же wizard-стека (см. wizardStep),
+  // а не отдельные экраны: "Назад" естественно возвращает из Должников/
+  // Финансов на хаб, а из карточки должника — обратно в список.
 
   var ICON_OPS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10M12 19V5M20 19v-6"/></svg>';
+  var ICON_OPS_FINANCE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1.4 1.1-2.5 2.5-2.5s2.5 1 2.5 2.2c0 2.8-5 1.6-5 4.4 0 1.2 1.1 2.2 2.5 2.2s2.5-1.1 2.5-2.5"/></svg>';
+  var ICON_OPS_DEBTORS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0.9-3.6 3.2-5.4 6-5.4s5.1 1.8 6 5.4"/><path d="M17 4.5c1.6 0.4 2.8 1.8 2.8 3.5s-1.2 3.1-2.8 3.5M21 20c-0.6-2.4-1.8-4-3.5-4.8"/></svg>';
+
+  function opsStepHeader(body, title) {
+    body.appendChild(el("h2", "wizard-title", title));
+  }
+
+  function loadOpsHub(root) {
+    root.innerHTML = "";
+    var rows = el("div", "card profile-nav-list");
+    rows.appendChild(buildProfileRow(ICON_OPS_FINANCE, "Финансы", function () {
+      wizardStep(function (body) {
+        opsStepHeader(body, "Финансы");
+        var sub = el("div");
+        sub.appendChild(el("div", "skeleton-block"));
+        body.appendChild(sub);
+        loadOpsFinance(sub);
+      });
+    }));
+    rows.appendChild(buildProfileRow(ICON_OPS_DEBTORS, "Должники", function () {
+      wizardStep(function (body) {
+        opsStepHeader(body, "Должники");
+        var sub = el("div");
+        sub.appendChild(el("div", "skeleton-block"));
+        body.appendChild(sub);
+        loadOpsDebtorsList(sub);
+      });
+    }));
+    root.appendChild(rows);
+  }
 
   function _opsFmtDate(d) {
     var dd = String(d.getDate()).padStart(2, "0");
@@ -2717,7 +2751,7 @@
     { key: "review", label: "На проверке" },
   ];
 
-  function loadOpsCenter(root) {
+  function loadOpsFinance(root) {
     var ops = {
       period: "today",
       customFrom: _opsFmtDate(new Date()),
@@ -2923,6 +2957,176 @@
     }
 
     render();
+  }
+
+  // --- Операционный центр → Должники ----------------------------------------
+  // Сам долг по-прежнему считается на сервере из "Заказы" (не дублируем
+  // подсчёт на фронте) — здесь только отображение + комментарии/
+  // напоминания, которые хранятся в отдельных листах (см. pauseapp.py:
+  // api_ops_debtor_*). "Написать" — через tg://user?id=... (настоящий
+  // Telegram ID клиента, не вписанный вручную текст "юзернейма" в CRM),
+  // этот URI-scheme Telegram-клиент перехватывает сам и открывает чат —
+  // поэтому обычная навигация (location.href), а не window.open: попапы
+  // в WebView Telegram часто просто блокируются.
+
+  function loadOpsDebtorsList(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/ops/debtors").then(function (data) {
+      root.innerHTML = "";
+      if (!data.debtors.length) {
+        root.appendChild(el("div", "empty-note", "Должников нет — приятная новость 🪴"));
+        return;
+      }
+      data.debtors.forEach(function (d) {
+        var card = el("div", "card ops-debtor-row");
+        card.innerHTML =
+          '<div class="ops-debtor-name">' + escapeHtml(d.name) + '</div>' +
+          '<div class="ops-debtor-sum">' + fmtSum(d.sum) + '</div>';
+        card.addEventListener("click", function () {
+          haptic("select");
+          wizardStep(function (body) {
+            opsStepHeader(body, d.name);
+            var sub = el("div");
+            sub.appendChild(el("div", "skeleton-block"));
+            body.appendChild(sub);
+            loadOpsDebtorDetail(sub, d.id);
+          });
+        });
+        root.appendChild(card);
+      });
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить список должников: " + err.message));
+    });
+  }
+
+  function loadOpsDebtorDetail(root, clientId) {
+    function load() {
+      root.innerHTML = "";
+      root.appendChild(el("div", "skeleton-block"));
+      api("/api/ops/debtors/" + encodeURIComponent(clientId)).then(function (data) {
+        render(data);
+      }).catch(function (err) {
+        root.innerHTML = "";
+        root.appendChild(el("div", "empty-note", "Не удалось загрузить данные: " + err.message));
+      });
+    }
+
+    function render(data) {
+      root.innerHTML = "";
+
+      // --- карточка клиента ---
+      var card = el("div", "card");
+      var cardBody = el("div");
+      cardBody.innerHTML =
+        '<div class="ops-debtor-card-name">' + escapeHtml(data.name) + '</div>' +
+        (data.phone ? '<div class="ops-debtor-card-line">' + escapeHtml(data.phone) + '</div>' : "") +
+        (data.telegram ? '<div class="ops-debtor-card-line">@' + escapeHtml(data.telegram.replace(/^@/, "")) + '</div>' : "");
+      card.appendChild(cardBody);
+      var writeBtn = el("button", "btn-primary ops-write-btn", "Написать");
+      if (data.tg_link) {
+        writeBtn.addEventListener("click", function () { window.location.href = data.tg_link; });
+      } else {
+        writeBtn.disabled = true;
+        writeBtn.title = "Телеграм не привязан — юзер скрыт";
+      }
+      card.appendChild(writeBtn);
+      root.appendChild(card);
+
+      // --- история долга ---
+      root.appendChild(el("h3", "ops-section-title", "История долга"));
+      var linesCard = el("div", "card");
+      if (data.lines.length) {
+        data.lines.forEach(function (l, idx) {
+          var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          row.innerHTML =
+            '<div class="ops-breakdown-name">' + l.date + ' — ' + escapeHtml(l.display_name) + (l.qty ? ' ×' + l.qty : '') + '</div>' +
+            '<div class="ops-breakdown-nums"><span>' + fmtSum(l.sum) + '</span></div>';
+          linesCard.appendChild(row);
+        });
+      } else {
+        linesCard.appendChild(el("div", "empty-note", "Долгов не найдено."));
+      }
+      root.appendChild(linesCard);
+      root.appendChild(el("div", "ops-debtor-total", "Итого долг: " + fmtSum(data.total)));
+
+      // --- комментарии ---
+      root.appendChild(el("h3", "ops-section-title", "Комментарии"));
+      var commentField = el("div", "field");
+      var commentInput = el("textarea");
+      commentInput.rows = 2;
+      commentInput.placeholder = "Например: обещал отдать 5 числа";
+      commentField.appendChild(commentInput);
+      root.appendChild(commentField);
+      var addCommentBtn = el("button", "btn-ghost", "Добавить комментарий");
+      addCommentBtn.addEventListener("click", function () {
+        var text = commentInput.value.trim();
+        if (!text) return;
+        addCommentBtn.disabled = true;
+        api("/api/ops/debtors/" + encodeURIComponent(clientId) + "/comment", { method: "POST", body: { text: text } })
+          .then(function () { load(); })
+          .catch(function (err) { addCommentBtn.disabled = false; toast("Не удалось сохранить: " + err.message); });
+      });
+      root.appendChild(addCommentBtn);
+
+      if (data.comments.length) {
+        var commentsCard = el("div", "card");
+        data.comments.forEach(function (c, idx) {
+          var row = el("div", "ops-comment-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          row.innerHTML = '<div class="ops-comment-date">' + c.date + '</div><div class="ops-comment-text">' + escapeHtml(c.text) + '</div>';
+          commentsCard.appendChild(row);
+        });
+        root.appendChild(commentsCard);
+      }
+
+      // --- напоминание ---
+      root.appendChild(el("h3", "ops-section-title", "Напоминание"));
+      var remRow = el("div", "ops-select-row");
+      var dateField = el("div", "field");
+      dateField.innerHTML = '<label>Дата</label>';
+      var dateInput = el("input"); dateInput.type = "date";
+      dateField.appendChild(dateInput);
+      var noteField = el("div", "field");
+      noteField.innerHTML = '<label>Заметка (необязательно)</label>';
+      var noteInput = el("input"); noteInput.type = "text"; noteInput.placeholder = "Например: перезвонить";
+      noteField.appendChild(noteInput);
+      remRow.appendChild(dateField); remRow.appendChild(noteField);
+      root.appendChild(remRow);
+      var setReminderBtn = el("button", "btn-ghost", "Установить напоминание");
+      setReminderBtn.addEventListener("click", function () {
+        if (!dateInput.value) { toast("Выберите дату"); return; }
+        setReminderBtn.disabled = true;
+        api("/api/ops/debtors/" + encodeURIComponent(clientId) + "/reminder", {
+          method: "POST", body: { date: _opsIsoToRu(dateInput.value), note: noteInput.value.trim() },
+        }).then(function () { load(); }).catch(function (err) {
+          setReminderBtn.disabled = false; toast("Не удалось сохранить: " + err.message);
+        });
+      });
+      root.appendChild(setReminderBtn);
+
+      if (data.reminders.length) {
+        var remCard = el("div", "card");
+        data.reminders.forEach(function (r, idx) {
+          var row = el("div", "ops-reminder-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          var left = el("div", "ops-breakdown-name", r.date + (r.note ? ' — ' + escapeHtml(r.note) : ''));
+          var cancelBtn = el("button", "btn-text", "Отменить");
+          cancelBtn.addEventListener("click", function () {
+            cancelBtn.disabled = true;
+            api("/api/ops/debtors/" + encodeURIComponent(clientId) + "/reminder/delete", {
+              method: "POST", body: { row: r.row },
+            }).then(function () { load(); }).catch(function (err) {
+              cancelBtn.disabled = false; toast("Не удалось отменить: " + err.message);
+            });
+          });
+          row.appendChild(left); row.appendChild(cancelBtn);
+          remCard.appendChild(row);
+        });
+        root.appendChild(remCard);
+      }
+    }
+
+    load();
   }
 
   // --- Мои послания --------------------------------------------------------
