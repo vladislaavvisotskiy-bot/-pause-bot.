@@ -1059,21 +1059,28 @@ async def api_ops_debtor_detail(request: web.Request):
         {"date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]), "qty": l["qty"], "sum": l["sum"]}
         for l in lines
     ]
-    # "Написать" — по tg_id (настоящий Telegram ID клиента, известен для
-    # любого, кто хоть раз писал боту), а не по вписанному вручную
-    # "юзернейму" в Sheet1: тот — свободный текст (см. config.COL_TELEGRAM
-    # — "Instagram/Telegram username"), не всегда вообще про Telegram и
-    # может быть устаревшим. tg://user?id=... открывает диалог даже у
-    # клиента без публичного @username; есть только у тех, кто хоть раз
-    # писал боту (старые карточки, заведённые вручную, — без tg_id, см.
-    # config.COL_TG_ID) — для них кнопка на фронте будет неактивна.
+    # "Написать" — по tg_id (настоящий Telegram ID клиента), когда он
+    # известен: tg://user?id=... открывает диалог даже без публичного
+    # @username, и надёжнее вписанного вручную текста. У клиента, который
+    # ни разу не писал боту (старая карточка, заведена вручную — tg_id
+    # нет, см. config.COL_TG_ID), используем вписанный вручную юзернейм
+    # из Sheet1 (config.COL_TELEGRAM — "Instagram/Telegram username") как
+    # запасной вариант: https://t.me/<юзернейм>, с "@" впереди (если он
+    # есть) срезаем. Ни того ни другого нет — кнопка неактивна на фронте.
     tg_id = (client or {}).get("tg_id", "")
+    telegram_username = ((client or {}).get("telegram") or "").strip().lstrip("@")
+    if tg_id:
+        tg_link = f"tg://user?id={tg_id}"
+    elif telegram_username:
+        tg_link = f"https://t.me/{telegram_username}"
+    else:
+        tg_link = ""
     return web.json_response({
         "client_id": client_id,
         "name": (client or {}).get("name") or client_id,
         "phone": (client or {}).get("contact", ""),
         "telegram": (client or {}).get("telegram", ""),
-        "tg_link": f"tg://user?id={tg_id}" if tg_id else "",
+        "tg_link": tg_link,
         "total": sum(l["sum"] for l in lines),
         "lines": lines_out,
         "comments": comments,
