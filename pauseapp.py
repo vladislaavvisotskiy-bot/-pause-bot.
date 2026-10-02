@@ -955,7 +955,6 @@ async def api_ops_summary(request: web.Request):
     items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to)
     margins = await _retry_sheets(sheets.get_set_margins)
 
-    order_keys = set()
     revenue = 0
     profit = 0
     by_set = {}    # ключ — КЛИЕНТСКОЕ название (display_name), не сырое из
@@ -968,7 +967,6 @@ async def api_ops_summary(request: web.Request):
     people = {}    # ключ — client_id
     for i in items:
         key = _ops_order_key(i)
-        order_keys.add(key)
         revenue += i["sum"]
         item_profit = margins.get(i["set"], 0) * i["qty"]
         profit += item_profit
@@ -989,7 +987,14 @@ async def api_ops_summary(request: web.Request):
 
     total_qty = sum(s["qty"] for s in by_set.values())
     by_set_list = sorted(
-        [dict(s, pct=round(s["qty"] / total_qty * 100, 1) if total_qty else 0) for s in by_set.values()],
+        [
+            dict(
+                s,
+                pct=round(s["qty"] / total_qty * 100, 1) if total_qty else 0,
+                kitchen=s["revenue"] - s["profit"],
+            )
+            for s in by_set.values()
+        ],
         key=lambda x: -x["qty"],
     )
     by_zone_list = sorted(
@@ -1007,9 +1012,16 @@ async def api_ops_summary(request: web.Request):
         key=lambda x: x["name"],
     )
 
+    kitchen = revenue - profit
+    delivery_cost = 0  # расходы на доставку — подключим отдельным источником позже
+    net_profit = profit - delivery_cost
+
     return web.json_response({
         "date_from": date_from, "date_to": date_to,
-        "order_count": len(order_keys), "revenue": revenue, "profit": profit,
+        # "заказов" считаем по количеству проданных сетов (штук), а не по
+        # числу оформленных заказов — так попросил админ.
+        "order_count": total_qty, "revenue": revenue, "profit": profit,
+        "kitchen": kitchen, "delivery_cost": delivery_cost, "net_profit": net_profit,
         "people_count": len(people_list),
         "by_set": by_set_list, "by_zone": by_zone_list, "people": people_list,
     })

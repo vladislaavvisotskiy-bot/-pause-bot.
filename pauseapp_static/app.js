@@ -2814,6 +2814,25 @@
     });
   }
 
+  // Детальный экран "Чистая прибыль" — валовая прибыль минус расходы на
+  // доставку. Расходы на доставку пока всегда 0 (их будет заполнять
+  // другой человек в отдельном месте таблицы — подключим позже), экран
+  // уже готов показать реальную цифру, когда источник появится.
+  function renderOpsNetProfitDetail(body, summary) {
+    var card = el("div", "card");
+    var row = function (label, value, hint, sep) {
+      var r = el("div", "ops-breakdown-row" + (sep ? " ops-breakdown-row-sep" : ""));
+      r.innerHTML =
+        '<div class="ops-breakdown-name">' + escapeHtml(label) + (hint ? ' <span class="ops-hint-inline">' + escapeHtml(hint) + '</span>' : '') + '</div>' +
+        '<div class="ops-breakdown-nums"><span>' + fmtSum(value) + '</span></div>';
+      return r;
+    };
+    card.appendChild(row("Валовая прибыль", summary.profit, null, false));
+    card.appendChild(row("Доставка", summary.delivery_cost, "подключим позже", true));
+    body.appendChild(card);
+    body.appendChild(el("div", "ops-debtor-total", "Чистая прибыль: " + fmtSum(summary.net_profit)));
+  }
+
   function loadOpsFinance(root) {
     var ops = {
       period: "today",
@@ -2827,6 +2846,11 @@
     function range() {
       var today = new Date();
       if (ops.period === "custom") return { from: ops.customFrom, to: ops.customTo };
+      if (ops.period === "yesterday") {
+        var y = new Date(today);
+        y.setDate(y.getDate() - 1);
+        return { from: _opsFmtDate(y), to: _opsFmtDate(y) };
+      }
       var from = new Date(today);
       if (ops.period === "7d") from.setDate(from.getDate() - 6);
       else if (ops.period === "30d") from.setDate(from.getDate() - 29);
@@ -2856,7 +2880,7 @@
 
       // --- период ---
       var periodChips = el("div", "feed-filters");
-      [["today", "Сегодня"], ["7d", "7 дней"], ["30d", "30 дней"], ["custom", "Свой период"]].forEach(function (p) {
+      [["today", "Сегодня"], ["yesterday", "Вчера"], ["7d", "7 дней"], ["30d", "30 дней"], ["custom", "Свой период"]].forEach(function (p) {
         var chip = el("button", "filter-chip" + (ops.period === p[0] ? " active" : ""), p[1]);
         chip.addEventListener("click", function () { ops.period = p[0]; render(); });
         periodChips.appendChild(chip);
@@ -2922,6 +2946,15 @@
           opsStepHeader(b, "Валовая прибыль по сетам");
           renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.profit); }, summary.profit);
         });
+      }));
+      statGrid.appendChild(opsStatTile(fmtSum(summary.kitchen), "к оплате кухне", function () {
+        wizardStep(function (b) {
+          opsStepHeader(b, "К оплате кухне по сетам");
+          renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.kitchen); }, summary.kitchen);
+        });
+      }));
+      statGrid.appendChild(opsStatTile(fmtSum(summary.net_profit), "чистая прибыль", function () {
+        wizardStep(function (b) { opsStepHeader(b, "Чистая прибыль"); renderOpsNetProfitDetail(b, summary); });
       }));
       body.appendChild(statGrid);
 
