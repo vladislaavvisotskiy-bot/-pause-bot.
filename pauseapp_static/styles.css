@@ -665,15 +665,30 @@ p { margin: 0; color: var(--ink-soft); }
 .profile-stat-value { font-size: 20px; font-weight: 700; color: var(--ink); }
 .profile-stat-label { font-size: 11px; color: var(--ink-soft); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.03em; }
 
-.club-progress-track {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--ivory-deep);
-  margin: 10px 0 6px;
-  overflow: hidden;
-}
-.club-progress-fill { height: 100%; background: var(--ink); border-radius: 999px; }
-.club-progress-label { font-size: 13.5px; color: var(--ink); }
+.club-progress-label { font-size: 13.5px; color: var(--ink); margin-bottom: 16px; }
+
+/* Экран "Pause Club" — шкала всех статусов + карточки (см. app.js:
+   renderClubLevelsScreen/buildClubLevelCard). */
+.club-scale { display: flex; gap: 4px; margin-bottom: 10px; }
+.club-scale-seg { flex: 1; height: 6px; border-radius: 999px; background: var(--ivory-deep); }
+.club-scale-seg.filled { background: var(--ink); }
+
+.club-level-list { display: flex; flex-direction: column; gap: 10px; }
+.club-level-card { padding: 14px 16px; cursor: pointer; }
+.club-level-card.current { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.club-level-card-head { display: flex; align-items: center; gap: 10px; }
+.club-level-card-icon { flex: 0 0 auto; color: var(--ink); display: flex; }
+.club-level-card-info { flex: 1; min-width: 0; }
+.club-level-card-name { font-size: 15px; font-weight: 700; color: var(--ink); }
+.club-level-card-range { font-size: 12.5px; color: var(--ink-soft); margin-top: 1px; }
+.club-level-card-right { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.club-level-card-check { color: var(--success); display: flex; }
+.club-level-card-chevron { color: var(--ink-soft); display: flex; transition: transform .25s ease; }
+.club-level-card-chevron.up { transform: rotate(-90deg); }
+.club-level-card-details { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.club-level-card-detail-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; padding: 4px 0; }
+.club-level-card-detail-row span:first-child { color: var(--ink-soft); }
+.club-level-card-detail-row span:last-child { color: var(--ink); font-weight: 600; text-align: right; }
 
 .profile-section-title {
   font-size: 12px;

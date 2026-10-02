@@ -322,6 +322,18 @@ CLUB_LEVELS = [
     ("ambassador", 25, "👑", "VIP Pause Club"),
 ]
 
+# Что даёт каждый статус — ТОЛЬКО для отображения на экране "Pause Club"
+# (PAUSE App, карточка профиля клиента → список всех статусов). Это
+# описательный текст для клиента, ни на какую фактическую логику
+# (реальный расчёт доставки, допуск к розыгрышам) эти строки не влияют —
+# та логика как считалась отдельно от этого места, так и считается.
+CLUB_BENEFITS = {
+    "guest": {"delivery": "Бесплатно", "giveaways": "—"},
+    "regular": {"delivery": "10 000 сум за точку", "giveaways": "—"},
+    "circle": {"delivery": "5 000 сум за точку", "giveaways": "Ежедневный «Пауза в подарок»"},
+    "ambassador": {"delivery": "Бесплатно", "giveaways": "Ежедневный «Пауза в подарок» + ежемесячный (Алиса, телефоны)"},
+}
+
 # --- PDF-отчёт для кухни ---
 PDF_FONT_REGULAR = os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans.ttf")
 PDF_FONT_BOLD = os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans-Bold.ttf")

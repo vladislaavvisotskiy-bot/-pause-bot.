@@ -168,9 +168,12 @@
       "profile.loadFailed": "Не удалось загрузить профиль: {msg}",
       "profile.notRegistered": "Вы ещё не зарегистрированы. Наберите /start в чате с ботом, чтобы завести профиль.",
       "profile.noName": "Без имени",
-      "profile.member": "Участник",
       "profile.toNextLevel": "До статуса «{emoji} {label}» осталось заказов: {left}",
       "profile.topLevel": "Вы уже на высшем уровне PAUSE Club 🎉",
+      "profile.clubTitle": "Pause Club",
+      "profile.clubOrders": "{range} заказов",
+      "profile.clubDelivery": "Доставка",
+      "profile.clubGiveaways": "Розыгрыши",
       "club.level.guest": "Гость PAUSE", "club.level.regular": "Своя пауза",
       "club.level.circle": "Внутренний круг", "club.level.ambassador": "VIP Pause Club",
       "profile.statOrders": "заказов", "profile.statPromo": "акции", "profile.statPosts": "постов",
@@ -360,9 +363,12 @@
       "profile.loadFailed": "Profilni yuklab bo'lmadi: {msg}",
       "profile.notRegistered": "Siz hali ro'yxatdan o'tmagansiz. Profil ochish uchun botga /start yozing.",
       "profile.noName": "Ismsiz",
-      "profile.member": "A'zo",
       "profile.toNextLevel": "«{emoji} {label}» darajasigacha qolgan buyurtmalar: {left}",
       "profile.topLevel": "Siz allaqachon PAUSE Club eng yuqori darajasidasiz 🎉",
+      "profile.clubTitle": "Pause Club",
+      "profile.clubOrders": "{range} ta buyurtma",
+      "profile.clubDelivery": "Yetkazib berish",
+      "profile.clubGiveaways": "Yutuqlar",
       "club.level.guest": "PAUSE mehmoni", "club.level.regular": "Shaxsiy pauza",
       "club.level.circle": "Ichki doira", "club.level.ambassador": "VIP Pause Club",
       "profile.statOrders": "buyurtma", "profile.statPromo": "aksiya", "profile.statPosts": "post",
@@ -552,11 +558,14 @@
       "profile.loadFailed": "Couldn't load profile: {msg}",
       "profile.notRegistered": "You're not registered yet. Send /start in the bot chat to create a profile.",
       "profile.noName": "No name",
-      "profile.member": "Member",
       "profile.toNextLevel": "{left} orders left to «{emoji} {label}»",
       "club.level.guest": "PAUSE guest", "club.level.regular": "My Pause",
       "club.level.circle": "Inner Circle", "club.level.ambassador": "VIP Pause Club",
       "profile.topLevel": "You're already at the top PAUSE Club level 🎉",
+      "profile.clubTitle": "Pause Club",
+      "profile.clubOrders": "{range} orders",
+      "profile.clubDelivery": "Delivery",
+      "profile.clubGiveaways": "Giveaways",
       "profile.statOrders": "orders", "profile.statPromo": "promos", "profile.statPosts": "posts",
       "profile.myOrders": "My orders", "profile.favorites": "Favorites", "profile.notifications": "Notifications",
       "profile.bonuses": "Bonuses & promo codes", "profile.support": "Support",
@@ -670,6 +679,74 @@
   };
   function clubLevelIcon(key) {
     return CLUB_LEVEL_ICONS[key] || "";
+  }
+
+  var ICON_CLUB_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+
+  // Экран "Pause Club" (по тапу на бейдж статуса в Профиле) — вся шкала
+  // целиком: сколько осталось до следующего уровня (как раньше), затем
+  // все 4 статуса по порядку, у пройденных — галочка, текущий —
+  // подсвечен, у каждого можно развернуть, что он даёт (p.club.levels —
+  // см. sheets.get_club_levels_overview, уже посчитано на сервере).
+  function renderClubLevelsScreen(root, p) {
+    root.innerHTML = "";
+
+    var scale = el("div", "club-scale");
+    p.club.levels.forEach(function (l) {
+      scale.appendChild(el("div", "club-scale-seg" + (l.passed || l.current ? " filled" : "")));
+    });
+    root.appendChild(scale);
+
+    if (p.club.next_label) {
+      root.appendChild(el(
+        "div", "club-progress-label",
+        t("profile.toNextLevel", { emoji: clubLevelIcon(p.club.next_key), label: escapeHtml(clubLevelLabel(p.club.next_key, p.club.next_label)), left: p.club.left })
+      ));
+    } else {
+      root.appendChild(el("div", "club-progress-label", t("profile.topLevel")));
+    }
+
+    var list = el("div", "club-level-list");
+    p.club.levels.forEach(function (l) {
+      list.appendChild(buildClubLevelCard(l));
+    });
+    root.appendChild(list);
+  }
+
+  function buildClubLevelCard(l) {
+    var card = el("div", "card club-level-card" + (l.current ? " current" : ""));
+    var expanded = false;
+
+    function render() {
+      card.innerHTML = "";
+      card.classList.toggle("expanded", expanded);
+
+      var head = el("div", "club-level-card-head");
+      head.appendChild(el("span", "club-level-card-icon", clubLevelIcon(l.key)));
+      var info = el("div", "club-level-card-info");
+      info.appendChild(el("div", "club-level-card-name", escapeHtml(clubLevelLabel(l.key, l.label))));
+      info.appendChild(el("div", "club-level-card-range", t("profile.clubOrders", { range: l.range_text })));
+      head.appendChild(info);
+
+      var right = el("div", "club-level-card-right");
+      if (l.passed) right.appendChild(el("span", "club-level-card-check", ICON_CLUB_CHECK));
+      right.appendChild(el("span", "club-level-card-chevron" + (expanded ? " up" : ""), ICON_CHEVRON));
+      head.appendChild(right);
+      card.appendChild(head);
+
+      if (expanded) {
+        var details = el("div", "club-level-card-details");
+        details.innerHTML =
+          '<div class="club-level-card-detail-row"><span>' + t("profile.clubDelivery") + '</span><span>' + escapeHtml(l.delivery) + '</span></div>' +
+          '<div class="club-level-card-detail-row"><span>' + t("profile.clubGiveaways") + '</span><span>' + escapeHtml(l.giveaways) + '</span></div>';
+        card.appendChild(details);
+      }
+
+      card.onclick = function () { haptic("select"); expanded = !expanded; render(); };
+    }
+
+    render();
+    return card;
   }
 
   // Названия блюд/сетов и варианты ("С компотом"/"Без компота") — это
@@ -2438,21 +2515,12 @@
 
     // Статус клуба виден сразу, с первого заказа (даже на "Гость PAUSE",
     // 0 заказов) — не прячем, пока не наберётся хоть один, как было
-    // раньше. По тапу — сколько осталось до следующего уровня (см.
-    // sheets.get_club_level — та же самая чистая функция, что и в боте).
-    var badge = el("button", "pill profile-club-badge", clubLevelIcon(p.club.key) + "<span>" + t("profile.member") + " " + clubLevelLabel(p.club.key, p.club.label) + "</span>");
+    // раньше. По тапу — полный экран со всеми статусами (см.
+    // renderClubLevelsScreen), а не короткая подсказка.
+    var badge = el("button", "pill profile-club-badge", clubLevelIcon(p.club.key) + "<span>" + clubLevelLabel(p.club.key, p.club.label) + "</span>");
     badge.addEventListener("click", function () {
       haptic("select");
-      if (p.club.next_label) {
-        var total = p.order_count + p.club.left;
-        var pct = total ? Math.min(100, Math.round((p.order_count / total) * 100)) : 0;
-        showInfo(
-          '<div class="club-progress-label">' + t("profile.toNextLevel", { emoji: clubLevelIcon(p.club.next_key), label: escapeHtml(clubLevelLabel(p.club.next_key, p.club.next_label)), left: p.club.left }) + '</div>' +
-          '<div class="club-progress-track"><div class="club-progress-fill" style="width:' + pct + '%"></div></div>'
-        );
-      } else {
-        showInfo('<div class="club-progress-label">' + t("profile.topLevel") + '</div>');
-      }
+      openProfileSubscreen(t("profile.clubTitle"), function (sub) { renderClubLevelsScreen(sub, p); });
     });
     head.appendChild(badge);
     root.appendChild(head);

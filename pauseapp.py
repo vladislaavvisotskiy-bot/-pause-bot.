@@ -532,14 +532,15 @@ async def api_profile(request: web.Request):
     client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
     if not client:
         return web.json_response({"registered": False})
-    level = sheets.get_club_level(client.get("order_count", 0))  # чистая функция, таблицу не трогает
+    order_count = client.get("order_count", 0)
+    level = sheets.get_club_level(order_count)  # чистая функция, таблицу не трогает
     return web.json_response({
         "registered": True,
         "name": client.get("name", ""),
         "phone": client.get("contact", ""),
         "zone": client.get("zone", ""),
         "point": client.get("point", ""),
-        "order_count": client.get("order_count", 0),
+        "order_count": order_count,
         "reg_date": client.get("reg_date", ""),
         "club": {
             "key": level.get("key"),
@@ -549,6 +550,10 @@ async def api_profile(request: web.Request):
             "next_emoji": level.get("next_emoji"),
             "next_label": level.get("next_label"),
             "left": level.get("left", 0),
+            # Полная шкала всех статусов (для экрана "Pause Club" — см.
+            # renderClubLevelsScreen в app.js), сама по себе чистая
+            # функция, доп. обращения к таблице не нужны.
+            "levels": sheets.get_club_levels_overview(order_count),
         },
     })
 

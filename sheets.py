@@ -1788,6 +1788,40 @@ def get_club_level(order_count: int) -> dict:
     return result
 
 
+def get_club_levels_overview(order_count: int) -> list:
+    """Все уровни Pause Club разом, каждый со своим диапазоном "сколько
+    заказов" и отметками "уже пройден"/"текущий" — для экрана "все
+    статусы" в PAUSE App (отличается от get_club_level, которая даёт
+    только текущий+следующий уровень для короткой подсказки). "passed" —
+    уровни СТРОГО ДО текущего (их клиент уже прошёл и двигается дальше),
+    "current" — ровно один, на котором клиент сейчас. delivery/giveaways
+    — чисто отображаемый текст из config.CLUB_BENEFITS, ни на какую
+    реальную логику доставки/розыгрышей не влияет."""
+    levels = config.CLUB_LEVELS
+    current_key = get_club_level(order_count)["key"]
+    current_index = next(i for i, l in enumerate(levels) if l[0] == current_key)
+    out = []
+    for i, (key, threshold, emoji, label) in enumerate(levels):
+        next_threshold = levels[i + 1][1] if i + 1 < len(levels) else None
+        if next_threshold is None:
+            range_text = f"{threshold}+"
+        elif next_threshold - threshold == 1:
+            range_text = str(threshold)
+        else:
+            range_text = f"{threshold}–{next_threshold - 1}"
+        benefits = config.CLUB_BENEFITS.get(key, {})
+        out.append({
+            "key": key,
+            "label": label,
+            "range_text": range_text,
+            "passed": i < current_index,
+            "current": i == current_index,
+            "delivery": benefits.get("delivery", ""),
+            "giveaways": benefits.get("giveaways", ""),
+        })
+    return out
+
+
 def get_club_info_text() -> str:
     ws = _ws(config.SHEET_CLUB)
     return ws.acell(config.CLUB_INFO_TEXT_CELL).value or ""
