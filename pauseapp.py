@@ -1013,11 +1013,15 @@ async def api_ops_summary(request: web.Request):
     )
 
     kitchen = revenue - profit
-    # Расходы на доставку через сторонние сервисы (Яндекс, Uklon и т.п.) —
-    # вводятся в Mini App "Маршрут" ("Профиль" → "Расходы на логистику", см.
-    # webapp.api_logistics_set / sheets.set_delivery_expense), тут только
-    # читаем сумму за тот же период.
-    delivery_cost = await _retry_sheets(sheets.get_delivery_expense_total, date_from, date_to)
+    # "Доставка" в "Чистая прибыль" — два слагаемых, оба вводятся в Mini
+    # App "Маршрут" ("Профиль" → "Расходы на логистику", см.
+    # webapp.api_logistics_set): расходы на сторонние сервисы (Яндекс,
+    # Uklon и т.п.) + оплата за смену всем курьерам. Раньше учитывалась
+    # только первая часть — поймано на реальном примере (оплата курьеру
+    # не прибавлялась к расходу на доставку) и исправлено.
+    delivery_services_cost = await _retry_sheets(sheets.get_delivery_expense_total, date_from, date_to)
+    couriers_cost = await _retry_sheets(sheets.get_logistics_expense_total, date_from, date_to)
+    delivery_cost = delivery_services_cost + couriers_cost
     net_profit = profit - delivery_cost
 
     return web.json_response({

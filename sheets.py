@@ -3226,9 +3226,11 @@ def set_delivery_expense(date_str: str, amount: int):
 
 
 def get_delivery_expense_total(date_from: str, date_to: str) -> int:
-    """Сумма расходов на доставку через сторонние сервисы за период
-    [date_from, date_to] включительно — для "Чистая прибыль" в PAUSE App
-    (см. pauseapp.api_ops_summary)."""
+    """Сумма расходов на доставку через сторонние сервисы (Яндекс, Uklon
+    и т.п.) за период [date_from, date_to] включительно — одно из ДВУХ
+    слагаемых "Доставки" в "Чистая прибыль" PAUSE App, см.
+    get_logistics_expense_total (второе слагаемое — оплата курьерам) и
+    pauseapp.api_ops_summary, который суммирует оба."""
     try:
         d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
         d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
@@ -3250,6 +3252,44 @@ def get_delivery_expense_total(date_from: str, date_to: str) -> int:
         if not (d_from <= d <= d_to):
             continue
         raw = row[config.DEL_SUM - 1].strip()
+        try:
+            total += int(raw) if raw else 0
+        except ValueError:
+            pass
+    return total
+
+
+def get_logistics_expense_total(date_from: str, date_to: str) -> int:
+    """Сумма оплаты за смену ВСЕМ курьерам за период [date_from, date_to]
+    включительно — второе слагаемое "Доставки" в "Чистая прибыль" PAUSE
+    App (первое — get_delivery_expense_total, расходы на сторонние
+    сервисы). Раньше в "Чистая прибыль" учитывалась только эта сторонняя
+    доставка — поймано на реальном примере (оплата курьеру 150 000 сум не
+    прибавлялась к расходу на доставку через Яндекс) и исправлено."""
+    try:
+        d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
+        d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
+    except ValueError:
+        return 0
+    ws = _ws_or_create(
+        config.SHEET_LOGISTICS_EXPENSES,
+        ["date", "courier_tg_id", "courier_name", "shift_pay", "updated"],
+    )
+    rows = ws.get_all_values()
+    total = 0
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.LOG_DATA_START_ROW:
+            continue
+        if len(row) < config.LOG_SHIFT_PAY:
+            continue
+        try:
+            d = dt.datetime.strptime(row[config.LOG_DATE - 1].strip(), "%d.%m.%Y")
+        except ValueError:
+            continue
+        if not (d_from <= d <= d_to):
+            continue
+        raw = row[config.LOG_SHIFT_PAY - 1].strip()
         try:
             total += int(raw) if raw else 0
         except ValueError:
