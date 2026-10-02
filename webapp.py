@@ -159,13 +159,21 @@ async def _role_for(tg_id):
     (ROUTE_ADMIN_IDS), и остаётся true даже когда ROUTE_ADMIN_IDS-админ
     переключился в режим "Курьер" (иначе он не смог бы вернуться обратно —
     "Профиль" в этом режиме показывал бы courier-экран без переключателя).
-    Основному админу самого переключения режима не показываем (см.
-    api_route_admin_mode_set) — у него role всегда "admin"."""
-    if tg_id in config.ADMIN_IDS:
-        return "admin", True
+
+    ROUTE_ADMIN_IDS проверяем ПЕРЕД ADMIN_IDS: основной админ бота (Влад)
+    обычно одновременно и в ROUTE_ADMIN_IDS — если проверять ADMIN_IDS
+    первым, для него role всегда оказывался бы "admin" независимо от
+    сохранённого режима, и переключение в "Курьер" молча не действовало бы
+    (воспроизведено: запись в "Режим Маршрута" сохранялась, но раздел
+    "Заказы" после перезагрузки всё равно показывал админский интерфейс
+    с перетаскиванием карточек). Основному админу, который НЕ в
+    ROUTE_ADMIN_IDS, самого переключения режима не показываем (см.
+    api_route_admin_mode_set) — у него role всегда "admin", как и раньше."""
     if tg_id in config.ROUTE_ADMIN_IDS:
         mode = await _retry_sheets(sheets.get_route_admin_mode, tg_id)
         return mode, True
+    if tg_id in config.ADMIN_IDS:
+        return "admin", True
     if await _retry_sheets(sheets.is_courier, tg_id):
         return "courier", False
     return "", False
