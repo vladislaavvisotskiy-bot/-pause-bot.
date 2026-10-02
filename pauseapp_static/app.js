@@ -2950,7 +2950,7 @@
           opsStepHeader(b, "Валовая прибыль по сетам");
           renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.profit); }, summary.profit);
         });
-      }, fmtSum(summary.profit) + " · " + summary.profit_margin_pct + "%"));
+      }, summary.profit_margin_pct + "%"));
       statGrid.appendChild(opsStatTile(fmtSum(summary.kitchen), "к оплате кухне", function () {
         wizardStep(function (b) {
           opsStepHeader(b, "К оплате кухне по сетам");
@@ -2959,7 +2959,7 @@
       }));
       statGrid.appendChild(opsStatTile(fmtSum(summary.net_profit), "чистая прибыль", function () {
         wizardStep(function (b) { opsStepHeader(b, "Чистая прибыль"); renderOpsNetProfitDetail(b, summary); });
-      }, fmtSum(summary.net_profit) + " · " + summary.net_margin_pct + "%"));
+      }, summary.net_margin_pct + "%"));
       body.appendChild(statGrid);
 
       // --- разбивка по районам ---
