@@ -372,8 +372,16 @@ def is_canceled(comment: str) -> bool:
 
 
 def is_debt_paid_marked(comment: str) -> bool:
-    """Долг по этой строке погашен через карточку должника (PAUSE App) —
-    см. config.DEBT_PAID_MARKER и mark_debt_line_paid ниже."""
+    """Строка когда-то была долгом, погашенным через карточку должника
+    (PAUSE App, см. config.DEBT_PAID_MARKER и mark_debt_line_paid ниже) —
+    ТОЛЬКО для истории долга (get_debtor_lines): сам подсчёт долга
+    (get_all_debtors/get_client_debt*) в этом маркере не нуждается —
+    mark_debt_line_paid меняет способ оплаты (столбец K) на "Наличными"
+    точно так же, как обычное подтверждение оплаты, и строка перестаёт
+    быть "В долг" сама по себе, формула столбца L тоже сама покажет
+    "ОПЛАЧЕНО". Маркер нужен только чтобы такую строку по-прежнему можно
+    было найти и показать в истории ОДНОГО клиента, хотя в подсчёт долга
+    она уже не идёт."""
     return config.DEBT_PAID_MARKER in (comment or "")
 
 
@@ -389,7 +397,7 @@ def get_client_debt(client_id) -> int:
         eid = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
         payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
-        if eid == str(client_id) and payment == "В долг" and not is_canceled(comment) and not is_debt_paid_marked(comment):
+        if eid == str(client_id) and payment == "В долг" and not is_canceled(comment):
             total += _row_amount(row, prices)
     return total
 
@@ -405,7 +413,7 @@ def get_client_debt_from_orders(orders: list) -> int:
     prices = get_set_prices()
     total = 0
     for o in orders:
-        if o["payment"].strip() != "В долг" or o["canceled"] or o.get("debt_paid"):
+        if o["payment"].strip() != "В долг" or o["canceled"]:
             continue
         try:
             qty = int(str(o["qty"]).strip() or 0)
@@ -438,7 +446,7 @@ def get_all_debtors() -> list:
         if payment != "В долг":
             continue
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
-        if is_canceled(comment) or is_debt_paid_marked(comment):
+        if is_canceled(comment):
             continue
         eid = row[config.O_CLIENT_ID - 1].strip()
         name = (clients.get(eid) or {}).get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or eid
@@ -452,12 +460,12 @@ def get_all_debtors() -> list:
 
 def get_debtor_lines(client_id) -> list:
     """Строки-позиции долга ОДНОГО клиента — "за какое число, какой сет,
-    какая сумма" для карточки должника в Операционном центре. payment ==
-    "В долг", не отменено — но, в отличие от get_all_debtors, строки,
-    погашенные через карточку должника (resolved=True, см.
-    config.DEBT_PAID_MARKER), ОСТАЮТСЯ в списке (просто не считаются в
-    сумму долга) — по прямой просьбе: погашенный день не пропадает из
-    истории, а просто помечается иначе."""
+    какая сумма" для карточки должника в Операционном центре. Берём
+    строки, которые СЕЙЧАС "В долг", плюс те, что были долгом и погашены
+    через карточку должника (resolved=True, узнаём по маркеру в
+    комментарии — см. config.DEBT_PAID_MARKER и mark_debt_line_paid: у
+    них payment уже "Наличными", не "В долг", но из истории клиента они
+    по прямой просьбе не пропадают, просто помечаются иначе)."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
     prices = get_set_prices()
@@ -470,9 +478,13 @@ def get_debtor_lines(client_id) -> list:
             continue
         if row[config.O_CLIENT_ID - 1].strip() != str(client_id):
             continue
-        if row[config.O_PAYMENT - 1].strip() != "В долг":
-            continue
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        resolved = is_debt_paid_marked(comment)
+        # Пока в долге — payment == "В долг"; погашенные через карточку
+        # должника строки узнаём по маркеру (их payment mark_debt_line_paid
+        # уже сменил на "Наличными", "В долг" там больше нет).
+        if row[config.O_PAYMENT - 1].strip() != "В долг" and not resolved:
+            continue
         if is_canceled(comment):
             continue
         out.append({
@@ -481,7 +493,7 @@ def get_debtor_lines(client_id) -> list:
             "set": row[config.O_SET - 1].strip(),
             "qty": row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else "",
             "sum": _row_amount(row, prices),
-            "resolved": is_debt_paid_marked(comment),
+            "resolved": resolved,
         })
     out.sort(key=lambda o: dt.datetime.strptime(o["date"], "%d.%m.%Y") if _is_valid_date(o["date"]) else dt.datetime.min, reverse=True)
     return out
@@ -489,23 +501,30 @@ def get_debtor_lines(client_id) -> list:
 
 def mark_debt_line_paid(row: int):
     """Админ отметил конкретный день долга оплаченным прямо на карточке
-    должника — см. config.DEBT_PAID_MARKER. payment в столбце K НЕ
-    трогаем (строка остаётся "В долг" технически), только добавляем
-    маркер в комментарий — той же техникой, что и cancel_order_rows
-    добавляет CANCEL_MARKER, не затирая остальной текст комментария."""
+    должника. Способ оплаты (столбец K) меняем на "Наличными" — ТОЙ ЖЕ
+    механикой, что и обычное подтверждение оплаты наличными
+    (confirm_cash_payment): строка по-настоящему перестаёт быть "В
+    долг", формула столбца L сама покажет "ОПЛАЧЕНО", отчёты и "Мои
+    заказы" клиента это тоже увидят правильно — раньше здесь только
+    добавлялся маркер в комментарий, а K не менялся, из-за чего в самой
+    таблице ничего не менялось (поймано пользователем). Маркер в
+    комментарии всё равно добавляем — он нужен get_debtor_lines, чтобы
+    найти и показать эту строку в истории клиента и после того, как она
+    перестала быть "В долг"."""
     ws = _ws(config.SHEET_ORDERS)
     cur = ws.cell(row, config.O_COMMENT).value or ""
-    if is_debt_paid_marked(cur):
-        return
-    new = f"{cur} | {config.DEBT_PAID_MARKER}" if cur else config.DEBT_PAID_MARKER
-    ws.update_cell(row, config.O_COMMENT, new)
+    ws.update_cell(row, config.O_PAYMENT, "Наличными")
+    if not is_debt_paid_marked(cur):
+        new = f"{cur} | {config.DEBT_PAID_MARKER}" if cur else config.DEBT_PAID_MARKER
+        ws.update_cell(row, config.O_COMMENT, new)
 
 
 def unmark_debt_line_paid(row: int):
-    """Отмена mark_debt_line_paid — убирает именно маркер из
-    комментария, остальной текст (если он там был до пометки) не
-    трогает."""
+    """Отмена mark_debt_line_paid — возвращает payment (столбец K) в "В
+    долг" и убирает маркер из комментария (остальной текст, если он там
+    был, не трогает)."""
     ws = _ws(config.SHEET_ORDERS)
+    ws.update_cell(row, config.O_PAYMENT, "В долг")
     cur = ws.cell(row, config.O_COMMENT).value or ""
     parts = [p.strip() for p in cur.split("|")]
     parts = [p for p in parts if p and config.DEBT_PAID_MARKER not in p]
@@ -688,7 +707,6 @@ def get_client_orders(client_id, limit=10) -> list:
                 "status": row[config.O_STATUS - 1].strip() if len(row) >= config.O_STATUS else "",
                 "comment": comment,
                 "canceled": is_canceled(comment),
-                "debt_paid": is_debt_paid_marked(comment),
                 "batch": row[config.O_ORDER_BATCH - 1].strip() if len(row) >= config.O_ORDER_BATCH else "",
                 "sum": row[config.O_SUM - 1] if len(row) >= config.O_SUM else "",
             })
