@@ -1024,12 +1024,20 @@ async def api_ops_summary(request: web.Request):
     delivery_cost = delivery_services_cost + couriers_cost
     net_profit = profit - delivery_cost
 
+    # Маржа — для маленькой строки под "Валовая прибыль"/"Чистая прибыль"
+    # в карточках (см. pauseapp_static/app.js: opsStatTile). Сама сумма
+    # прибыли не меняется, это чисто производный процент от выручки за
+    # тот же период.
+    profit_margin_pct = round(profit / revenue * 100) if revenue else 0
+    net_margin_pct = round(net_profit / revenue * 100) if revenue else 0
+
     return web.json_response({
         "date_from": date_from, "date_to": date_to,
         # "заказов" считаем по количеству проданных сетов (штук), а не по
         # числу оформленных заказов — так попросил админ.
         "order_count": total_qty, "revenue": revenue, "profit": profit,
         "kitchen": kitchen, "delivery_cost": delivery_cost, "net_profit": net_profit,
+        "profit_margin_pct": profit_margin_pct, "net_margin_pct": net_margin_pct,
         "people_count": len(people_list),
         "by_set": by_set_list, "by_zone": by_zone_list, "people": people_list,
     })

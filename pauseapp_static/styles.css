@@ -1034,6 +1034,9 @@ p { margin: 0; color: var(--ink-soft); }
 
 .ops-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
 .ops-stat-grid .profile-stat-value { font-size: 18px; }
+/* Маржа под "Валовая прибыль"/"Чистая прибыль" — мельче и бледнее
+   основной суммы, сама сумма (profile-stat-value) не трогается. */
+.ops-stat-sub { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
 
 .ops-section-title { font-size: 13px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin: 18px 0 8px; }
 

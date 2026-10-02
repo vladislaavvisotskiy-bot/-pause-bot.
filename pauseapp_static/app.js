@@ -2769,10 +2769,15 @@
 
   // Плашка сводки 2×2 (люди/заказы/выручка/прибыль) — та же плитка, что
   // уже использовалась в Профиле ("Мои заказы"), .profile-stat-clickable
-  // даёт нажимаемый вид, своей CSS для этого не нужно.
-  function opsStatTile(value, label, onClick) {
+  // даёт нажимаемый вид, своей CSS для этого не нужно. sub — необязательная
+  // мелкая строка под основным числом (сумма маржи у "Валовая прибыль"/
+  // "Чистая прибыль", см. вызовы ниже) — сама сумма прибыли (value) от
+  // неё не зависит и не меняется.
+  function opsStatTile(value, label, onClick, sub) {
     var tile = el("div", "profile-stat profile-stat-clickable");
-    tile.innerHTML = '<div class="profile-stat-value">' + value + '</div><div class="profile-stat-label">' + label + '</div>';
+    tile.innerHTML = '<div class="profile-stat-value">' + value + '</div>' +
+      (sub ? '<div class="ops-stat-sub">' + sub + '</div>' : '') +
+      '<div class="profile-stat-label">' + label + '</div>';
     tile.addEventListener("click", function () { haptic("select"); onClick(); });
     return tile;
   }
@@ -2945,7 +2950,7 @@
           opsStepHeader(b, "Валовая прибыль по сетам");
           renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.profit); }, summary.profit);
         });
-      }));
+      }, fmtSum(summary.profit) + " · " + summary.profit_margin_pct + "%"));
       statGrid.appendChild(opsStatTile(fmtSum(summary.kitchen), "к оплате кухне", function () {
         wizardStep(function (b) {
           opsStepHeader(b, "К оплате кухне по сетам");
@@ -2954,7 +2959,7 @@
       }));
       statGrid.appendChild(opsStatTile(fmtSum(summary.net_profit), "чистая прибыль", function () {
         wizardStep(function (b) { opsStepHeader(b, "Чистая прибыль"); renderOpsNetProfitDetail(b, summary); });
-      }));
+      }, fmtSum(summary.net_profit) + " · " + summary.net_margin_pct + "%"));
       body.appendChild(statGrid);
 
       // --- разбивка по районам ---
