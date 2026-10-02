@@ -1032,6 +1032,9 @@ p { margin: 0; color: var(--ink-soft); }
 .ops-range-row { display: flex; gap: 10px; }
 .ops-range-row .field { flex: 1; margin-bottom: 14px; }
 
+.ops-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
+.ops-stat-grid .profile-stat-value { font-size: 18px; }
+
 .ops-section-title { font-size: 13px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin: 18px 0 8px; }
 
 .ops-breakdown-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; }

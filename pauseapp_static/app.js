@@ -2767,6 +2767,53 @@
   var ICON_OPS_MESSAGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>';
   var ICON_OPS_CALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4c0 1.1-0.9 2-2 2C9.6 21 3 14.4 3 6c0-1.1 0.9-2 2-2z"/></svg>';
 
+  // Плашка сводки 2×2 (люди/заказы/выручка/прибыль) — та же плитка, что
+  // уже использовалась в Профиле ("Мои заказы"), .profile-stat-clickable
+  // даёт нажимаемый вид, своей CSS для этого не нужно.
+  function opsStatTile(value, label, onClick) {
+    var tile = el("div", "profile-stat profile-stat-clickable");
+    tile.innerHTML = '<div class="profile-stat-value">' + value + '</div><div class="profile-stat-label">' + label + '</div>';
+    tile.addEventListener("click", function () { haptic("select"); onClick(); });
+    return tile;
+  }
+
+  // Детальный экран по одной из трёх плашек "по сетам" (заказы-%,
+  // выручка, прибыль) — разные только значение в строке и итог внизу.
+  function renderOpsSetBreakdownDetail(body, summary, valueFn, total) {
+    if (!summary.by_set.length) {
+      body.appendChild(el("div", "empty-note", "За этот период заказов нет."));
+      return;
+    }
+    var card = el("div", "card");
+    summary.by_set.forEach(function (s, idx) {
+      var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
+      row.innerHTML =
+        '<div class="ops-breakdown-name">' + escapeHtml(s.display_name) + '</div>' +
+        '<div class="ops-breakdown-nums"><span>' + s.qty + ' шт</span><span>' + valueFn(s) + '</span></div>';
+      card.appendChild(row);
+    });
+    body.appendChild(card);
+    if (total !== undefined) {
+      body.appendChild(el("div", "ops-debtor-total", "Итого: " + fmtSum(total)));
+    }
+  }
+
+  // Детальный экран "Кто заказал" — имя клиента и какие сеты/сколько штук.
+  function renderOpsPeopleDetail(body, summary) {
+    if (!summary.people.length) {
+      body.appendChild(el("div", "empty-note", "За этот период заказов нет."));
+      return;
+    }
+    summary.people.forEach(function (p) {
+      var card = el("div", "card");
+      var setsText = p.sets.map(function (s) { return s.qty + "× " + s.display_name; }).join(", ");
+      card.innerHTML =
+        '<div class="ops-order-name">' + escapeHtml(p.name) + '</div>' +
+        '<div class="order-card-items">' + escapeHtml(setsText) + '</div>';
+      body.appendChild(card);
+    });
+  }
+
   function loadOpsFinance(root) {
     var ops = {
       period: "today",
@@ -2853,30 +2900,30 @@
     function renderBody(body, summary, ordersData) {
       body.innerHTML = "";
 
-      // --- сводка ---
-      var statRow = el("div", "profile-stat-row");
-      var s1 = el("div", "profile-stat");
-      s1.innerHTML = '<div class="profile-stat-value">' + summary.order_count + '</div><div class="profile-stat-label">заказов</div>';
-      var s2 = el("div", "profile-stat");
-      s2.innerHTML = '<div class="profile-stat-value">' + fmtSum(summary.revenue) + '</div><div class="profile-stat-label">выручка</div>';
-      statRow.appendChild(s1); statRow.appendChild(s2);
-      body.appendChild(statRow);
-
-      // --- разбивка по сетам ---
-      body.appendChild(el("h3", "ops-section-title", "По сетам"));
-      if (summary.by_set.length) {
-        var setsCard = el("div", "card");
-        summary.by_set.forEach(function (s, idx) {
-          var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
-          row.innerHTML =
-            '<div class="ops-breakdown-name">' + escapeHtml(s.display_name) + '</div>' +
-            '<div class="ops-breakdown-nums"><span>' + s.qty + ' шт</span><span>' + fmtSum(s.revenue) + '</span></div>';
-          setsCard.appendChild(row);
+      // --- сводка: 4 кликабельные плашки, 2×2 ---
+      var statGrid = el("div", "ops-stat-grid");
+      statGrid.appendChild(opsStatTile(summary.people_count, "человек", function () {
+        wizardStep(function (b) { opsStepHeader(b, "Кто заказал"); renderOpsPeopleDetail(b, summary); });
+      }));
+      statGrid.appendChild(opsStatTile(summary.order_count, "заказов", function () {
+        wizardStep(function (b) {
+          opsStepHeader(b, "Заказы по сетам");
+          renderOpsSetBreakdownDetail(b, summary, function (s) { return s.pct + "%"; });
         });
-        body.appendChild(setsCard);
-      } else {
-        body.appendChild(el("div", "empty-note", "За этот период заказов нет."));
-      }
+      }));
+      statGrid.appendChild(opsStatTile(fmtSum(summary.revenue), "выручка", function () {
+        wizardStep(function (b) {
+          opsStepHeader(b, "Выручка по сетам");
+          renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.revenue); }, summary.revenue);
+        });
+      }));
+      statGrid.appendChild(opsStatTile(fmtSum(summary.profit), "валовая прибыль", function () {
+        wizardStep(function (b) {
+          opsStepHeader(b, "Валовая прибыль по сетам");
+          renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.profit); }, summary.profit);
+        });
+      }));
+      body.appendChild(statGrid);
 
       // --- разбивка по районам ---
       body.appendChild(el("h3", "ops-section-title", "По районам"));
@@ -2910,7 +2957,7 @@
       setSelect.appendChild(el("option", null, "Все"));
       summary.by_set.forEach(function (s) {
         var opt = document.createElement("option");
-        opt.value = s.set;
+        opt.value = s.display_name;
         opt.textContent = s.display_name;
         setSelect.appendChild(opt);
       });

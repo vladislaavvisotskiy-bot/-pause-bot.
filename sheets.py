@@ -1203,6 +1203,69 @@ def get_set_prices() -> dict:
     return out
 
 
+def get_set_margins() -> dict:
+    """Валовая прибыль с одного сета (столбец P, см. config.
+    REF_SET_MARGIN_COL) — сколько зарабатываем с проданной штуки до
+    вычета доставки/курьера и прочих расходов. Для Операционного центра
+    (PAUSE App) — больше нигде не используется. Админ меняет прямо в
+    таблице, как и цену; пустая ячейка — 0 (сет ещё не внесён в
+    расчёт прибыли, не ошибка)."""
+    ws = _ws(config.SHEET_REFERENCE)
+    values = ws.get(config.REF_SET_MARGIN_RANGE)
+    out = {}
+    for row in values:
+        if not row or not row[0]:
+            continue
+        cell = row[config.REF_SET_MARGIN_COL_IDX] if len(row) > config.REF_SET_MARGIN_COL_IDX else ""
+        try:
+            out[row[0]] = int(str(cell).replace(" ", "").replace(",", "")) if str(cell).strip() else 0
+        except ValueError:
+            out[row[0]] = 0
+    return out
+
+
+# Разовое первое заполнение столбца P — см. /seed_set_margins в
+# handlers/admin.py. Цифры прямо от пользователя (сверены построчно в
+# чате); дальше админ меняет их сам в таблице, бот сюда больше не пишет.
+DEFAULT_SET_MARGINS = {
+    "Блюдо дня": 15000,
+    "Сет Prime": 15000,
+    "Сет стандарт": 15000,
+    "Боул": 15000,
+    "Самса": 20000,
+    "Самса без компота": 15000,
+    "Chicken bowl": 15000,
+    "Beef bowl": 15000,
+    "Чизкейк": 6000,
+}
+
+
+def seed_set_margins() -> dict:
+    """Пишет DEFAULT_SET_MARGINS в столбец P для каждого сета из
+    REF_SET_PRICE_RANGE (столбец F), который есть в этом словаре — сет,
+    которого там нет (новый, добавленный позже), не трогает, его
+    прибыль нужно будет вписать в таблицу вручную. Возвращает
+    {"seeded": [...], "skipped": [...]} — какие сеты заполнены, какие
+    пропущены (их в DEFAULT_SET_MARGINS нет)."""
+    ws = _ws(config.SHEET_REFERENCE)
+    values = ws.get(config.REF_SET_PRICE_RANGE)
+    cells = []
+    seeded, skipped = [], []
+    for i, row in enumerate(values):
+        r = i + 2  # REF_SET_PRICE_RANGE = "F2:G20" — данные с строки 2
+        if not row or not row[0]:
+            continue
+        name = row[0]
+        if name in DEFAULT_SET_MARGINS:
+            cells.append(gspread.Cell(r, config.REF_SET_MARGIN_COL, DEFAULT_SET_MARGINS[name]))
+            seeded.append(name)
+        else:
+            skipped.append(name)
+    if cells:
+        ws.update_cells(cells, value_input_option="RAW")
+    return {"seeded": seeded, "skipped": skipped}
+
+
 def get_sets() -> list:
     """Список названий сетов для кнопок "какие сеты сегодня" (шаг 1
     публикации меню) — те же самые технические имена, что и в таблице

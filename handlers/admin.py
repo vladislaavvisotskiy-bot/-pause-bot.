@@ -219,6 +219,30 @@ async def cmd_fix_client_ids(message: Message):
     )
 
 
+@router.message(Command("seed_set_margins"))
+async def cmd_seed_set_margins(message: Message):
+    """Разовое первое заполнение столбца P ("Справочники") стартовыми
+    цифрами валовой прибыли по сету (см. sheets.DEFAULT_SET_MARGINS) —
+    нужно для "Валовой прибыли" в Операционном центре (PAUSE App).
+    Дальше прибыль меняется прямо в таблице, эта команда больше не
+    нужна — не на каждый день, поэтому не в /admin и не в списке команд
+    бота, набирается вручную."""
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    await message.answer("Заполняю столбец P (валовая прибыль) стартовыми значениями…")
+    try:
+        result = sheets.seed_set_margins()
+    except Exception:
+        logger.exception("Не удалось заполнить валовую прибыль по сетам")
+        await message.answer("Не получилось — подробности в логах.")
+        return
+    lines = [f"Готово. Заполнено сетов: {len(result['seeded'])}."]
+    if result["skipped"]:
+        lines.append("Без прибыли (впишите в столбец P вручную): " + ", ".join(result["skipped"]))
+    await message.answer("\n".join(lines))
+
+
 @router.message(Command("chatid"))
 @router.channel_post(Command("chatid"))
 async def cmd_chatid(message: Message):

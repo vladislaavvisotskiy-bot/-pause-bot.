@@ -953,34 +953,65 @@ async def api_ops_summary(request: web.Request):
         return web.json_response({"error": "bad_range"}, status=400)
     date_from, date_to = rng
     items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to)
+    margins = await _retry_sheets(sheets.get_set_margins)
 
     order_keys = set()
     revenue = 0
-    by_set = {}
+    profit = 0
+    by_set = {}    # ключ — КЛИЕНТСКОЕ название (display_name), не сырое из
+                   # "Заказы": по прямой просьбе везде показываем то же
+                   # имя, что видит клиент; "Самса"/"Самса без компота"
+                   # (разные строки в таблице, одно клиентское имя
+                   # "Пауза дуо." — см. texts.SET_DISPLAY_NAMES) из-за
+                   # этого корректно складываются в одну строку отчёта.
     by_zone = {}
+    people = {}    # ключ — client_id
     for i in items:
-        order_keys.add(_ops_order_key(i))
+        key = _ops_order_key(i)
+        order_keys.add(key)
         revenue += i["sum"]
+        item_profit = margins.get(i["set"], 0) * i["qty"]
+        profit += item_profit
 
-        s = by_set.setdefault(i["set"], {"set": i["set"], "display_name": texts.display_set_name(i["set"]), "qty": 0, "revenue": 0})
+        display_name = texts.display_set_name(i["set"])
+        s = by_set.setdefault(display_name, {"display_name": display_name, "qty": 0, "revenue": 0, "profit": 0})
         s["qty"] += i["qty"]
         s["revenue"] += i["sum"]
+        s["profit"] += item_profit
 
         zone = i["zone"] or "—"
         z = by_zone.setdefault(zone, {"zone": zone, "revenue": 0, "_orders": set()})
-        z["_orders"].add(_ops_order_key(i))
+        z["_orders"].add(key)
         z["revenue"] += i["sum"]
 
-    by_set_list = sorted(by_set.values(), key=lambda x: -x["qty"])
+        p = people.setdefault(i["client_id"], {"client_id": i["client_id"], "name": i["name"], "sets": {}})
+        p["sets"][display_name] = p["sets"].get(display_name, 0) + i["qty"]
+
+    total_qty = sum(s["qty"] for s in by_set.values())
+    by_set_list = sorted(
+        [dict(s, pct=round(s["qty"] / total_qty * 100, 1) if total_qty else 0) for s in by_set.values()],
+        key=lambda x: -x["qty"],
+    )
     by_zone_list = sorted(
         [{"zone": z["zone"], "order_count": len(z["_orders"]), "revenue": z["revenue"]} for z in by_zone.values()],
         key=lambda x: -x["revenue"],
     )
+    people_list = sorted(
+        [
+            {
+                "client_id": p["client_id"], "name": p["name"],
+                "sets": [{"display_name": k, "qty": v} for k, v in p["sets"].items()],
+            }
+            for p in people.values()
+        ],
+        key=lambda x: x["name"],
+    )
 
     return web.json_response({
         "date_from": date_from, "date_to": date_to,
-        "order_count": len(order_keys), "revenue": revenue,
-        "by_set": by_set_list, "by_zone": by_zone_list,
+        "order_count": len(order_keys), "revenue": revenue, "profit": profit,
+        "people_count": len(people_list),
+        "by_set": by_set_list, "by_zone": by_zone_list, "people": people_list,
     })
 
 
@@ -1019,7 +1050,7 @@ async def api_ops_orders(request: web.Request):
             continue
         if status_filter and g["pay_status"] != status_filter:
             continue
-        if set_filter and not any(it["set"] == set_filter for it in g["items"]):
+        if set_filter and not any(it["display_name"] == set_filter for it in g["items"]):
             continue
         if q and q not in g["name"].lower():
             continue
