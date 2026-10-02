@@ -591,26 +591,64 @@ def _order_payment_value(data: dict) -> str:
 async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
     data = await state.get_data()
     cart = data.get("cart", [])
-    date_str = sheets.get_active_menu_date()
     full_comment = _order_comment(data)
     payment_value = _order_payment_value(data)
 
-    # Новая точка через «Другое» — заказ придерживаем до подтверждения
-    # координатором, в «Заказы» (и отчёты кухни/курьера) пока не попадает.
-    if data.get("is_new_point"):
-        pending_id = sheets.create_pending_order(
-            date_str=date_str,
-            zone=data["cur_zone"],
-            point=data["cur_point"],
-            client_id=data["client_id"],
-            client_name=data.get("client_name", ""),
-            client_phone=data.get("client_phone", ""),
-            cart=cart,
-            payment=payment_value,
-            comment=full_comment,
-            screenshot=data.get("card_screenshot") or "",
-        )
+    # Сама запись в Google Таблицы (несколько запросов подряд: дата,
+    # возможно create_pending_order/append_order на каждую позицию
+    # корзины) — ничем не огорожена была раньше: любая временная ошибка
+    # Sheets API (429/5xx/сетевой сбой) здесь обрывала функцию ДО
+    # callback.answer(), и клиент видел ровно то же "зависание", что чинили
+    # на выборе района/точки (см. тот фикс) — только уже на последнем шаге,
+    # когда заказ готов уйти. try/except здесь — чтобы вместо тишины клиент
+    # получил понятное сообщение и мог просто нажать "Отправить" ещё раз
+    # (состояние/корзина не очищаются, пока заказ не ушёл реально).
+    try:
+        date_str = sheets.get_active_menu_date()
 
+        # Новая точка через «Другое» — заказ придерживаем до подтверждения
+        # координатором, в «Заказы» (и отчёты кухни/курьера) пока не попадает.
+        if data.get("is_new_point"):
+            pending_id = sheets.create_pending_order(
+                date_str=date_str,
+                zone=data["cur_zone"],
+                point=data["cur_point"],
+                client_id=data["client_id"],
+                client_name=data.get("client_name", ""),
+                client_phone=data.get("client_phone", ""),
+                cart=cart,
+                payment=payment_value,
+                comment=full_comment,
+                screenshot=data.get("card_screenshot") or "",
+            )
+        else:
+            # Одна метка на ВСЮ корзину этого нажатия "Всё верно, отправить" —
+            # чтобы отличать этот заказ от других заказов того же клиента в
+            # тот же день (см. config.O_ORDER_BATCH/sheets.get_client_order_groups).
+            batch_id = uuid.uuid4().hex
+            row_nums = []
+            for item in cart:
+                row_num = sheets.append_order(
+                    date_str=date_str,
+                    zone=data["cur_zone"],
+                    point=data["cur_point"],
+                    client_id=data["client_id"],
+                    set_name=item["set"],
+                    qty=item["qty"],
+                    garnish=item["garnish"],
+                    payment=payment_value,
+                    comment=full_comment,
+                    screenshot=data.get("card_screenshot") or "",
+                    batch_id=batch_id,
+                )
+                row_nums.append(row_num)
+    except Exception:
+        logger.exception("Order: не удалось записать заказ в таблицу (client_id=%s)", data.get("client_id"))
+        await callback.message.answer(texts.ORDER_SEND_FAILED.format(support=texts.SUPPORT_USERNAME))
+        await callback.answer()
+        return
+
+    if data.get("is_new_point"):
         if config.ADMIN_IDS:
             try:
                 prices = sheets.get_set_prices()
@@ -644,27 +682,6 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
         await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(callback.from_user.id))
         await callback.answer()
         return
-
-    # Одна метка на ВСЮ корзину этого нажатия "Всё верно, отправить" — чтобы
-    # отличать этот заказ от других заказов того же клиента в тот же день
-    # (см. config.O_ORDER_BATCH/sheets.get_client_order_groups).
-    batch_id = uuid.uuid4().hex
-    row_nums = []
-    for item in cart:
-        row_num = sheets.append_order(
-            date_str=date_str,
-            zone=data["cur_zone"],
-            point=data["cur_point"],
-            client_id=data["client_id"],
-            set_name=item["set"],
-            qty=item["qty"],
-            garnish=item["garnish"],
-            payment=payment_value,
-            comment=full_comment,
-            screenshot=data.get("card_screenshot") or "",
-            batch_id=batch_id,
-        )
-        row_nums.append(row_num)
 
     # точка уже известна (по умолчанию или выбрана из списка) — пересохраняем
     # как текущую точку по умолчанию клиента
