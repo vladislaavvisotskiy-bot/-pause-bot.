@@ -386,8 +386,7 @@ def is_debt_paid_marked(comment: str) -> bool:
 
 
 def get_client_debt(client_id) -> int:
-    ws = _ws(config.SHEET_ORDERS)
-    rows = ws.get_all_values()
+    rows = _orders_raw_rows()
     prices = get_set_prices()
     total = 0
     for i, row in enumerate(rows):
@@ -430,9 +429,13 @@ def get_client_debt_from_orders(orders: list) -> int:
 
 
 def get_all_debtors() -> list:
-    """Возвращает список [(имя, id, сумма_долга)] — агрегированный по всем заказам."""
-    ws = _ws(config.SHEET_ORDERS)
-    rows = ws.get_all_values()
+    """Возвращает список [(имя, id, сумма_долга)] — агрегированный по всем
+    заказам. Сырые строки — из общего кэша (см. _orders_raw_rows): эта
+    функция и так вызывается ДВАЖДЫ на один показ списка должников
+    (сначала изнутри cleanup_resolved_debtors, потом ещё раз явно, см.
+    pauseapp.api_ops_debtors) — без общего кэша это было два полных
+    чтения растущего листа "Заказы" подряд на каждое открытие экрана."""
+    rows = _orders_raw_rows()
     clients = _clients_index()
     prices = get_set_prices()
     debts = {}
@@ -465,9 +468,14 @@ def get_debtor_lines(client_id) -> list:
     через карточку должника (resolved=True, узнаём по маркеру в
     комментарии — см. config.DEBT_PAID_MARKER и mark_debt_line_paid: у
     них payment уже "Наличными", не "В долг", но из истории клиента они
-    по прямой просьбе не пропадают, просто помечаются иначе)."""
-    ws = _ws(config.SHEET_ORDERS)
-    rows = ws.get_all_values()
+    по прямой просьбе не пропадают, просто помечаются иначе).
+
+    Сырые строки — из того же короткого кэша, что и get_orders_in_range
+    (см. _orders_raw_rows), а не отдельным чтением: эта функция вызывается
+    сразу ПОСЛЕ каждой отметки оплаты (обновить карточку должника), так
+    что без общего кэша один клик по "Оплатил"/"Закрыть весь долг" —
+    это ещё одно чтение всего растущего листа "Заказы" поверх записи."""
+    rows = _orders_raw_rows()
     prices = get_set_prices()
     out = []
     for i, row in enumerate(rows):
@@ -517,16 +525,33 @@ def mark_debt_line_paid(row: int):
     if not is_debt_paid_marked(cur):
         new = f"{cur} | {config.DEBT_PAID_MARKER}" if cur else config.DEBT_PAID_MARKER
         ws.update_cell(row, config.O_COMMENT, new)
+    _invalidate_orders_raw_cache()
 
 
 def mark_debt_lines_paid(rows: list):
-    """Пакетная версия mark_debt_line_paid — отмечает оплаченными сразу
-    несколько дней долга разом (галочки на карточке должника + "Закрыть
-    весь долг" в PAUSE App). Построчно, той же механикой, что и
-    одиночная версия — обычно это всего несколько строк за раз, отдельный
-    batch-путь ради этого не нужен."""
-    for row in rows:
-        mark_debt_line_paid(row)
+    """Пакетная версия mark_debt_line_paid — ОДИН поход в Sheets на чтение
+    комментариев всех строк разом (batch_get) и ОДИН на запись
+    (update_cells), а не 2-3 отдельных синхронных HTTP-запроса НА КАЖДУЮ
+    строку. Раньше тут был цикл, вызывающий mark_debt_line_paid на каждую
+    строку по очереди — при реальном долге в 15-20+ дней это десятки
+    последовательных запросов к Google Sheets API подряд в одном
+    обработчике, что на практике упиралось в таймаут/лимит запросов и
+    роняло весь Mini App с server_error ("Закрыть весь долг" — поймано и
+    подтверждено пользователем)."""
+    if not rows:
+        return
+    ws = _ws(config.SHEET_ORDERS)
+    comment_ranges = [gspread.utils.rowcol_to_a1(r, config.O_COMMENT) for r in rows]
+    comment_values = ws.batch_get(comment_ranges)
+    cells = []
+    for row, vals in zip(rows, comment_values):
+        cur = vals[0][0] if vals and vals[0] else ""
+        cells.append(gspread.Cell(row, config.O_PAYMENT, "Наличными"))
+        if not is_debt_paid_marked(cur):
+            new = f"{cur} | {config.DEBT_PAID_MARKER}" if cur else config.DEBT_PAID_MARKER
+            cells.append(gspread.Cell(row, config.O_COMMENT, new))
+    ws.update_cells(cells, value_input_option="RAW")
+    _invalidate_orders_raw_cache()
 
 
 def unmark_debt_line_paid(row: int):
@@ -539,6 +564,7 @@ def unmark_debt_line_paid(row: int):
     parts = [p.strip() for p in cur.split("|")]
     parts = [p for p in parts if p and config.DEBT_PAID_MARKER not in p]
     ws.update_cell(row, config.O_COMMENT, " | ".join(parts))
+    _invalidate_orders_raw_cache()
 
 
 def delete_debtor_history(client_id):
@@ -1956,8 +1982,46 @@ def get_client_ticket_counts(date_str: str) -> dict:
 # диапазон дат и с суммой/статусом оплаты вместо "piece"-строки для кухни.
 # ---------------------------------------------------------------------------
 
-_ops_orders_cache = {"key": None, "items": None, "ts": 0}
-_OPS_ORDERS_CACHE_TTL = 5  # секунд
+_orders_raw_cache = {"rows": None, "ts": 0}
+_ORDERS_RAW_CACHE_TTL = 20  # секунд
+
+
+def _invalidate_orders_raw_cache():
+    """Сбрасывает кэш сырых строк "Заказы" — вызывать сразу после ЛЮБОЙ
+    записи в этот лист, после которой код в том же запросе ожидает
+    немедленно увидеть свежие данные через _orders_raw_rows (сейчас —
+    mark_debt_line_paid/mark_debt_lines_paid/unmark_debt_line_paid:
+    карточка должника обновляется сразу после отметки оплаты, без этого
+    сброса она бы до 20с показывала старое состояние)."""
+    _orders_raw_cache["rows"] = None
+    _orders_raw_cache["ts"] = 0
+
+
+def _orders_raw_rows() -> list:
+    """Сырые строки "Заказы" (ws.get_all_values()), с коротким (20с)
+    кэшем — независимо от того, какой диапазон дат потом запрашивают.
+
+    "Заказы" — лист, который только растёт (вся история заказов с начала
+    работы бота), поэтому ЛЮБОЙ вызов get_orders_in_range — хоть за
+    сегодня, хоть за 30 дней — читает его ЦЕЛИКОМ: диапазон дат только
+    фильтрует уже прочитанные строки в Python, не уменьшает сам запрос к
+    Sheets. Экран "Финансы" на один показ дёргает это чтение несколько
+    раз (api_ops_summary и api_ops_orders параллельно, плюс админ часто
+    переключает период Сегодня/7д/30д туда-обратно за несколько секунд) —
+    без кэша это каждый раз новое чтение всего растущего листа, что на
+    практике приближает к лимиту запросов Google Sheets API и ощущается
+    как медленная, постоянно "подгружающаяся" Mini App, вплоть до
+    server_error (воспроизведено и подтверждено). Кэш — по содержимому
+    листа, а не по диапазону дат, поэтому переключение периода внутри
+    TTL больше не означает новый поход в Sheets вообще."""
+    now = time.time()
+    if _orders_raw_cache["rows"] is not None and now - _orders_raw_cache["ts"] < _ORDERS_RAW_CACHE_TTL:
+        return _orders_raw_cache["rows"]
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    _orders_raw_cache["rows"] = rows
+    _orders_raw_cache["ts"] = now
+    return rows
 
 
 def get_orders_in_range(date_from: str, date_to: str) -> list:
@@ -1972,28 +2036,15 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
     остальное (пусто, "В долг") — не оплачено. Та же трёхходовая логика,
     что и в get_payments_for_date/pauseapp._payment_value.
 
-    Короткий (5с) кэш по (date_from, date_to): экран "Финансы" в PAUSE App
-    на один показ дёргает эту функцию ДВАЖДЫ почти одновременно —
-    api_ops_summary и api_ops_orders оба читают "Заказы" за тот же период
-    параллельно (см. pauseapp.py, Promise.all на фронте) — без кэша это
-    двойное чтение всего листа "Заказы" на каждое открытие экрана, что
-    лишний раз приближает к лимиту запросов Google Sheets API (воспроизведено
-    на практике — "Финансы" иногда падает с server_error сразу после
-    активного тестирования). TTL короткий специально, чтобы админ, меняющий
-    фильтры/период, не видел устаревшие данные дольше нескольких секунд."""
-    key = (date_from, date_to)
-    now = time.time()
-    if _ops_orders_cache["key"] == key and now - _ops_orders_cache["ts"] < _OPS_ORDERS_CACHE_TTL:
-        return _ops_orders_cache["items"]
-
+    См. _orders_raw_rows() — сам лист читается не чаще раза в TTL,
+    независимо от того, какой диапазон дат запрашивают."""
     try:
         d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
         d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
     except ValueError:
         return []
 
-    ws = _ws(config.SHEET_ORDERS)
-    rows = ws.get_all_values()
+    rows = _orders_raw_rows()
     clients = _clients_index()
     prices = get_set_prices()
     out = []
@@ -2044,9 +2095,6 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
             "sum": _row_amount(row, prices),
             "batch": row[config.O_ORDER_BATCH - 1].strip(),
         })
-    _ops_orders_cache["key"] = key
-    _ops_orders_cache["items"] = out
-    _ops_orders_cache["ts"] = now
     return out
 
 
