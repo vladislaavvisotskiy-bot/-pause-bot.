@@ -2604,12 +2604,29 @@ def get_couriers() -> list:
     return out
 
 
-def set_courier_kpi_hidden(tg_id: str, hidden: bool) -> bool:
-    """Скрывает/возвращает показатель эффективности курьера на главном
-    экране KPI (см. "Центр управления" → "Курьеры" → карточка курьера →
-    "Показать"/"Скрыть с главного экрана"). Возвращает False, если такого
-    курьера нет (не создаёт строку — курьер должен уже существовать)."""
+def _ensure_courier_columns(ws, col: int):
+    """Расширяет лист "Курьеры" до нужного числа столбцов, если нужно.
+    Эта таблица изначально заводилась только на 4 столбца (A-D: ID/имя/
+    статус/телефон) — "kpi_hidden"/"is_route_admin"/"disabled" (E/F/G)
+    появились только в этом коде, и в реальной таблице колонок под них
+    могло не быть вовсе. Google Sheets API отклоняет запись ЗА пределами
+    текущей сетки листа (gspread.exceptions.APIError на values.update,
+    "exceeds grid limits") — именно это и ловилось при первом нажатии на
+    переключатели "Курьеры" (воспроизведено и подтверждено на реальной
+    таблице: тогда столбец D был последним). add_cols — дешёвая
+    однократная операция, нужна только пока столбцов меньше требуемого."""
+    if ws.col_count < col:
+        ws.add_cols(col - ws.col_count)
+
+
+def _set_courier_flag(tg_id: str, col: int, value: str) -> bool:
+    """Общая часть set_courier_kpi_hidden/set_courier_route_admin/
+    set_courier_disabled — находит строку курьера по tg_id и пишет
+    значение в указанный столбец, расширяя лист при необходимости (см.
+    _ensure_courier_columns). Возвращает False, если такого курьера нет
+    (не создаёт строку — курьер должен уже существовать)."""
     ws = _ws(config.SHEET_COURIERS)
+    _ensure_courier_columns(ws, col)
     rows = ws.get_all_values()
     target = str(tg_id).strip()
     for i, row in enumerate(rows):
@@ -2617,30 +2634,25 @@ def set_courier_kpi_hidden(tg_id: str, hidden: bool) -> bool:
         if r < config.COURIER_DATA_START_ROW:
             continue
         if len(row) >= config.COURIER_TG_ID and row[config.COURIER_TG_ID - 1].strip() == target:
-            ws.update_cell(r, config.COURIER_KPI_HIDDEN, "Да" if hidden else "")
+            ws.update_cell(r, col, value)
             _cache["couriers"] = None
             return True
     return False
+
+
+def set_courier_kpi_hidden(tg_id: str, hidden: bool) -> bool:
+    """Скрывает/возвращает показатель эффективности курьера на главном
+    экране KPI (см. "Центр управления" → "Курьеры" → карточка курьера →
+    "Показать"/"Скрыть с главного экрана")."""
+    return _set_courier_flag(tg_id, config.COURIER_KPI_HIDDEN, "Да" if hidden else "")
 
 
 def set_courier_route_admin(tg_id: str, is_admin: bool) -> bool:
     """Назначает/снимает курьера администратором "Маршрута" (см.
     config.COURIER_IS_ROUTE_ADMIN) — вызывающий код (webapp.
     api_courier_route_admin_set) сам проверяет, что это делает
-    config.OWNER_TG_ID, эта функция прав не проверяет. Возвращает False,
-    если такого курьера нет."""
-    ws = _ws(config.SHEET_COURIERS)
-    rows = ws.get_all_values()
-    target = str(tg_id).strip()
-    for i, row in enumerate(rows):
-        r = i + 1
-        if r < config.COURIER_DATA_START_ROW:
-            continue
-        if len(row) >= config.COURIER_TG_ID and row[config.COURIER_TG_ID - 1].strip() == target:
-            ws.update_cell(r, config.COURIER_IS_ROUTE_ADMIN, "Да" if is_admin else "")
-            _cache["couriers"] = None
-            return True
-    return False
+    config.OWNER_TG_ID, эта функция прав не проверяет."""
+    return _set_courier_flag(tg_id, config.COURIER_IS_ROUTE_ADMIN, "Да" if is_admin else "")
 
 
 def is_courier_route_admin(tg_id) -> bool:
@@ -2659,19 +2671,8 @@ def set_courier_disabled(tg_id: str, disabled: bool) -> bool:
     (и кнопке в меню бота, см. is_courier) — строка в "Курьеры" остаётся
     (курьер не удалён, просто временно отключён). Доступно ЛЮБОМУ
     администратору "Маршрута", не только владельцу (в отличие от
-    set_courier_route_admin). Возвращает False, если такого курьера нет."""
-    ws = _ws(config.SHEET_COURIERS)
-    rows = ws.get_all_values()
-    target = str(tg_id).strip()
-    for i, row in enumerate(rows):
-        r = i + 1
-        if r < config.COURIER_DATA_START_ROW:
-            continue
-        if len(row) >= config.COURIER_TG_ID and row[config.COURIER_TG_ID - 1].strip() == target:
-            ws.update_cell(r, config.COURIER_DISABLED, "Да" if disabled else "")
-            _cache["couriers"] = None
-            return True
-    return False
+    set_courier_route_admin)."""
+    return _set_courier_flag(tg_id, config.COURIER_DISABLED, "Да" if disabled else "")
 
 
 def add_courier(tg_id: str, name: str, phone: str = ""):
