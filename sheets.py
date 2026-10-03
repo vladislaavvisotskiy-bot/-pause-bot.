@@ -1863,6 +1863,28 @@ def get_club_levels_overview(order_count: int) -> list:
     return out
 
 
+def get_club_leaderboard(limit: int = 10) -> list:
+    """Топ клиентов по количеству заказов — [{"tg_id", "name", "order_count",
+    "club": {"key", "emoji", "label"}}], по убыванию order_count, не больше
+    limit записей — для таблицы лидеров в PAUSE App ("Pause Club"). Только
+    клиенты с привязанным tg_id (без него нет ни аватарки, ни смысла
+    показывать) и хотя бы одним заказом — таблица из одних нулей была бы
+    бессмысленной."""
+    clients = _load_clients()
+    ranked = [c for c in clients if c["tg_id"] and c["order_count"] > 0]
+    ranked.sort(key=lambda c: -c["order_count"])
+    out = []
+    for c in ranked[:limit]:
+        level = get_club_level(c["order_count"])
+        out.append({
+            "tg_id": c["tg_id"],
+            "name": c["name"],
+            "order_count": c["order_count"],
+            "club": {"key": level["key"], "emoji": level["emoji"], "label": level["label"]},
+        })
+    return out
+
+
 def get_club_info_text() -> str:
     ws = _ws(config.SHEET_CLUB)
     return ws.acell(config.CLUB_INFO_TEXT_CELL).value or ""

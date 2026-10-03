@@ -86,11 +86,38 @@ input, textarea, select { font-family: inherit; font-size: 15px; }
   color: var(--ink);
   white-space: nowrap;
 }
+/* Главная: "PAUSE." — вдвое крупнее обычной шапки (была 17px), чуть
+   крупнее приветствия "Добро пожаловать, {имя}" под ней (.home-hero h2,
+   24px) — и шире расставлены буквы, чтобы само слово заметно растянулось
+   в ширину, а не просто выросло в высоту. Веточка рядом с лого убрана по
+   прямой просьбе — здесь только текст. */
 .screen-header-logo span {
   font-weight: 700;
-  font-size: 17px;
-  letter-spacing: 0.14em;
+  font-size: 34px;
+  letter-spacing: 0.22em;
 }
+/* Переключатель языка в шапке Главной (ru/uz/en) — замена колокольчику
+   уведомлений, та же "пилюля-трек" с активным сегментом, что и везде в
+   приложении (см. .filter-chip/.mode-switch-row), без новых цветов. */
+.screen-header-right-lang { flex: 0 0 auto; }
+.header-lang-switch {
+  display: flex;
+  gap: 2px;
+  background: var(--ink-soft-bg);
+  border-radius: 999px;
+  padding: 3px;
+}
+.header-lang-btn {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+.header-lang-btn.active { background: var(--ink); color: var(--ivory); }
 .header-icon-btn {
   background: none;
   border: none;
@@ -300,6 +327,63 @@ p { margin: 0; color: var(--ink-soft); }
 .splash-logo { font-weight: 700; font-size: 40px; color: var(--ivory); letter-spacing: 0.03em; }
 .splash-tagline { margin-top: 16px; color: rgba(242, 235, 220, 0.75); font-size: 12.5px; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1.9; }
 .splash-start { width: 100%; }
+
+/* ------------------------------------------------------------------ */
+/* Pause Club — таблица лидеров (топ-10 по числу заказов)               */
+/* ------------------------------------------------------------------ */
+
+.leaderboard-top3 { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+/* Первое место — единственный цветной акцент, тот же --accent-warm, что
+   уже используется в приложении (метка "Розыгрыш") — не новый цвет. */
+.leaderboard-row.rank-1 { background: var(--accent-warm-soft); border-color: var(--accent-warm); padding: 14px; }
+.leaderboard-rank { flex: 0 0 auto; width: 16px; text-align: center; font-weight: 700; font-size: 13px; color: var(--ink-soft); }
+.leaderboard-row.rank-1 .leaderboard-rank { color: var(--accent-warm); font-size: 15px; }
+
+.leaderboard-avatar {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--ink-soft-bg);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+}
+.leaderboard-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.leaderboard-row.rank-1 .leaderboard-avatar { width: 54px; height: 54px; font-size: 17px; border: 2px solid var(--accent-warm); }
+
+.leaderboard-info { flex: 1 1 auto; min-width: 0; }
+.leaderboard-name { font-weight: 600; font-size: 14.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leaderboard-row.rank-1 .leaderboard-name { font-size: 15.5px; }
+.leaderboard-club { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+
+.leaderboard-count { flex: 0 0 auto; text-align: right; }
+.leaderboard-count-value { font-weight: 700; font-size: 16px; color: var(--ink); }
+.leaderboard-row.rank-1 .leaderboard-count-value { font-size: 19px; color: var(--accent-warm); }
+.leaderboard-count-label { font-size: 10px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
+
+.leaderboard-rest { display: flex; flex-direction: column; margin-top: 4px; }
+.leaderboard-rest.collapsed { display: none; }
+.leaderboard-rest .leaderboard-row { background: none; border: none; border-radius: 0; padding: 9px 2px; border-bottom: 1px solid var(--line); }
+.leaderboard-rest .leaderboard-row:last-child { border-bottom: none; }
+.leaderboard-rest .leaderboard-avatar { width: 32px; height: 32px; font-size: 12px; }
+.leaderboard-rest .leaderboard-name { font-size: 14px; }
+.leaderboard-rest .leaderboard-count-value { font-size: 14px; }
+
+.leaderboard-toggle { width: 100%; text-align: center; margin-top: 2px; }
 
 /* ------------------------------------------------------------------ */
 /* PAUSE Club / Послания — лента                                       */

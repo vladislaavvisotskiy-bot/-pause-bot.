@@ -43,6 +43,8 @@
     menuCategory: "all",  // выбранный чип категории на экране Меню
     feed: null,           // список постов ленты PAUSE Club (ответ /api/feed) — общий и для CLUB, и для Послания
     feedFilter: "all",    // "all" | один из config.FEED_POST_TYPES — фильтр экрана CLUB
+    leaderboard: null,     // топ-10 клиентов по заказам (ответ /api/club/leaderboard), см. loadClubLeaderboard
+    leaderboardExpanded: false, // раскрыты ли места 4-10 под топ-3 (см. renderClubLeaderboard)
     messagesFilter: "all", // тот же принцип, отдельный фильтр экрана Послания
     favoriteKeys: null,    // null — ещё не грузили; иначе Set(s.key) избранных блюд клиента
     cart: [],              // корзина заказа — переживает закрытие визарда, см. addToCart/syncCartBar
@@ -77,8 +79,6 @@
       "home.welcomeName": "Добро пожаловать, {name}",
       "home.welcome": "Добро пожаловать",
       "home.tagline": "Вкусные обеды. Забота о тебе.",
-      "home.notify": "Уведомления",
-      "home.notifySoon": "Уведомления — скоро добавим",
       "home.todayMenu": "Сегодняшнее меню",
       "home.todayMenuOpen": "На {date} — открыт приём заказов",
       "home.menuToday": "Меню сегодня",
@@ -140,6 +140,11 @@
       "care.numberLabel": "Послание № {number} из {total}",
 
       "club.title": "Pause Club", "club.more": "Ещё", "club.moreSoon": "Скоро добавим",
+      "club.leaderboardTitle": "Рейтинг",
+      "club.leaderboardShowMore": "Показать ещё",
+      "club.leaderboardShowLess": "Свернуть",
+      "club.leaderboardEmpty": "Рейтинг пока пуст — сделайте первый заказ!",
+      "club.leaderboardLoadFailed": "Не удалось загрузить рейтинг.",
       "club.empty": "Пока здесь тихо — самое время опубликовать первый пост.",
       "club.deleteConfirm": "Удалить этот пост из ленты?",
       "club.deleteYes": "Да, удалить",
@@ -178,6 +183,9 @@
       "club.level.circle": "Внутренний круг", "club.level.ambassador": "VIP Pause Club",
       "profile.statOrders": "заказов", "profile.statPromo": "акции", "profile.statPosts": "постов",
       "profile.myOrders": "Мои заказы", "profile.favorites": "Избранное", "profile.notifications": "Уведомления",
+      "profile.myMessages": "Мои послания",
+      "profile.myMessagesEmpty": "Посланий пока не было — они появляются после каждого заказа.",
+      "profile.myMessagesLoadFailed": "Не удалось загрузить послания.",
       "profile.bonuses": "Бонусы и промокоды", "profile.support": "Поддержка",
       "profile.bonusesSoon": "Бонусы и промокоды — скоро добавим",
       "profile.logout": "Выйти",
@@ -272,8 +280,6 @@
       "home.welcomeName": "Xush kelibsiz, {name}",
       "home.welcome": "Xush kelibsiz",
       "home.tagline": "Mazali tushliklar. Sizga g'amxo'rlik.",
-      "home.notify": "Bildirishnomalar",
-      "home.notifySoon": "Bildirishnomalar — tez orada qo'shamiz",
       "home.todayMenu": "Bugungi menyu",
       "home.todayMenuOpen": "{date} uchun — buyurtmalar qabul qilinmoqda",
       "home.menuToday": "Bugungi menyu",
@@ -335,6 +341,11 @@
       "care.numberLabel": "Xabar № {number} / {total}",
 
       "club.title": "Pause Club", "club.more": "Yana", "club.moreSoon": "Tez orada qo'shamiz",
+      "club.leaderboardTitle": "Reyting",
+      "club.leaderboardShowMore": "Yana ko'rsatish",
+      "club.leaderboardShowLess": "Yig'ish",
+      "club.leaderboardEmpty": "Reyting hali bo'sh — birinchi buyurtmani bering!",
+      "club.leaderboardLoadFailed": "Reytingni yuklab bo'lmadi.",
       "club.empty": "Hozircha bu yerda jimjit — birinchi postni joylash uchun ayni payt.",
       "club.deleteConfirm": "Bu postni lentadan o'chirasizmi?",
       "club.deleteYes": "Ha, o'chirish",
@@ -373,6 +384,9 @@
       "club.level.circle": "Ichki doira", "club.level.ambassador": "VIP Pause Club",
       "profile.statOrders": "buyurtma", "profile.statPromo": "aksiya", "profile.statPosts": "post",
       "profile.myOrders": "Buyurtmalarim", "profile.favorites": "Sevimlilar", "profile.notifications": "Bildirishnomalar",
+      "profile.myMessages": "Xabarlarim",
+      "profile.myMessagesEmpty": "Hozircha xabarlar yo'q — ular har bir buyurtmadan keyin paydo bo'ladi.",
+      "profile.myMessagesLoadFailed": "Xabarlarni yuklab bo'lmadi.",
       "profile.bonuses": "Bonus va promokodlar", "profile.support": "Yordam",
       "profile.bonusesSoon": "Bonus va promokodlar — tez orada qo'shamiz",
       "favorites.title": "Sevimlilar",
@@ -467,8 +481,6 @@
       "home.welcomeName": "Welcome, {name}",
       "home.welcome": "Welcome",
       "home.tagline": "Tasty lunches. Care for you.",
-      "home.notify": "Notifications",
-      "home.notifySoon": "Notifications — coming soon",
       "home.todayMenu": "Today's menu",
       "home.todayMenuOpen": "For {date} — orders are open",
       "home.menuToday": "Today's menu",
@@ -530,6 +542,11 @@
       "care.numberLabel": "Message № {number} of {total}",
 
       "club.title": "Pause Club", "club.more": "More", "club.moreSoon": "Coming soon",
+      "club.leaderboardTitle": "Leaderboard",
+      "club.leaderboardShowMore": "Show more",
+      "club.leaderboardShowLess": "Show less",
+      "club.leaderboardEmpty": "Leaderboard is empty yet — place your first order!",
+      "club.leaderboardLoadFailed": "Couldn't load the leaderboard.",
       "club.empty": "It's quiet here — a great time to publish the first post.",
       "club.deleteConfirm": "Delete this post from the feed?",
       "club.deleteYes": "Yes, delete",
@@ -568,6 +585,9 @@
       "profile.clubGiveaways": "Giveaways",
       "profile.statOrders": "orders", "profile.statPromo": "promos", "profile.statPosts": "posts",
       "profile.myOrders": "My orders", "profile.favorites": "Favorites", "profile.notifications": "Notifications",
+      "profile.myMessages": "My messages",
+      "profile.myMessagesEmpty": "No messages yet — they appear after each order.",
+      "profile.myMessagesLoadFailed": "Couldn't load your messages.",
       "profile.bonuses": "Bonuses & promo codes", "profile.support": "Support",
       "profile.bonusesSoon": "Bonuses & promo codes — coming soon",
       "favorites.title": "Favorites",
@@ -1021,13 +1041,16 @@
       left.appendChild(backBtn);
     } else if (opts.logo) {
       var logo = el("div", "screen-header-logo");
-      logo.innerHTML = ICON_SPRIG + '<span>PAUSE.</span>';
+      logo.innerHTML = '<span>PAUSE.</span>';
       left.appendChild(logo);
     }
     bar.appendChild(left);
     bar.appendChild(el("div", "screen-header-title", escapeHtml(opts.title || "")));
     var right = el("div", "screen-header-side screen-header-right");
-    if (opts.right) {
+    if (opts.rightLang) {
+      right.classList.add("screen-header-right-lang");
+      right.appendChild(buildHeaderLangSwitch());
+    } else if (opts.right) {
       var rightBtn = el("button", "header-icon-btn", opts.right.icon);
       rightBtn.setAttribute("aria-label", opts.right.label || "");
       rightBtn.addEventListener("click", function () { haptic("select"); opts.right.onClick(); });
@@ -1037,13 +1060,28 @@
     root.appendChild(bar);
   }
 
+  // Переключатель языка в шапке Главной (ru/uz/en, см. LANGUAGES ниже) —
+  // та же смена языка, что и в Настройках (setLang + applyLangToUI), только
+  // в одно касание, без захода в Профиль. HEADER_LANG_CODES — короткие
+  // подписи пилюль ("RU"/"UZ"/"EN"), не через t() — как и LANGUAGES ниже,
+  // обозначения языка всегда на своём коде, а не переводятся.
+  var HEADER_LANG_CODES = ["ru", "uz", "en"];
+  function buildHeaderLangSwitch() {
+    var wrap = el("div", "header-lang-switch");
+    HEADER_LANG_CODES.forEach(function (code) {
+      var btn = el("button", "header-lang-btn" + (state.lang === code ? " active" : ""), code.toUpperCase());
+      btn.addEventListener("click", function () {
+        if (state.lang === code) return;
+        haptic("select");
+        setLang(code);
+        applyLangToUI();
+      });
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+
   var ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22"><path d="M15 5l-7 7 7 7"/></svg>';
-  var ICON_BELL_HDR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="21" height="21"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>';
-  // Веточка с листьями рядом с "PAUSE." на Главной — по присланному
-  // макету (тонкая линия-стебель + несколько листьев вдоль неё), вместо
-  // эмодзи "🌿". Координаты листьев посчитаны (не нарисованы на глаз) —
-  // предыдущие попытки руками привели к нечитаемой кляксе, см. отчёт.
-  var ICON_SPRIG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M12.5 21 Q11.85 12.75 10 4.5"/><path d="M11.90 15.22 Q13.86 14.89 14.85 13.16 Q12.88 13.50 11.90 15.22 Z"/><path d="M11.55 12.75 Q10.42 11.11 8.43 10.95 Q9.57 12.59 11.55 12.75 Z"/><path d="M11.06 9.78 Q12.82 9.63 13.83 8.18 Q12.07 8.33 11.06 9.78 Z"/><path d="M10.53 6.97 Q9.95 5.64 8.54 5.30 Q9.11 6.64 10.53 6.97 Z"/></svg>';
   // Стандартная, многократно проверенная иконка "шестерёнка" (Feather
   // Icons, settings) — прошлая версия была нарисована вручную и рендерилась
   // неровно (зубцы разного размера/шага), заменена на готовый, точный путь.
@@ -1084,7 +1122,10 @@
     if (name === "home") { if (state.home) renderHomeScreen(); loadHome(); }
     if (name === "profile") { if (state.profile) renderProfileScreen(); else loadProfile(); }
     if (name === "menu") { if (state.menu) renderMenuScreen(); loadMenu(); }
-    if (name === "club") { if (state.feed) renderFeedScreen(); else loadFeed(); }
+    if (name === "club") {
+      if (state.feed) renderFeedScreen(); else loadFeed();
+      if (state.leaderboard) renderClubLeaderboard(); else loadClubLeaderboard();
+    }
     if (name === "messages") { if (state.feed) renderMessagesFeedScreen(); else loadFeed(); }
   }
 
@@ -1230,7 +1271,7 @@
   function renderHomeScreen() {
     screenHeader("home-header", {
       logo: true,
-      right: { icon: ICON_BELL_HDR, label: t("home.notify"), onClick: function () { toast(t("home.notifySoon")); } },
+      rightLang: true,
     });
     var root = document.getElementById("home-root");
     root.innerHTML = "";
@@ -1601,24 +1642,25 @@
     });
   }
 
-  // Картинки ленты идут через свой прокси-эндпоинт, который требует ту же
-  // подпись initData, что и остальные запросы (см. pauseapp.py:
-  // admin_auth_middleware — гейт на КАЖДЫЙ /api/*, без исключений). Обычный
-  // <img src="..."> заголовков не шлёт, поэтому картинку сначала тянем
-  // сами через fetch() с заголовком и превращаем в blob-URL — простое
-  // кэширование в памяти, чтобы при повторном рендере ленты не качать те
-  // же файлы заново.
-  var _feedImageCache = {};
-  function loadFeedImage(url, imgEl) {
-    if (_feedImageCache[url]) {
-      _feedImageCache[url].then(function (blobUrl) { imgEl.src = blobUrl; });
-      return;
+  // Картинки ленты (и, ниже, аватарки в таблице лидеров Pause Club) идут
+  // через свой прокси-эндпоинт, который требует ту же подпись initData,
+  // что и остальные запросы (см. pauseapp.py: admin_auth_middleware — гейт
+  // на КАЖДЫЙ /api/*, без исключений). Обычный <img src="..."> заголовков
+  // не шлёт, поэтому картинку сначала тянем сами через fetch() с
+  // заголовком и превращаем в blob-URL — простое кэширование в памяти по
+  // URL, чтобы при повторном рендере не качать те же файлы заново (общий
+  // кэш для любых авторизованных картинок, не только ленты).
+  var _authedImageCache = {};
+  function fetchAuthedImageBlobUrl(url) {
+    if (!_authedImageCache[url]) {
+      _authedImageCache[url] = fetch(url, { headers: { "X-Telegram-Init-Data": initData() } })
+        .then(function (resp) { if (!resp.ok) throw new Error("HTTP " + resp.status); return resp.blob(); })
+        .then(function (blob) { return URL.createObjectURL(blob); });
     }
-    var p = fetch(url, { headers: { "X-Telegram-Init-Data": initData() } })
-      .then(function (resp) { if (!resp.ok) throw new Error("HTTP " + resp.status); return resp.blob(); })
-      .then(function (blob) { return URL.createObjectURL(blob); });
-    _feedImageCache[url] = p;
-    p.then(function (blobUrl) { imgEl.src = blobUrl; }).catch(function () { imgEl.style.display = "none"; });
+    return _authedImageCache[url];
+  }
+  function loadFeedImage(url, imgEl) {
+    fetchAuthedImageBlobUrl(url).then(function (blobUrl) { imgEl.src = blobUrl; }).catch(function () { imgEl.style.display = "none"; });
   }
 
   // Фото блюд (карточка Меню/Избранного, детальный экран) приходят двумя
@@ -1720,6 +1762,89 @@
     openWizard(function (body) {
       wizardPhaseEl.innerHTML = "";
       body.appendChild(buildFeedPostCard(post));
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // Pause Club — таблица лидеров (топ-10 по числу заказов). Топ-3 всегда
+  // на виду, места 4-10 — под разворачивающейся кнопкой (см.
+  // state.leaderboardExpanded). Аватарка — реальное фото профиля
+  // человека из Telegram (см. pauseapp.py: api_avatar_image), не своё —
+  // поэтому тем же авторизованным прокси, что и картинки ленты
+  // (fetchAuthedImageBlobUrl), с откатом на инициалы, если фото нет.
+  // -------------------------------------------------------------------
+
+  function buildLeaderboardAvatar(tgId, name) {
+    var wrap = el("div", "leaderboard-avatar");
+    var img = document.createElement("img");
+    img.alt = "";
+    wrap.appendChild(img);
+    fetchAuthedImageBlobUrl("/pauseapp/api/avatar/" + encodeURIComponent(tgId))
+      .then(function (blobUrl) { img.src = blobUrl; })
+      .catch(function () {
+        wrap.innerHTML = "";
+        wrap.textContent = initials(name);
+      });
+    return wrap;
+  }
+
+  function buildLeaderboardRow(entry, rank) {
+    var row = el("div", "leaderboard-row" + (rank === 1 ? " rank-1" : ""));
+    row.appendChild(el("div", "leaderboard-rank", String(rank)));
+    row.appendChild(buildLeaderboardAvatar(entry.tg_id, entry.name));
+    var info = el("div", "leaderboard-info");
+    info.appendChild(el("div", "leaderboard-name", escapeHtml(entry.name || t("profile.noName"))));
+    var clubLine = el("div", "leaderboard-club");
+    clubLine.innerHTML = clubLevelIcon(entry.club.key) + "<span>" + escapeHtml(clubLevelLabel(entry.club.key, entry.club.label)) + "</span>";
+    info.appendChild(clubLine);
+    row.appendChild(info);
+    var count = el("div", "leaderboard-count");
+    count.innerHTML = '<div class="leaderboard-count-value">' + entry.order_count + '</div><div class="leaderboard-count-label">' + t("profile.statOrders") + '</div>';
+    row.appendChild(count);
+    return row;
+  }
+
+  function renderClubLeaderboard() {
+    var root = document.getElementById("club-leaderboard");
+    root.innerHTML = "";
+    var list = state.leaderboard || [];
+    if (!list.length) {
+      root.appendChild(el("div", "profile-section-title", t("club.leaderboardTitle")));
+      root.appendChild(el("div", "empty-note", t("club.leaderboardEmpty")));
+      return;
+    }
+
+    root.appendChild(el("div", "profile-section-title", t("club.leaderboardTitle")));
+
+    var top3 = el("div", "leaderboard-top3");
+    list.slice(0, 3).forEach(function (entry, idx) { top3.appendChild(buildLeaderboardRow(entry, idx + 1)); });
+    root.appendChild(top3);
+
+    var rest = list.slice(3);
+    if (rest.length) {
+      var restWrap = el("div", "leaderboard-rest" + (state.leaderboardExpanded ? "" : " collapsed"));
+      rest.forEach(function (entry, idx) { restWrap.appendChild(buildLeaderboardRow(entry, idx + 4)); });
+      root.appendChild(restWrap);
+
+      var toggle = el("button", "btn-text leaderboard-toggle", state.leaderboardExpanded ? t("club.leaderboardShowLess") : t("club.leaderboardShowMore"));
+      toggle.addEventListener("click", function () {
+        haptic("select");
+        state.leaderboardExpanded = !state.leaderboardExpanded;
+        renderClubLeaderboard();
+      });
+      root.appendChild(toggle);
+    }
+  }
+
+  function loadClubLeaderboard() {
+    api("/api/club/leaderboard").then(function (data) {
+      state.leaderboard = data.leaderboard || [];
+      renderClubLeaderboard();
+    }).catch(function () {
+      var root = document.getElementById("club-leaderboard");
+      root.innerHTML = "";
+      root.appendChild(el("div", "profile-section-title", t("club.leaderboardTitle")));
+      root.appendChild(el("div", "empty-note", t("club.leaderboardLoadFailed")));
     });
   }
 
@@ -2541,12 +2666,16 @@
     statRow.appendChild(s1); statRow.appendChild(s2); statRow.appendChild(s3);
     root.appendChild(statRow);
 
-    // Пять строк — ровно как на макете. "Настройки" (точка доставки,
-    // имя/телефон) и "Мои послания" туда не входят: первое теперь
-    // отдельная иконка-шестерёнка в шапке, второе — уже своя вкладка
-    // нижней навигации (Послания), дублировать её здесь незачем.
+    // "Настройки" (точка доставки, имя/телефон) сюда не входит — это
+    // отдельная иконка-шестерёнка в шапке. "Мои послания" — ЦИФРОВЫЕ
+    // карточки с номером, которые человек получает при каждом заказе (см.
+    // loadMessages/sheets.get_client_messages) — отдельная личная история,
+    // не то же самое, что вкладка нижней навигации "Послания" (там общая
+    // лента постов PAUSE Club), поэтому обе показываются, а не дублируют
+    // друг друга.
     var rows = el("div", "card profile-nav-list");
     rows.appendChild(buildProfileRow(ICON_ORDERS, t("profile.myOrders"), function () { openProfileSubscreen(t("orders.title"), loadOrders); }));
+    rows.appendChild(buildProfileRow(ICON_ENVELOPE, t("profile.myMessages"), function () { openProfileSubscreen(t("profile.myMessages"), loadMessages); }));
     rows.appendChild(buildProfileRow(ICON_HEART, t("profile.favorites"), function () { openProfileSubscreen(t("favorites.title"), loadFavorites); }));
     rows.appendChild(buildProfileRow(ICON_BELL, t("profile.notifications"), openNotifySubscreen));
     rows.appendChild(buildProfileRow(ICON_TAG, t("profile.bonuses"), function () { toast(t("profile.bonusesSoon")); }));
@@ -3638,20 +3767,20 @@
     api("/api/messages").then(function (data) {
       root.innerHTML = "";
       if (!data.messages.length) {
-        root.appendChild(el("div", "empty-note", "Посланий пока не было — они появляются после каждого заказа."));
+        root.appendChild(el("div", "empty-note", t("profile.myMessagesEmpty")));
         return;
       }
       data.messages.forEach(function (m) {
         var card = el("div", "card message-card");
         card.innerHTML =
-          '<div class="message-card-num">№ ' + m.number + ' из ' + data.total + '</div>' +
+          '<div class="message-card-num">' + escapeHtml(t("care.numberLabel", { number: m.number, total: data.total })) + '</div>' +
           '<div class="message-card-text">«' + escapeHtml(m.text) + '»</div>' +
           '<div class="message-card-date">' + m.date + '</div>';
         root.appendChild(card);
       });
     }).catch(function () {
       root.innerHTML = "";
-      root.appendChild(el("div", "empty-note", "Не удалось загрузить послания."));
+      root.appendChild(el("div", "empty-note", t("profile.myMessagesLoadFailed")));
     });
   }
 
@@ -3914,6 +4043,7 @@
     if (state.home) renderHomeScreen();
     if (state.menu) renderMenuScreen();
     if (state.feed) { renderFeedScreen(); renderMessagesFeedScreen(); }
+    if (state.leaderboard) renderClubLeaderboard();
     if (state.profile) renderProfileScreen();
   }
 

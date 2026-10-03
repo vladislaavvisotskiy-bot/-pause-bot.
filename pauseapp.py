@@ -839,6 +839,53 @@ async def api_messages(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# Pause Club — таблица лидеров (топ-10 по числу заказов, экран "Pause Club").
+# ---------------------------------------------------------------------------
+
+async def api_club_leaderboard(request: web.Request):
+    leaderboard = await _retry_sheets(sheets.get_club_leaderboard)
+    return web.json_response({"leaderboard": leaderboard})
+
+
+async def api_avatar_image(request: web.Request):
+    """Аватар клиента из Telegram (его собственное фото профиля) — для
+    таблицы лидеров: своё фото человек видит через tg.initDataUnsafe.user
+    (см. app.js: tgPhotoUrl), а вот чужие аватарки оттуда взять нельзя —
+    единственный способ показать аватарку ДРУГОГО человека — спросить её у
+    Bot API самим (getUserProfilePhotos) и отдать клиенту уже готовые байты,
+    не светя сам BOT_TOKEN во фронтенде (прямая ссылка api.telegram.org/
+    file/bot<TOKEN>/... его как раз содержит). Тот же приём скачивания, что
+    и у api_feed_image выше (bot.download сам делает getFile + скачивание)."""
+    tg_id = request.match_info.get("tg_id", "")
+    bot = request.app.get("bot")
+    if not bot or not tg_id:
+        return web.Response(status=404)
+    try:
+        tg_id_int = int(tg_id)
+    except ValueError:
+        return web.Response(status=404)
+    try:
+        photos = await bot.get_user_profile_photos(tg_id_int, limit=1)
+    except Exception:
+        logger.exception("PAUSE App: не удалось получить аватар клиента (tg_id=%s)", tg_id)
+        return web.Response(status=502)
+    if not photos or not photos.photos:
+        return web.Response(status=404)
+    file_id = photos.photos[0][-1].file_id
+    try:
+        buf = await bot.download(file_id)
+    except Exception:
+        logger.exception("PAUSE App: не удалось скачать аватар клиента (tg_id=%s)", tg_id)
+        return web.Response(status=502)
+    if buf is None:
+        return web.Response(status=404)
+    return web.Response(
+        body=buf.read(), content_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+# ---------------------------------------------------------------------------
 # PAUSE Club — лента. Фото НЕ хранятся ни на сервере, ни в самой таблице —
 # только в закрытом Telegram-канале config.MEDIA_CHAT_ID: бот отправляет
 # туда фото (api_feed_publish), Telegram возвращает настоящий file_id, это
@@ -1392,6 +1439,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/favorites/toggle", api_favorites_toggle)
     app.router.add_post("/api/feedback", api_feedback)
     app.router.add_get("/api/messages", api_messages)
+    app.router.add_get("/api/club/leaderboard", api_club_leaderboard)
+    app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_get("/api/feed", api_feed_list)
     app.router.add_post("/api/feed", api_feed_publish)
     app.router.add_post("/api/feed/delete", api_feed_delete)
