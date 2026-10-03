@@ -1139,10 +1139,10 @@ async def api_ops_orders(request: web.Request):
 async def api_ops_debtors(request: web.Request):
     if not request["pa_debtors"]:
         return web.json_response({"error": "forbidden"}, status=403)
-    # Ленивая уборка: кто закрыл все долги с прошлого открытия этого
-    # экрана — его комментарии/напоминания больше не нужны (прямая
-    # просьба пользователя), чистим перед каждым показом списка.
-    await _retry_sheets(sheets.cleanup_resolved_debtors)
+    # Больше НЕ чистим автоматически: клиент, закрывший весь долг, должен
+    # остаться виден в списке (с суммой 0, в самом низу — см.
+    # sheets.get_all_debtors) до тех пор, пока админ сам явно не нажмёт
+    # "Удалить историю долгов" на его карточке (прямая просьба).
     debtors = await _retry_sheets(sheets.get_all_debtors)
     return web.json_response({"debtors": debtors})
 

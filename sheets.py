@@ -430,11 +430,17 @@ def get_client_debt_from_orders(orders: list) -> int:
 
 def get_all_debtors() -> list:
     """Возвращает список [(имя, id, сумма_долга)] — агрегированный по всем
-    заказам. Сырые строки — из общего кэша (см. _orders_raw_rows): эта
-    функция и так вызывается ДВАЖДЫ на один показ списка должников
-    (сначала изнутри cleanup_resolved_debtors, потом ещё раз явно, см.
-    pauseapp.api_ops_debtors) — без общего кэша это было два полных
-    чтения растущего листа "Заказы" подряд на каждое открытие экрана."""
+    заказам. Сырые строки — из общего кэша (см. _orders_raw_rows).
+
+    Помимо АКТИВНЫХ должников (сумма > 0) сюда же попадают клиенты, у
+    которых все дни долга уже отмечены оплаченными, но админ ещё не
+    нажал "Удалить историю долгов" на их карточке — с суммой 0, по
+    прямой просьбе: "просто падает вниз списка с долгом 0, но не
+    удаляется, пока явно не нажали кнопку". Сортировка по убыванию
+    суммы и так кладёт их в самый конец, отдельной логики не нужно.
+    Пропадают из этого списка насовсем только через delete_debtor_history
+    (она же снимает маркер "долг погашен" из "Заказы" — без этого клиент
+    остался бы в списке с суммой 0 навсегда, даже после явного удаления)."""
     rows = _orders_raw_rows()
     clients = _clients_index()
     prices = get_set_prices()
@@ -446,18 +452,20 @@ def get_all_debtors() -> list:
         if len(row) < config.O_PAYMENT:
             continue
         payment = row[config.O_PAYMENT - 1].strip()
-        if payment != "В долг":
-            continue
         comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
         if is_canceled(comment):
             continue
+        is_debt = payment == "В долг"
+        is_resolved = is_debt_paid_marked(comment)
+        if not is_debt and not is_resolved:
+            continue
         eid = row[config.O_CLIENT_ID - 1].strip()
         name = (clients.get(eid) or {}).get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or eid
-        amount = _row_amount(row, prices)
         key = eid or name
         if key not in debts:
             debts[key] = {"name": name, "id": eid, "sum": 0}
-        debts[key]["sum"] += amount
+        if is_debt:
+            debts[key]["sum"] += _row_amount(row, prices)
     return sorted(debts.values(), key=lambda d: -d["sum"])
 
 
@@ -568,27 +576,54 @@ def unmark_debt_line_paid(row: int):
 
 
 def delete_debtor_history(client_id):
-    """"Удалить историю долгов" на карточке должника — только когда у
-    клиента не осталось НЕпогашенных долгов (проверяем тут же, а не
-    полагаемся на фронт): иначе get_all_debtors ещё бы считал его
-    должником, а комментарии/напоминания уже исчезли бы — рассинхрон.
-    Чистит только комментарии/напоминания (см. cleanup_resolved_debtors)
-    — сами строки "Заказы" не трогаем, маркер в них остаётся как есть,
-    он не мешает ни одному отчёту."""
+    """"Удалить историю долгов" на карточке должника — ЕДИНСТВЕННЫЙ способ
+    убрать клиента из списка должников, когда его долг уже полностью
+    погашен (см. get_all_debtors — до этой кнопки он так и остаётся там
+    виден, с суммой 0, в самом низу списка, по прямой просьбе). Только
+    когда у клиента не осталось НЕпогашенных долгов (проверяем тут же, а
+    не полагаемся на фронт).
+
+    Снимает маркер "долг погашен" (config.DEBT_PAID_MARKER) с его строк в
+    "Заказы" — без этого get_all_debtors продолжал бы находить эти
+    строки и клиент остался бы в списке с суммой 0 навсегда, даже после
+    удаления. Сами строки не удаляются и остальной текст комментария (если
+    был) не трогаем — снимаем только сам маркер, той же механикой, что и
+    unmark_debt_line_paid. Плюс комментарии/напоминания с карточки."""
     if get_client_debt(client_id) > 0:
         return False
+
+    ws = _ws(config.SHEET_ORDERS)
+    cells = []
+    for i, row in enumerate(_orders_raw_rows()):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_COMMENT:
+            continue
+        if row[config.O_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        comment = row[config.O_COMMENT - 1].strip()
+        if not is_debt_paid_marked(comment):
+            continue
+        parts = [p.strip() for p in comment.split("|")]
+        parts = [p for p in parts if p and config.DEBT_PAID_MARKER not in p]
+        cells.append(gspread.Cell(r, config.O_COMMENT, " | ".join(parts)))
+    if cells:
+        ws.update_cells(cells, value_input_option="RAW")
+        _invalidate_orders_raw_cache()
+
     for sheet_name, header, client_col in (
         (config.SHEET_DEBT_COMMENTS, ["client_id", "date", "text"], config.DC_CLIENT_ID),
         (config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"], config.DR_CLIENT_ID),
     ):
-        ws = _ws_or_create(sheet_name, header)
-        rows = ws.get_all_values()
+        ws2 = _ws_or_create(sheet_name, header)
+        rows2 = ws2.get_all_values()
         stale_rows = [
-            i + 1 for i, row in enumerate(rows)
+            i + 1 for i, row in enumerate(rows2)
             if i + 1 != 1 and len(row) >= client_col and row[client_col - 1].strip() == str(client_id)
         ]
         for r in sorted(stale_rows, reverse=True):
-            ws.delete_rows(r)
+            ws2.delete_rows(r)
     return True
 
 
@@ -689,36 +724,6 @@ def get_due_debt_reminders(date_str: str) -> list:
 def mark_debt_reminder_sent(row: int):
     ws = _ws_or_create(config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"])
     ws.update_cell(row, config.DR_SENT, "Да")
-
-
-def cleanup_resolved_debtors():
-    """Клиент закрыл все долги — его комментарии/напоминания больше не
-    нужны (по прямой просьбе: "нам не нужна такая информация больше").
-    Сверяем client_id в обоих служебных листах с текущим списком реальных
-    должников (get_all_debtors, считается из "Заказы" заново) — чей ID
-    туда не попал, у того долгов больше нет, удаляем все его строки.
-    Вызывается лениво при каждом открытии списка должников (см.
-    pauseapp.py: api_ops_debtors) — отдельного фонового задания не нужно."""
-    active_ids = {str(d["id"]) for d in get_all_debtors() if d["id"]}
-
-    for sheet_name, header, client_col in (
-        (config.SHEET_DEBT_COMMENTS, ["client_id", "date", "text"], config.DC_CLIENT_ID),
-        (config.SHEET_DEBT_REMINDERS, ["client_id", "created", "date", "note", "sent"], config.DR_CLIENT_ID),
-    ):
-        ws = _ws_or_create(sheet_name, header)
-        rows = ws.get_all_values()
-        stale_rows = []
-        for i, row in enumerate(rows):
-            r = i + 1
-            if r == 1:
-                continue
-            if len(row) < client_col:
-                continue
-            client_id = row[client_col - 1].strip()
-            if client_id and client_id not in active_ids:
-                stale_rows.append(r)
-        for r in sorted(stale_rows, reverse=True):
-            ws.delete_rows(r)
 
 
 def get_client_orders(client_id, limit=10) -> list:
