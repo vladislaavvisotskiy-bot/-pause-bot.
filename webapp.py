@@ -150,22 +150,30 @@ async def _retry_sheets(fn, *args, retries: int = 2, delay: float = 1.2, **kwarg
     raise last_exc
 
 
-async def _role_for(tg_id, is_dynamic_route_admin):
-    """Возвращает (role, is_route_admin). role — что показывает раздел
-    "Заказы": "admin" (управление точками/курьерами) или "courier" (меню
-    "Поехали"/"Сдал"). is_route_admin — видит ли человек админский
-    "Профиль" (видимость маршрута, расходы на логистику) — true и для
-    основного админа бота (ADMIN_IDS), и для админов этого Mini App
-    (ROUTE_ADMIN_IDS/OWNER_TG_ID/курьеров, назначенных через "Курьеры" —
-    см. is_dynamic_route_admin), и остаётся true даже когда такой админ
+async def _role_for(tg_id):
+    """Возвращает (role, is_route_admin, is_dynamic_route_admin). role —
+    что показывает раздел "Заказы": "admin" (управление точками/
+    курьерами) или "courier" (меню "Поехали"/"Сдал"). is_route_admin —
+    видит ли человек админский "Профиль" (видимость маршрута, расходы на
+    логистику) — true и для основного админа бота (ADMIN_IDS), и для
+    админов этого Mini App (ROUTE_ADMIN_IDS/OWNER_TG_ID/курьеров,
+    назначенных через "Курьеры"), и остаётся true даже когда такой админ
     переключился в режим "Курьер" (иначе он не смог бы вернуться обратно —
     "Профиль" в этом режиме показывал бы courier-экран без переключателя).
+    is_dynamic_route_admin — отдельно, т.к. нужен ещё раз в auth_middleware
+    для can_toggle_mode.
 
-    is_dynamic_route_admin — результат sheets.is_courier_route_admin(tg_id)
-    (см. auth_middleware), вычисляется ДО вызова этой функции, а не внутри
-    неё — тот же самый результат нужен ещё раз чуть ниже для
-    can_toggle_mode, а get_couriers() всё равно кэширован, второй вызов
-    был бы лишним только по читаемости, не по нагрузке на Sheets.
+    sheets.is_courier_route_admin(tg_id) (единственная НОВАЯ, по сравнению
+    с ROUTE_ADMIN_IDS/ADMIN_IDS, причина читать "Курьеры" на каждый
+    /api/* запрос) проверяется ТОЛЬКО если tg_id не нашёлся среди
+    ROUTE_ADMIN_IDS/OWNER_TG_ID — раньше эта проверка была БЕЗУСЛОВНОЙ (в
+    auth_middleware, до вызова этой функции), то есть лишним чтением
+    Google Sheets на КАЖДЫЙ запрос от владельца и от обоих статических
+    админов "Маршрута" — самых активных пользователей Mini App. Именно
+    это, судя по всему, и давало "server_error" при нажатии на
+    переключатели в "Курьеры": больше чтений "Курьеры" на каждый клик —
+    больше шанс упереться в лимит Google Sheets API (429/5xx), который
+    _retry_sheets не всегда успевает пересидеть за 2 повтора.
 
     ROUTE_ADMIN_IDS/OWNER_TG_ID/is_dynamic_route_admin проверяем ПЕРЕД
     ADMIN_IDS: основной админ бота (Влад) обычно одновременно и в
@@ -177,14 +185,17 @@ async def _role_for(tg_id, is_dynamic_route_admin):
     перетаскиванием карточек). Основному админу, который ни в одной из
     этих трёх категорий, самого переключения режима не показываем (см.
     api_route_admin_mode_set) — у него role всегда "admin", как и раньше."""
-    if tg_id in config.ROUTE_ADMIN_IDS or tg_id == config.OWNER_TG_ID or is_dynamic_route_admin:
+    if tg_id in config.ROUTE_ADMIN_IDS or tg_id == config.OWNER_TG_ID:
         mode = await _retry_sheets(sheets.get_route_admin_mode, tg_id)
-        return mode, True
+        return mode, True, False
+    if await _retry_sheets(sheets.is_courier_route_admin, tg_id):
+        mode = await _retry_sheets(sheets.get_route_admin_mode, tg_id)
+        return mode, True, True
     if tg_id in config.ADMIN_IDS:
-        return "admin", True
+        return "admin", True, False
     if await _retry_sheets(sheets.is_courier, tg_id):
-        return "courier", False
-    return "", False
+        return "courier", False, False
+    return "", False, False
 
 
 # Каждая из sheets.get_route_for_date/reorder_route/add_route_point/
@@ -230,8 +241,7 @@ async def auth_middleware(request: web.Request, handler):
         tg_id, tg_name = _extract_tg_user(request)
         if tg_id is None:
             return web.json_response({"error": "unauthorized"}, status=401)
-        is_dynamic_route_admin = await _retry_sheets(sheets.is_courier_route_admin, tg_id)
-        role, is_route_admin = await _role_for(tg_id, is_dynamic_route_admin)
+        role, is_route_admin, is_dynamic_route_admin = await _role_for(tg_id)
         if not role:
             return web.json_response({"error": "forbidden"}, status=403)
         request["tg_id"] = tg_id
