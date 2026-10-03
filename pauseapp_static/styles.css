@@ -79,23 +79,6 @@ input, textarea, select { font-family: inherit; font-size: 15px; }
 }
 .screen-header:not(.screen-header-center) .screen-header-title { text-align: left; }
 .screen-header.screen-header-center .screen-header-title { text-align: center; }
-.screen-header-logo {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink);
-  white-space: nowrap;
-}
-/* Главная: "PAUSE." — чуть крупнее приветствия "Добро пожаловать, {имя}"
-   под ней (.home-hero h2, 19px) и с разрядкой букв для премиального
-   ощущения, но без прежней крупности (была 34px/0.22em — на деле вышло
-   слишком массивно и неаккуратно). Веточка рядом с лого убрана по прямой
-   просьбе — здесь только текст. */
-.screen-header-logo span {
-  font-weight: 700;
-  font-size: 22px;
-  letter-spacing: 0.14em;
-}
 /* Переключатель языка в шапке Главной (ru/uz/en) — замена колокольчику
    уведомлений, та же "пилюля-трек" с активным сегментом, что и везде в
    приложении (см. .filter-chip/.mode-switch-row), без новых цветов. */
@@ -482,8 +465,18 @@ p { margin: 0; color: var(--ink-soft); }
 /* ------------------------------------------------------------------ */
 
 .home-hero { padding: 4px 2px 20px; }
-.home-hero h2 { font-size: 19px; }
-.home-hero p { margin-top: 4px; }
+/* "Добро пожаловать" + имя отдельной строкой (см. app.js: home.welcomeName
+   — перенос через <br>) — теперь это главный заголовок экрана (раньше
+   рядом сверху ещё стояло отдельное лого "PAUSE.", которого больше нет,
+   см. screenHeader). Размер — среднее между тем, что было изначально
+   (24px) и слишком уменьшенным на предыдущем шаге (19px). */
+.home-hero h2 { font-size: 22px; line-height: 1.25; }
+.home-hero p { margin-top: 6px; }
+/* "PAUSE" — бренд в начале строки с таглайном (переехал сюда из шапки),
+   чуть заметнее основного приглушённого текста параграфа, но без
+   отдельного увеличения — сам текст таглайна остаётся одной спокойной
+   строкой, не второй "шапкой". */
+.home-tagline-brand { font-weight: 700; color: var(--ink); letter-spacing: 0.04em; }
 
 .home-promo { display: flex; align-items: center; gap: 14px; cursor: pointer; margin-bottom: 20px; }
 .home-promo-icon { color: var(--ink); flex: 0 0 auto; }

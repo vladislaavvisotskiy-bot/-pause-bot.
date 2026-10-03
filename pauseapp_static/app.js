@@ -76,7 +76,7 @@
       "access.errorTitle": "Небольшая заминка",
       "access.errorText": "Не получилось связаться с сервером — потяните экран вниз или откройте приложение заново.",
       "home.loadError": "Не удалось загрузить данные: {msg}",
-      "home.welcomeName": "Добро пожаловать, {name}",
+      "home.welcomeName": "Добро пожаловать<br>{name}",
       "home.welcome": "Добро пожаловать",
       "home.tagline": "Больше чем еда. Упаковано с любовью ♡",
       "home.todayMenu": "Сегодняшнее меню",
@@ -277,7 +277,7 @@
       "access.errorTitle": "Kichik uzilish",
       "access.errorText": "Server bilan bog'lanib bo'lmadi — ekranni pastga torting yoki ilovani qayta oching.",
       "home.loadError": "Ma'lumotlarni yuklab bo'lmadi: {msg}",
-      "home.welcomeName": "Xush kelibsiz, {name}",
+      "home.welcomeName": "Xush kelibsiz<br>{name}",
       "home.welcome": "Xush kelibsiz",
       "home.tagline": "Shunchaki ovqatdan ko'ra ko'proq. Sevgi bilan qadoqlangan ♡",
       "home.todayMenu": "Bugungi menyu",
@@ -478,7 +478,7 @@
       "access.errorTitle": "Small hiccup",
       "access.errorText": "Couldn't reach the server — pull down to refresh or reopen the app.",
       "home.loadError": "Couldn't load data: {msg}",
-      "home.welcomeName": "Welcome, {name}",
+      "home.welcomeName": "Welcome<br>{name}",
       "home.welcome": "Welcome",
       "home.tagline": "More than food. Packed with love ♡",
       "home.todayMenu": "Today's menu",
@@ -1021,12 +1021,13 @@
   // -------------------------------------------------------------------
   // Шапка экрана — своя на каждой вкладке, как на макете (единой сплошной
   // шапки на всё приложение больше нет, см. index.html). opts:
-  //   logo   — true на Главной: веточка + "PAUSE." слева вместо кнопки "назад"
-  //   back   — функция клика по стрелке "назад" слева (если есть)
-  //   title  — текст заголовка
-  //   center — true, если заголовок по центру (Меню/Профиль), иначе слева
-  //            прижатый к началу (Pause Club/Послания — как на макете)
-  //   right  — {icon, label, onClick} — иконка справа, необязательна
+  //   back     — функция клика по стрелке "назад" слева (если есть)
+  //   title    — текст заголовка
+  //   center   — true, если заголовок по центру (Меню/Профиль), иначе слева
+  //              прижатый к началу (Pause Club/Послания — как на макете)
+  //   right    — {icon, label, onClick} — иконка справа, необязательна
+  //   rightLang — true на Главной: переключатель языка RU/UZ/EN справа
+  //              вместо иконки (см. buildHeaderLangSwitch)
   // -------------------------------------------------------------------
 
   function screenHeader(containerId, opts) {
@@ -1039,10 +1040,6 @@
       backBtn.setAttribute("aria-label", t("common.back"));
       backBtn.addEventListener("click", function () { haptic("select"); opts.back(); });
       left.appendChild(backBtn);
-    } else if (opts.logo) {
-      var logo = el("div", "screen-header-logo");
-      logo.innerHTML = '<span>PAUSE.</span>';
-      left.appendChild(logo);
     }
     bar.appendChild(left);
     bar.appendChild(el("div", "screen-header-title", escapeHtml(opts.title || "")));
@@ -1270,7 +1267,6 @@
 
   function renderHomeScreen() {
     screenHeader("home-header", {
-      logo: true,
       rightLang: true,
     });
     var root = document.getElementById("home-root");
@@ -1278,11 +1274,17 @@
     var p = state.profile;
     var m = state.menu;
 
+    // "PAUSE." раньше стояло отдельным лого в шапке — теперь это часть
+    // самого приветствия: "Добро пожаловать" + имя отдельной строкой (см.
+    // home.welcomeName — перенос строки прямо в переводе, через <br>), а
+    // бренд "PAUSE" переехал вниз, в начало строки с таглайном (само
+    // слово "PAUSE" не переводится ни на один язык — оставлено статикой,
+    // а не частью i18n-ключа).
     var firstName = (p && p.registered && p.name) ? p.name.trim().split(/\s+/)[0] : "";
     var hero = el("div", "home-hero");
     hero.innerHTML =
       '<h2>' + (firstName ? t("home.welcomeName", { name: escapeHtml(firstName) }) : t("home.welcome")) + '</h2>' +
-      '<p>' + t("home.tagline") + '</p>';
+      '<p><span class="home-tagline-brand">PAUSE</span> — ' + t("home.tagline") + '</p>';
     root.appendChild(hero);
 
     var promo = el("div", "card home-promo");
