@@ -296,6 +296,66 @@ p { margin: 0; color: var(--ink-soft); }
 }
 .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--ink); }
 
+.visibility-search-field { margin-bottom: 16px; }
+
+/* ------------------------------------------------------------------ */
+/* "Курьеры" (isRouteAdmin, Профиль → Центр управления → Курьеры) —     */
+/* список/добавление в том же языке, что "Операционный центр →         */
+/* Администраторы" в PAUSE App (см. pauseapp_static/styles.css),        */
+/* классы намеренно теми же именами — не общий файл, а тот же visual    */
+/* vocabulary продублирован в этом отдельном Mini App.                  */
+/* ------------------------------------------------------------------ */
+
+.ops-section-title { font-size: 13px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin: 18px 0 8px; }
+
+.ops-select-row { display: flex; gap: 10px; }
+.ops-select-row .field { flex: 1; margin-bottom: 14px; }
+
+.ops-input-box { border-radius: var(--radius-md); padding: 14px 14px 4px; margin-bottom: 10px; }
+.ops-input-box .field { margin-bottom: 10px; }
+.ops-input-box-comment { background: var(--ink-soft-bg); }
+
+.ops-breakdown-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; cursor: pointer; }
+.ops-breakdown-row:active { background: var(--ink-soft-bg); }
+.ops-breakdown-row-sep { border-top: 1px solid var(--line); }
+.ops-breakdown-name { font-size: 14.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+
+.ops-card-head { display: flex; align-items: center; gap: 14px; }
+.ops-card-avatar {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--ink-soft-bg);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 20px;
+  overflow: hidden;
+}
+.ops-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ops-card-name { font-size: 18px; font-weight: 700; color: var(--ink); }
+.ops-card-line { font-size: 13.5px; color: var(--ink-soft); margin-top: 3px; }
+
+.ops-contact-actions { display: flex; gap: 10px; margin-top: 16px; }
+.ops-contact-btn {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 12px 14px;
+  font-weight: 600;
+  font-size: 13.5px;
+  text-decoration: none;
+}
+.ops-contact-btn:active { opacity: .7; }
+.ops-contact-btn[disabled] { opacity: .4; pointer-events: none; }
+.ops-contact-btn-primary { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
+
 /* ------------------------------------------------------------------ */
 /* Профиль — аватар (фото из Telegram или инициалы), имя, роль          */
 /* ------------------------------------------------------------------ */

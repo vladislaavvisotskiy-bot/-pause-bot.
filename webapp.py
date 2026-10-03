@@ -384,6 +384,76 @@ async def api_logistics_set(request: web.Request):
     return web.json_response({"ok": True})
 
 
+# ---------------------------------------------------------------------------
+# Курьеры — справочник (только isRouteAdmin, экран "Профиль" → "Центр
+# управления" → "Курьеры"). Раньше строки сюда админ вписывал вручную прямо
+# в Google Таблицу — теперь через форму в Mini App (см. sheets.add_courier).
+# Отдельно от /api/couriers выше (та читает тот же sheets.get_couriers, но
+# доступна только при role=="admin" — используется картой для назначения
+# курьера на точку; этот же набор эндпоинтов должен остаться доступным и
+# когда ROUTE_ADMIN_IDS-админ переключился в режим "Курьер", как и весь
+# остальной "Центр управления").
+# ---------------------------------------------------------------------------
+
+async def api_couriers_manage_list(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    couriers = await _retry_sheets(sheets.get_couriers)
+    return web.json_response({"couriers": couriers})
+
+
+async def api_couriers_manage_add(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    tg_id = str(body.get("tg_id") or "").strip()
+    name = (body.get("name") or "").strip()
+    phone = (body.get("phone") or "").strip()
+    if not tg_id or not tg_id.lstrip("-").isdigit():
+        return web.json_response({"error": "bad_tg_id"}, status=400)
+    if not name:
+        return web.json_response({"error": "name_required"}, status=400)
+    await _retry_sheets(sheets.add_courier, tg_id, name, phone)
+    return web.json_response({"ok": True})
+
+
+async def api_avatar_image(request: web.Request):
+    """Аватар курьера из Telegram (его фото профиля) — для карточки
+    курьера в "Курьеры". Та же механика, что и в PAUSE App (см.
+    pauseapp.py: api_avatar_image) — bot.get_user_profile_photos +
+    bot.download, чтобы не светить BOT_TOKEN во фронтенде прямой ссылкой
+    на api.telegram.org/file/bot<TOKEN>/..."""
+    if not request["is_route_admin"]:
+        return web.Response(status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    bot = request.app.get("bot")
+    if not bot or not tg_id:
+        return web.Response(status=404)
+    try:
+        tg_id_int = int(tg_id)
+    except ValueError:
+        return web.Response(status=404)
+    try:
+        photos = await bot.get_user_profile_photos(tg_id_int, limit=1)
+    except Exception:
+        logger.exception("Маршрут: не удалось получить аватар курьера (tg_id=%s)", tg_id)
+        return web.Response(status=502)
+    if not photos or not photos.photos:
+        return web.Response(status=404)
+    file_id = photos.photos[0][-1].file_id
+    try:
+        buf = await bot.download(file_id)
+    except Exception:
+        logger.exception("Маршрут: не удалось скачать аватар курьера (tg_id=%s)", tg_id)
+        return web.Response(status=502)
+    if buf is None:
+        return web.Response(status=404)
+    return web.Response(
+        body=buf.read(), content_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
 async def api_route_dates(request: web.Request):
     # Не трогает лист "Маршрут" (только "Справочники" через
     # get_active_menu_date) — блокировка _route_lock тут не нужна.
@@ -573,6 +643,9 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/logistics", api_logistics_set)
     app.router.add_get("/api/delivery_points", api_delivery_points)
     app.router.add_get("/api/couriers", api_couriers)
+    app.router.add_get("/api/couriers/manage", api_couriers_manage_list)
+    app.router.add_post("/api/couriers/manage", api_couriers_manage_add)
+    app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_post("/api/route/reorder", api_route_reorder)
     app.router.add_post("/api/route/pin", api_route_pin)
     app.router.add_post("/api/route/add", api_route_add)

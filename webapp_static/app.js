@@ -113,6 +113,23 @@
     });
   }
 
+  // Аватарка курьера (см. ICON_COURIERS ниже) идёт через свой прокси-
+  // эндпоинт, который требует ту же подпись initData, что и /api/* —
+  // обычный <img src="..."> заголовков не шлёт, поэтому картинку сначала
+  // тянем сами через fetch() и превращаем в blob-URL, с кэшем в памяти по
+  // URL (тот же приём, что и в PAUSE App, см. pauseapp_static/app.js:
+  // fetchAuthedImageBlobUrl — отдельный файл, общего JS-модуля у двух
+  // Mini App нет, поэтому продублировано).
+  var _authedImageCache = {};
+  function fetchAuthedImageBlobUrl(url) {
+    if (!_authedImageCache[url]) {
+      _authedImageCache[url] = fetch(url, { headers: { "X-Telegram-Init-Data": initData() } })
+        .then(function (resp) { if (!resp.ok) throw new Error("HTTP " + resp.status); return resp.blob(); })
+        .then(function (blob) { return URL.createObjectURL(blob); });
+    }
+    return _authedImageCache[url];
+  }
+
   function toast(text) {
     var el = document.getElementById("toast");
     el.textContent = text;
@@ -876,12 +893,30 @@
     });
   }
 
+  // Единообразно "ДД.ММ" — раньше "Сегодня"/"Завтра"/"Вчера" словами для
+  // одних дат и числами для других визуально путало (смешанный формат в
+  // одном ряду). Теперь, когда лента дат открыта на всю историю (не
+  // только последние 3 дня, см. sheets.get_route_available_dates), "ДД.ММ"
+  // само по себе уже не однозначно — тот же день/месяц мог быть и год
+  // назад. Год дописываем ТОЛЬКО для дат не из текущего календарного
+  // года — обычный случай (весь список за один год) остаётся компактным,
+  // а не вырастает до "ДД.ММ.ГГГГ" на каждой пилюле.
   function dateLabel(d) {
-    // Единообразно "ДД.ММ" для всех пилюль без исключений — раньше
-    // "Сегодня"/"Завтра"/"Вчера" словами для одних дат и числами для
-    // других визуально путало (смешанный формат в одном ряду).
-    return d.slice(0, 5);
+    var parts = d.split(".");
+    var year = parts[2];
+    var curYear = String(new Date().getFullYear());
+    return year === curYear ? d.slice(0, 5) : parts[0] + "." + parts[1] + "." + year.slice(2);
   }
+
+  // Лента дат теперь может уходить далеко в прошлое (вся история с
+  // заказами, см. sheets.get_route_available_dates) — "последние 3 дня"
+  // при этом всё равно должны быть видны СРАЗУ, без прокрутки влево. При
+  // первой отрисовке (datePickerAutoScrolled ещё не было) докручиваем
+  // ленту так, чтобы начало этого трёхдневного окна оказалось у левого
+  // края видимой области — дальше пользователь сам листает в обе стороны,
+  // повторных авто-прокруток при переключении даты уже нет (не мешаем
+  // ручной навигации).
+  var datePickerAutoScrolled = false;
 
   function renderDatePicker() {
     var container = document.getElementById("route-date-picker");
@@ -901,6 +936,14 @@
       });
       container.appendChild(btn);
     });
+
+    if (!datePickerAutoScrolled) {
+      datePickerAutoScrolled = true;
+      var activeIdx = state.dates.indexOf(state.activeDate);
+      var windowStartIdx = activeIdx === -1 ? 0 : Math.max(0, activeIdx - 2);
+      var targetBtn = container.children[windowStartIdx];
+      if (targetBtn) targetBtn.scrollIntoView({ inline: "start", block: "nearest" });
+    }
   }
 
   // Вкладки курьеров над картой (см. ROUTE_SPLIT_VIEW) — только у админа,
@@ -1238,34 +1281,88 @@
   // экран "Профиль" → "Центр управления" → "Видимость маршрутов")
   // -------------------------------------------------------------------
 
-  function renderVisibilityList(root, dates) {
+  var MONTH_NAMES_RU = ["январь", "февраль", "март", "апрель", "май", "июнь",
+    "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+
+  // "15.10.2026" -> "Октябрь 2026" — заголовок группы в списке "Видимость
+  // маршрутов" (см. renderVisibilityList ниже), по которому длинная
+  // история сканируется глазами куда проще, чем сплошным списком дат.
+  function monthGroupLabel(dateStr) {
+    var parts = dateStr.split(".");
+    var month = parseInt(parts[1], 10);
+    var name = MONTH_NAMES_RU[month - 1] || "";
+    return (name.charAt(0).toUpperCase() + name.slice(1)) + " " + parts[2];
+  }
+
+  // Список дат теперь может уйти далеко в историю (см.
+  // sheets.get_route_available_dates — открыт доступ ко ВСЕМ дням с
+  // заказами, не только последним трём) — по прямой просьбе сделать это
+  // "красиво и удобно: фильтровать и искать": строка поиска по дате
+  // сверху (фильтрует по подстроке "ДД.ММ.ГГГГ" на лету) + группировка
+  // по месяцам внутри уже отсортированного по убыванию списка (новые
+  // сверху, см. sheets.get_route_visibility_status), чтобы "последние 3
+  // дня" были первыми без всякой прокрутки, а более ранняя история
+  // оставалась под рукой, а не терялась в одной длинной лентой строк.
+  function renderVisibilityList(root, allDates) {
     root.innerHTML = "";
-    if (!dates.length) {
-      root.appendChild(el("div", "modal-list-empty", "Пока нет доступных дат"));
-      return;
-    }
-    var card = el("div", "card");
-    dates.forEach(function (d) {
-      var row = el("div", "visibility-row");
-      var label = el("div", "visibility-row-label", escapeHtml(dateLabel(d.date) + (d.date === state.activeDate ? " · сегодня" : "")));
 
-      var switchLabel = el("label", "switch");
-      var input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = d.visible;
-      var slider = el("span", "switch-slider");
-      switchLabel.appendChild(input);
-      switchLabel.appendChild(slider);
+    var searchField = el("div", "field visibility-search-field");
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Найти дату — например, 15.09.2026";
+    searchField.appendChild(searchInput);
+    root.appendChild(searchField);
 
-      input.addEventListener("change", function () {
-        setRouteVisibility(d.date, input.checked, input);
+    var listWrap = el("div");
+    root.appendChild(listWrap);
+
+    function renderRows(filterText) {
+      listWrap.innerHTML = "";
+      var filtered = filterText
+        ? allDates.filter(function (d) { return d.date.indexOf(filterText) !== -1; })
+        : allDates;
+
+      if (!filtered.length) {
+        listWrap.appendChild(el("div", "modal-list-empty", filterText ? "Ничего не найдено" : "Пока нет доступных дат"));
+        return;
+      }
+
+      var lastMonth = null;
+      var card = null;
+      filtered.forEach(function (d) {
+        var mLabel = monthGroupLabel(d.date);
+        if (mLabel !== lastMonth) {
+          lastMonth = mLabel;
+          listWrap.appendChild(el("div", "profile-section-title", mLabel));
+          card = el("div", "card");
+          listWrap.appendChild(card);
+        }
+
+        var row = el("div", "visibility-row");
+        var label = el("div", "visibility-row-label", escapeHtml(d.date + (d.date === state.activeDate ? " · сегодня" : "")));
+
+        var switchLabel = el("label", "switch");
+        var input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = d.visible;
+        var slider = el("span", "switch-slider");
+        switchLabel.appendChild(input);
+        switchLabel.appendChild(slider);
+
+        input.addEventListener("change", function () {
+          setRouteVisibility(d.date, input.checked, input);
+        });
+
+        row.appendChild(label);
+        row.appendChild(switchLabel);
+        card.appendChild(row);
       });
+    }
 
-      row.appendChild(label);
-      row.appendChild(switchLabel);
-      card.appendChild(row);
+    renderRows("");
+    searchInput.addEventListener("input", function () {
+      renderRows(searchInput.value.trim());
     });
-    root.appendChild(card);
   }
 
   function loadVisibilityScreen(root) {
@@ -1511,6 +1608,7 @@
   var ICON_HUB = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>';
   var ICON_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
   var ICON_WALLET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>';
+  var ICON_COURIERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M2.5 19c0.8-3.6 2.8-5.4 5.5-5.4s4.7 1.8 5.5 5.4"/><circle cx="17" cy="8" r="2.4"/><path d="M14.8 13.8c0.6-0.3 1.3-0.5 2.2-0.5 2.3 0 3.9 1.5 4.5 4.4"/></svg>';
   var ICON_CHEVRON_RIGHT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>';
 
   function buildProfileRow(icon, label, onClick) {
@@ -1542,7 +1640,169 @@
         renderLogisticsScreen(sub);
       });
     }));
+    rows.appendChild(buildProfileRow(ICON_COURIERS, "Курьеры", function () {
+      wizardStep(function (body) {
+        body.appendChild(el("h2", "wizard-title", "Курьеры"));
+        var sub = el("div");
+        body.appendChild(sub);
+        loadCouriersManageScreen(sub);
+      });
+    }));
     root.appendChild(rows);
+  }
+
+  // -------------------------------------------------------------------
+  // "Курьеры" (isRouteAdmin) — справочник курьеров: добавление по
+  // Telegram ID + имени (вместо ручной правки листа "Курьеры" в Google
+  // Таблице), список уже добавленных, карточка с фото/телефоном и
+  // кнопками "Написать"/"Позвонить" (см. webapp.py: api_couriers_manage_*,
+  // sheets.add_courier/get_couriers).
+  // -------------------------------------------------------------------
+
+  var ICON_COURIER_MESSAGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>';
+  var ICON_COURIER_CALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4c0 1.1-0.9 2-2 2C9.6 21 3 14.4 3 6c0-1.1 0.9-2 2-2z"/></svg>';
+
+  // Телефон хранится как ввёл админ (нет единого формата, в отличие от
+  // профиля клиента в PAUSE App) — для tel: достаточно выдрать только
+  // цифры и ведущий "+", остальное (пробелы, скобки, дефисы) tel: не
+  // мешает.
+  function courierTelHref(phone) {
+    var digits = (phone || "").replace(/[^\d+]/g, "");
+    return digits ? "tel:" + digits : "";
+  }
+
+  function buildCourierAvatar(tgId, name) {
+    var wrap = el("div", "ops-card-avatar");
+    var img = document.createElement("img");
+    img.alt = "";
+    wrap.appendChild(img);
+    fetchAuthedImageBlobUrl("/miniapp/api/avatar/" + encodeURIComponent(tgId))
+      .then(function (blobUrl) { img.src = blobUrl; })
+      .catch(function () {
+        wrap.innerHTML = "";
+        wrap.textContent = initials(name);
+      });
+    return wrap;
+  }
+
+  function loadCouriersManageScreen(root) {
+    function load() {
+      root.innerHTML = "";
+      root.appendChild(el("div", "skeleton-block"));
+      api("/api/couriers/manage").then(function (data) {
+        render(data.couriers || []);
+      }).catch(function (err) {
+        root.innerHTML = "";
+        root.appendChild(el("div", "empty-note", "Не удалось загрузить список: " + err.message));
+      });
+    }
+
+    function render(couriers) {
+      root.innerHTML = "";
+
+      // --- добавить курьера ---
+      var addBox = el("div", "ops-input-box ops-input-box-comment");
+      var addRow = el("div", "ops-select-row");
+      var idField = el("div", "field");
+      idField.innerHTML = "<label>Telegram ID</label>";
+      var idInput = document.createElement("input");
+      idInput.type = "text";
+      idInput.inputMode = "numeric";
+      idInput.placeholder = "111222333";
+      idField.appendChild(idInput);
+      var nameField = el("div", "field");
+      nameField.innerHTML = "<label>Имя</label>";
+      var nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.placeholder = "Имя курьера";
+      nameField.appendChild(nameInput);
+      addRow.appendChild(idField);
+      addRow.appendChild(nameField);
+      addBox.appendChild(addRow);
+
+      var phoneField = el("div", "field");
+      phoneField.innerHTML = "<label>Телефон (необязательно)</label>";
+      var phoneInput = document.createElement("input");
+      phoneInput.type = "tel";
+      phoneInput.placeholder = "+998 90 123 45 67";
+      phoneField.appendChild(phoneInput);
+      addBox.appendChild(phoneField);
+
+      var addBtn = el("button", "btn-ghost", "Добавить курьера");
+      addBtn.addEventListener("click", function () {
+        var tgId = idInput.value.trim();
+        var name = nameInput.value.trim();
+        if (!tgId || !/^-?\d+$/.test(tgId)) { toast("Введите Telegram ID числом"); return; }
+        if (!name) { toast("Введите имя курьера"); return; }
+        addBtn.disabled = true;
+        api("/api/couriers/manage", { method: "POST", body: { tg_id: tgId, name: name, phone: phoneInput.value.trim() } })
+          .then(function () { haptic("success"); toast("Курьер добавлен"); load(); })
+          .catch(function (err) { addBtn.disabled = false; toast("Не удалось добавить: " + err.message); });
+      });
+      addBox.appendChild(addBtn);
+      root.appendChild(addBox);
+
+      // --- уже добавлены ---
+      root.appendChild(el("h3", "ops-section-title", "Уже добавлены"));
+      if (!couriers.length) {
+        root.appendChild(el("div", "empty-note", "Пока ни одного курьера не добавлено."));
+        return;
+      }
+      var card = el("div", "card");
+      couriers.forEach(function (c, idx) {
+        var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
+        row.innerHTML = '<div class="ops-breakdown-name">' + escapeHtml(c.name || c.tg_id) + "</div>";
+        row.addEventListener("click", function () {
+          haptic("select");
+          wizardStep(function (body) {
+            body.appendChild(el("h2", "wizard-title", c.name || c.tg_id));
+            renderCourierDetail(body, c);
+          });
+        });
+        card.appendChild(row);
+      });
+      root.appendChild(card);
+    }
+
+    load();
+  }
+
+  function renderCourierDetail(root, courier) {
+    var card = el("div", "card");
+    var head = el("div", "ops-card-head");
+    head.appendChild(buildCourierAvatar(courier.tg_id, courier.name));
+    var info = el("div");
+    info.innerHTML =
+      '<div class="ops-card-name">' + escapeHtml(courier.name || courier.tg_id) + "</div>" +
+      (courier.phone ? '<div class="ops-card-line">' + escapeHtml(courier.phone) + "</div>" : "");
+    head.appendChild(info);
+    card.appendChild(head);
+
+    var actionsRow = el("div", "ops-contact-actions");
+    var writeBtn = el("button", "ops-contact-btn ops-contact-btn-primary");
+    writeBtn.innerHTML = ICON_COURIER_MESSAGE + "<span>Написать</span>";
+    writeBtn.addEventListener("click", function () { window.location.href = "tg://user?id=" + courier.tg_id; });
+
+    // "Позвонить" — обычная <a href="tel:..."> (не программная навигация),
+    // как и везде в приложении (см. buildCard: telHref у person) — именно
+    // ссылку надёжно подхватывает системный диалер.
+    var telHrefVal = courierTelHref(courier.phone);
+    var callBtn;
+    if (telHrefVal) {
+      callBtn = document.createElement("a");
+      callBtn.href = telHrefVal;
+      callBtn.className = "ops-contact-btn";
+    } else {
+      callBtn = el("button", "ops-contact-btn");
+      callBtn.disabled = true;
+      callBtn.title = "Номер телефона не указан";
+    }
+    callBtn.innerHTML = ICON_COURIER_CALL + "<span>Позвонить</span>";
+    actionsRow.appendChild(writeBtn);
+    actionsRow.appendChild(callBtn);
+    card.appendChild(actionsRow);
+
+    root.appendChild(card);
   }
 
   // -------------------------------------------------------------------

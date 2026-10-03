@@ -2561,7 +2561,7 @@ def create_or_update_delivery_point(name: str, address: str, lat, lon):
 
 
 def get_couriers() -> list:
-    """Все записи из "Курьеры" — [{"tg_id","name","status"}]. "status" —
+    """Все записи из "Курьеры" — [{"tg_id","name","status","phone"}]. "status" —
     свободная текстовая заметка админа (см. config.COURIER_STATUS), ни на
     что технически не влияет — доступ определяется самим наличием строки
     (см. is_courier). Кэшируется на _CACHE_TTL секунд — is_courier()
@@ -2584,10 +2584,41 @@ def get_couriers() -> list:
             "tg_id": row[config.COURIER_TG_ID - 1].strip(),
             "name": row[config.COURIER_NAME - 1].strip() if len(row) >= config.COURIER_NAME else "",
             "status": row[config.COURIER_STATUS - 1].strip() if len(row) >= config.COURIER_STATUS else "",
+            "phone": row[config.COURIER_PHONE - 1].strip() if len(row) >= config.COURIER_PHONE else "",
         })
     _cache["couriers"] = out
     _cache["couriers_ts"] = now
     return out
+
+
+def add_courier(tg_id: str, name: str, phone: str = ""):
+    """Добавляет курьера в "Курьеры" — тот же лист, который раньше
+    приходилось заполнять руками (см. "Профиль" → "Центр управления" →
+    "Курьеры" в Mini App "Маршрут"). Если строка с этим tg_id уже есть —
+    обновляет на месте имя/телефон (не плодит дубликаты, позволяет
+    поправить опечатку), иначе дописывает новую строку; "Статус" у новой
+    строки остаётся пустым (тот же смысл, что и раньше — свободная
+    заметка админа, которую можно вписать потом прямо в таблицу)."""
+    ws = _ws(config.SHEET_COURIERS)
+    rows = ws.get_all_values()
+    target = str(tg_id).strip()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.COURIER_DATA_START_ROW:
+            continue
+        if len(row) >= config.COURIER_TG_ID and row[config.COURIER_TG_ID - 1].strip() == target:
+            ws.update_cells([
+                gspread.Cell(r, config.COURIER_NAME, name),
+                gspread.Cell(r, config.COURIER_PHONE, phone),
+            ], value_input_option="RAW")
+            _cache["couriers"] = None
+            return
+    row_values = [""] * config.COURIER_PHONE
+    row_values[config.COURIER_TG_ID - 1] = target
+    row_values[config.COURIER_NAME - 1] = name
+    row_values[config.COURIER_PHONE - 1] = phone
+    ws.append_row(row_values, value_input_option="RAW")
+    _cache["couriers"] = None
 
 
 def is_courier(tg_id) -> bool:
@@ -2862,9 +2893,11 @@ ROUTE_DATES_LOOKAHEAD_DAYS = 14
 def get_route_available_dates() -> list:
     """Даты, доступные для выбора на экране "Маршрут" в Mini App —
     сегодня и 2 предыдущих календарных дня (хронологически, старые
-    первыми) показываются всегда, даже без единого заказа — это рабочее
-    окно "последних дней", которое курьер/админ должен видеть в любом
-    случае.
+    первыми в результате) показываются всегда, даже без единого заказа —
+    это рабочее окно "последних дней", которое курьер/админ должен видеть
+    в любом случае, и именно оно должно быть видно первым, без прокрутки
+    (см. webapp_static/app.js: renderDatePicker — докручивает ленту дат
+    над картой до начала этого окна при первом открытии).
 
     Дальше — любая БУДУЩАЯ дата, на которую в "Заказы" реально есть хотя
     бы одна строка (в пределах ROUTE_DATES_LOOKAHEAD_DAYS вперёд) —
@@ -2876,17 +2909,37 @@ def get_route_available_dates() -> list:
     зависимость: если запись в "Заказы" на будущую дату уже есть (неважно,
     через бота или вручную) — точка по ней должна быть видна в маршруте
     сразу, а не только после того, как админ формально опубликует меню на
-    эту дату."""
+    эту дату.
+
+    И ещё — вообще ЛЮБАЯ ПРОШЕДШАЯ дата, на которую в "Заказы" есть хотя
+    бы одна строка, без ограничения "сколько дней назад" — по прямой
+    просьбе открыть доступ ко всей истории маршрутов, не только
+    последним трём дням (раньше история глубже этого окна была вообще
+    недостижима ни в ленте дат над картой, ни в "Видимости маршрутов")."""
     today = _now().date()
-    dates = [(today - dt.timedelta(days=n)).strftime("%d.%m.%Y") for n in (2, 1, 0)]
+    base = {(today - dt.timedelta(days=n)).strftime("%d.%m.%Y") for n in (2, 1, 0)}
 
     order_dates = _order_dates_with_data()
-    for n in range(1, ROUTE_DATES_LOOKAHEAD_DAYS + 1):
-        future_str = (today + dt.timedelta(days=n)).strftime("%d.%m.%Y")
-        if future_str in order_dates:
-            dates.append(future_str)
+    future_cutoff = today + dt.timedelta(days=ROUTE_DATES_LOOKAHEAD_DAYS)
 
-    return dates
+    def _parse(d):
+        try:
+            return dt.datetime.strptime(d, "%d.%m.%Y").date()
+        except ValueError:
+            return None
+
+    all_dates = set(base)
+    for d in order_dates:
+        parsed = _parse(d)
+        if parsed is None:
+            continue
+        # Прошлое — целиком, без ограничения; будущее — только в пределах
+        # окна lookahead (иначе один заказ, вручную вписанный на дальнюю
+        # будущую дату, растянул бы список на месяцы вперёд).
+        if parsed <= today or parsed <= future_cutoff:
+            all_dates.add(d)
+
+    return sorted(all_dates, key=lambda d: dt.datetime.strptime(d, "%d.%m.%Y"))
 
 
 def _route_visibility_map() -> dict:
@@ -2945,10 +2998,17 @@ def set_route_visibility(date_str: str, visible: bool):
 
 def get_route_visibility_status() -> list:
     """[{"date","visible"}] по всем датам, доступным в переключателе (см.
-    get_route_available_dates) — для экрана "Профиль" админа, где он
-    включает/выключает видимость по каждой дате отдельно."""
+    get_route_available_dates — включает всю историю, не только последние
+    три дня) — для экрана "Профиль" админа → "Центр управления" →
+    "Видимость маршрутов", где он включает/выключает видимость по каждой
+    дате отдельно. Порядок — НОВЫЕ СВЕРХУ (в отличие от
+    get_route_available_dates, которая отдаёт хронологически старые→новые
+    для ленты дат над картой): в вертикальном списке с поиском по дате
+    удобнее видеть сегодняшний и недавние дни первыми, не прокручивая
+    через всю историю."""
     visibility = _route_visibility_map()
-    return [{"date": d, "visible": visibility.get(d, False)} for d in get_route_available_dates()]
+    dates = list(reversed(get_route_available_dates()))
+    return [{"date": d, "visible": visibility.get(d, False)} for d in dates]
 
 
 def reorder_route(date_str: str, order_map: dict):
