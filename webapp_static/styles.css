@@ -321,59 +321,63 @@ p { margin: 0; color: var(--ink-soft); }
 .ops-breakdown-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; cursor: pointer; }
 .ops-breakdown-row:active { background: var(--ink-soft-bg); }
 .ops-breakdown-row-sep { border-top: 1px solid var(--line); }
-.ops-breakdown-name { font-size: 14.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+.ops-breakdown-name { font-size: 14.5px; font-weight: 600; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* "Админ"/"Курьер" рядом с именем в списке "Курьеры" — тот же приём, что
-   и у "Сдано" на карточке точки (card-status-tag.done): мягкая заливка
-   + текст того же цвета, просто отдельный класс, т.к. означает другое. */
+/* "Админ"/"Курьер" — справа, в конце строки (row — flex space-between,
+   см. .ops-breakdown-row) — чип с точкой-индикатором, по аналогии с тем,
+   как цветом отмечается "Сдано" на карточке точки, но отдельный класс,
+   т.к. означает другое. */
 .courier-role-badge {
-  display: inline-block;
-  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
   font-size: 11px;
-  font-weight: 600;
-  padding: 3px 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 4px 10px 4px 8px;
   border-radius: 20px;
   background: var(--ink-soft-bg);
   color: var(--ink-soft);
-  vertical-align: middle;
+}
+.courier-role-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
 }
 .courier-role-badge.admin { background: var(--success-soft); color: var(--success); }
 
-.ops-card-head { display: flex; align-items: center; gap: 14px; }
-.ops-card-avatar {
-  flex: 0 0 auto;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--ink-soft-bg);
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 20px;
-  overflow: hidden;
-}
-.ops-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.ops-card-name { font-size: 18px; font-weight: 700; color: var(--ink); }
-.ops-card-line { font-size: 13.5px; color: var(--ink-soft); margin-top: 3px; }
+/* Карточка курьера в "Курьеры" — упрощена по прямой просьбе: без
+   имени/телефона/аватарки (имя уже в заголовке визарда над карточкой),
+   цвет отличается от основного интерфейса (ivory-deep — уже
+   существующий в палитре оттенок, не новый цвет). */
+.courier-card { background: var(--ivory-deep); }
 
-.ops-contact-actions { display: flex; gap: 10px; margin-top: 16px; }
+/* "Написать"/"Позвонить" — только эмблемы, без надписей, обе одного
+   (тёмного) цвета, компактно рядом, по прямой просьбе. */
+.ops-contact-actions { display: flex; gap: 10px; margin-bottom: 4px; }
 .ops-contact-btn {
-  flex: 1;
-  display: flex; align-items: center; justify-content: center; gap: 7px;
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 12px 14px;
-  font-weight: 600;
-  font-size: 13.5px;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ink);
+  color: var(--ivory);
+  border: 1px solid var(--ink);
+  border-radius: 50%;
   text-decoration: none;
 }
 .ops-contact-btn:active { opacity: .7; }
 .ops-contact-btn[disabled] { opacity: .4; pointer-events: none; }
-.ops-contact-btn-primary { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
+
+/* Строка-включатель с (i)-пояснением (см. app.js: buildToggleRow) —
+   подпись и info-кнопка слева, переключатель справа (.visibility-row
+   уже justify-content: space-between). */
+.visibility-row-label-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
 
 /* ------------------------------------------------------------------ */
 /* "Время сдачи заказов" — дедлайн для KPI (см. loadDeadlineScreen)    */
@@ -400,10 +404,12 @@ p { margin: 0; color: var(--ink-soft); }
   font-weight: 700;
   font-size: 15px;
 }
+.kpi-gauge-main { cursor: pointer; }
 .kpi-gauge-main .kpi-gauge-label { font-size: 32px; }
 
 .kpi-mini-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; width: 100%; }
-.kpi-mini-item { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 0 0 auto; }
+.kpi-mini-item { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 0 0 auto; cursor: pointer; }
+.kpi-mini-item:active { opacity: .7; }
 .kpi-mini-name {
   font-size: 11px;
   color: var(--ink-soft);
@@ -906,35 +912,68 @@ p { margin: 0; color: var(--ink-soft); }
 .route-comment-save { margin-top: 6px; width: auto; display: inline-block; padding: 6px 2px; }
 
 /* ------------------------------------------------------------------ */
-/* "Заработок и наличные" — "Мои доходы" (курьер) и карточка курьера    */
-/* в "Курьеры" (админ), см. app.js: renderFinanceSection/renderFinanceBody */
+/* Касса курьера — "Наличные"/"Доход"/"Общая сумма" по дням, карточка   */
+/* курьера (админ, renderCourierCashCard) и "Мои доходы" (курьер,      */
+/* renderMyEarningsCarousel) — см. app.js.                              */
 /* ------------------------------------------------------------------ */
 
-.finance-body { margin-top: 4px; }
+.cash-card { display: flex; flex-direction: column; gap: 14px; }
 
-.finance-stat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 7px 0;
-  font-size: 14.5px;
-  color: var(--ink);
+.cash-box {
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--ink-soft-bg);
+  cursor: pointer;
 }
-.finance-stat-row + .finance-stat-row { border-top: 1px solid var(--line); }
-
-.finance-balance-card { text-align: center; }
-.finance-balance-label {
-  color: var(--ink-soft);
+.cash-box:active { opacity: .75; }
+.cash-box-label {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
 }
-.finance-balance-value { font-size: 17px; font-weight: 700; margin-top: 6px; }
+.cash-box-value { font-size: 20px; font-weight: 700; }
+/* Три прямоугольника — разным цветом шрифта, по прямой просьбе: не
+   новые цвета, те же, что уже значат "накопительно" (ink), "наличные на
+   руках" (accent-warm) и "начисленный доход" (info) по всему приложению. */
+.cash-box-total .cash-box-value { color: var(--ink); }
+.cash-box-cash .cash-box-value { color: var(--accent-warm); }
+.cash-box-earn .cash-box-value { color: var(--info); }
 
-.finance-settle-row { display: flex; gap: 10px; margin-top: 16px; }
-.finance-settle-form { margin-top: 14px; text-align: left; }
-.finance-settle-actions { display: flex; gap: 10px; margin-top: 10px; }
+.cash-box-pair { display: flex; gap: 12px; }
+.cash-box-pair .cash-box { flex: 1; min-width: 0; }
+
+.cash-actions-row { display: flex; gap: 10px; }
+.cash-actions-row .btn-ghost { flex: 1; }
+
+.cash-day-row { padding: 12px 0; }
+.cash-day-row-sep { border-top: 1px solid var(--line); }
+.cash-day-row-clickable { cursor: pointer; }
+.cash-day-row-clickable:active { background: var(--ink-soft-bg); }
+.cash-day-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.cash-day-date { font-weight: 600; color: var(--ink); font-size: 14.5px; }
+.cash-day-remaining { color: var(--ink); font-size: 14.5px; }
+.cash-day-sub { color: var(--ink-soft); font-size: 12.5px; margin-top: 2px; }
+.cash-day-detail { margin-top: 10px; }
+
+.withdraw-checkbox { width: 22px; height: 22px; flex: 0 0 auto; }
+
+/* Карусель "Мои доходы" (курьер) — один прямоугольник виден за раз,
+   стрелки по бокам переключают между тремя (см. MY_EARNINGS_BOXES). */
+.cash-carousel { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cash-carousel-box-holder { flex: 1; min-width: 0; }
+.cash-carousel-arrow { font-size: 20px; }
+.cash-carousel-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 4px; }
+.cash-carousel-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.cash-carousel-dot.active { background: var(--ink); }
+
+.logistics-pay-btn { flex: 0 0 auto; padding: 6px 2px; white-space: nowrap; }
 
 .cash-entry { padding: 10px 0; }
 .cash-entry-sep { border-top: 1px solid var(--line); }

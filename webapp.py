@@ -156,36 +156,30 @@ async def _role_for(tg_id):
     курьерами) или "courier" (меню "Поехали"/"Сдал"). is_route_admin —
     видит ли человек админский "Профиль" (видимость маршрута, расходы на
     логистику) — true и для основного админа бота (ADMIN_IDS), и для
-    админов этого Mini App (ROUTE_ADMIN_IDS/OWNER_TG_ID/курьеров,
-    назначенных через "Курьеры"), и остаётся true даже когда такой админ
-    переключился в режим "Курьер" (иначе он не смог бы вернуться обратно —
-    "Профиль" в этом режиме показывал бы courier-экран без переключателя).
-    is_dynamic_route_admin — отдельно, т.к. нужен ещё раз в auth_middleware
-    для can_toggle_mode.
+    владельца (OWNER_TG_ID), и для курьеров, назначенных администраторами
+    через "Курьеры" (см. is_dynamic_route_admin) — и остаётся true даже
+    когда такой админ переключился в режим "Курьер" (иначе он не смог бы
+    вернуться обратно — "Профиль" в этом режиме показывал бы
+    courier-экран без переключателя). is_dynamic_route_admin — отдельно,
+    т.к. нужен ещё раз в auth_middleware для can_toggle_mode.
 
-    sheets.is_courier_route_admin(tg_id) (единственная НОВАЯ, по сравнению
-    с ROUTE_ADMIN_IDS/ADMIN_IDS, причина читать "Курьеры" на каждый
-    /api/* запрос) проверяется ТОЛЬКО если tg_id не нашёлся среди
-    ROUTE_ADMIN_IDS/OWNER_TG_ID — раньше эта проверка была БЕЗУСЛОВНОЙ (в
-    auth_middleware, до вызова этой функции), то есть лишним чтением
-    Google Sheets на КАЖДЫЙ запрос от владельца и от обоих статических
-    админов "Маршрута" — самых активных пользователей Mini App. Именно
-    это, судя по всему, и давало "server_error" при нажатии на
-    переключатели в "Курьеры": больше чтений "Курьеры" на каждый клик —
-    больше шанс упереться в лимит Google Sheets API (429/5xx), который
-    _retry_sheets не всегда успевает пересидеть за 2 повтора.
+    Раньше был ещё и статический список config.ROUTE_ADMIN_IDS
+    (переменная окружения) — по прямой просьбе убран целиком: постоянное
+    назначение прав больше не предусмотрено ни для кого, кроме самого
+    владельца (OWNER_TG_ID) — любой другой администратор назначается и
+    снимается ТОЛЬКО через "Курьеры" (см. is_courier_route_admin).
 
-    ROUTE_ADMIN_IDS/OWNER_TG_ID/is_dynamic_route_admin проверяем ПЕРЕД
-    ADMIN_IDS: основной админ бота (Влад) обычно одновременно и в
-    ROUTE_ADMIN_IDS — если проверять ADMIN_IDS первым, для него role
-    всегда оказывался бы "admin" независимо от сохранённого режима, и
-    переключение в "Курьер" молча не действовало бы (воспроизведено:
-    запись в "Режим Маршрута" сохранялась, но раздел "Заказы" после
-    перезагрузки всё равно показывал админский интерфейс с
-    перетаскиванием карточек). Основному админу, который ни в одной из
-    этих трёх категорий, самого переключения режима не показываем (см.
-    api_route_admin_mode_set) — у него role всегда "admin", как и раньше."""
-    if tg_id in config.ROUTE_ADMIN_IDS or tg_id == config.OWNER_TG_ID:
+    OWNER_TG_ID/is_dynamic_route_admin проверяем ПЕРЕД ADMIN_IDS:
+    основной админ бота (Влад) может одновременно быть и OWNER_TG_ID —
+    если проверять ADMIN_IDS первым, для него role всегда оказывался бы
+    "admin" независимо от сохранённого режима, и переключение в "Курьер"
+    молча не действовало бы (воспроизведено: запись в "Режим Маршрута"
+    сохранялась, но раздел "Заказы" после перезагрузки всё равно
+    показывал админский интерфейс с перетаскиванием карточек). Основному
+    админу, который ни владелец, ни назначенный администратор, самого
+    переключения режима не показываем (см. api_route_admin_mode_set) — у
+    него role всегда "admin", как и раньше."""
+    if tg_id == config.OWNER_TG_ID:
         mode = await _retry_sheets(sheets.get_route_admin_mode, tg_id)
         return mode, True, False
     if await _retry_sheets(sheets.is_courier_route_admin, tg_id):
@@ -253,13 +247,10 @@ async def auth_middleware(request: web.Request, handler):
         # api_courier_route_admin_set) — отдельно от is_route_admin, у
         # которого таких людей может быть много.
         request["is_owner"] = tg_id == config.OWNER_TG_ID
-        # Переключатель "Режим" (admin/courier) — админам ЭТОГО Mini App
-        # (ROUTE_ADMIN_IDS), владельцу и курьерам, назначенным
-        # администраторами через "Курьеры" — НЕ основному админу бота
-        # (ADMIN_IDS) просто по умолчанию.
-        request["can_toggle_mode"] = (
-            tg_id in config.ROUTE_ADMIN_IDS or request["is_owner"] or is_dynamic_route_admin
-        )
+        # Переключатель "Режим" (admin/courier) — владельцу и курьерам,
+        # назначенным администраторами через "Курьеры" — НЕ основному
+        # админу бота (ADMIN_IDS) просто по умолчанию.
+        request["can_toggle_mode"] = request["is_owner"] or is_dynamic_route_admin
     return await handler(request)
 
 
@@ -368,10 +359,11 @@ async def _notify_couriers_route_ready(bot, date_str: str) -> int:
 
 
 async def api_route_admin_mode_set(request: web.Request):
-    """Переключает "Режим" (admin/courier) для админа ЭТОГО Mini App (см.
-    config.ROUTE_ADMIN_IDS) — определяет, что человек увидит в разделе
-    "Заказы" при следующем заходе. Основному админу бота (ADMIN_IDS)
-    запрещено — у него can_toggle_mode всегда False."""
+    """Переключает "Режим" (admin/courier) для владельца и для курьеров,
+    назначенных администраторами через "Курьеры" (см. can_toggle_mode в
+    auth_middleware) — определяет, что человек увидит в разделе "Заказы"
+    при следующем заходе. Основному админу бота (ADMIN_IDS) запрещено —
+    у него can_toggle_mode всегда False."""
     if not request["can_toggle_mode"]:
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
@@ -433,8 +425,8 @@ async def api_logistics_set(request: web.Request):
 # Отдельно от /api/couriers выше (та читает тот же sheets.get_couriers, но
 # доступна только при role=="admin" — используется картой для назначения
 # курьера на точку; этот же набор эндпоинтов должен остаться доступным и
-# когда ROUTE_ADMIN_IDS-админ переключился в режим "Курьер", как и весь
-# остальной "Центр управления").
+# когда владелец/назначенный администратор переключился в режим "Курьер",
+# как и весь остальной "Центр управления").
 # ---------------------------------------------------------------------------
 
 def _courier_tg_id_int(tg_id):
@@ -448,12 +440,11 @@ async def api_couriers_manage_list(request: web.Request):
     """Список курьеров для экрана "Курьеры" — с двумя добавленными
     полями, которых нет в sheets.get_couriers() (сырой флаг столбца
     "Курьеры"): "is_owner" (config.OWNER_TG_ID) и "effective_admin" (его
-    же показывает бейдж "Админ"/"Курьер" в списке, см. app.js — владелец,
-    ИЛИ is_route_admin ИЗ ТАБЛИЦЫ (назначен владельцем), ИЛИ статическое
-    членство в config.ROUTE_ADMIN_IDS, которое таблица не отражает).
-    Список отсортирован: владелец → администраторы → обычные курьеры,
-    внутри группы — по имени, по прямой просьбе ("Главный админ (меня)
-    до Админов, а потом курьеры")."""
+    же показывает бейдж "Админ"/"Курьер" в списке, см. app.js — владелец
+    ИЛИ is_route_admin ИЗ ТАБЛИЦЫ, назначенный владельцем). Список
+    отсортирован: владелец → администраторы → обычные курьеры, внутри
+    группы — по имени, по прямой просьбе ("Главный админ (меня) до
+    Админов, а потом курьеры")."""
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
     couriers = await _retry_sheets(sheets.get_couriers)
@@ -461,9 +452,7 @@ async def api_couriers_manage_list(request: web.Request):
     for c in couriers:
         tg_id_int = _courier_tg_id_int(c["tg_id"])
         is_owner = tg_id_int is not None and tg_id_int == config.OWNER_TG_ID
-        effective_admin = (
-            is_owner or c["is_route_admin"] or (tg_id_int is not None and tg_id_int in config.ROUTE_ADMIN_IDS)
-        )
+        effective_admin = is_owner or c["is_route_admin"]
         enriched.append(dict(c, is_owner=is_owner, effective_admin=effective_admin))
     enriched.sort(key=lambda c: (
         0 if c["is_owner"] else 1 if c["effective_admin"] else 2,
@@ -533,18 +522,98 @@ async def api_courier_disabled_set(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
-# Касса курьера — "Заработок" (= "Оплата за смену"), наличные, баланс и
-# расчёты (кнопки "Забрал наличные"/"Доплатил курьеру"). Экран "Мои доходы"
-# (курьер, свои данные без контактов клиентов) и карточка курьера в
-# "Курьеры" (админ, видит и контакты из get_cash_entries, и может
-# отмечать расчёты) — см. app.js: renderFinanceBody.
+# Касса курьера — "Наличные у курьера"/"Доход курьера"/"Общая сумма у
+# курьера" (по дням — см. sheets.get_courier_cash_for_day/
+# get_courier_cash_balance_as_of), "Забрать наличные" (по выбранным
+# дням) и "Заработок"/"Оплата за смену" (с выбором источника — из уже
+# собранных наличных или отдельно). Экран "Мои доходы" (курьер, свои
+# данные без контактов клиентов) и карточка курьера в "Курьеры" (админ,
+# видит и контакты из get_cash_entries, и может отмечать забор наличных
+# и вводить "Заработок") — см. app.js: renderCourierDetail/renderCashCard.
 # ---------------------------------------------------------------------------
 
-async def api_courier_earnings_set(request: web.Request):
-    """Админ вписывает "Заработок" курьера за день — пишет в то же поле,
-    что и "Расходы на логистику" → "Оплата за смену" (см.
-    sheets.set_logistics_expense), просто из карточки конкретного
-    курьера в "Курьеры"."""
+def _courier_scope_ok(request, tg_id: str) -> bool:
+    """И admin (любой курьер), и сам курьер — только свои данные."""
+    return request["is_route_admin"] or tg_id == str(request["tg_id"])
+
+
+async def api_courier_cash_summary(request: web.Request):
+    """"Наличные у курьера" (за ОДИН день), "Доход курьера" (за тот же
+    день) и "Общая сумма у курьера" (накопительно по состоянию на этот
+    день) — три прямоугольника карточки курьера/"Мои доходы" (см.
+    sheets.get_courier_cash_for_day/get_logistics_total_for_courier/
+    get_courier_cash_balance_as_of)."""
+    tg_id = request.query.get("courier_tg_id") or str(request["tg_id"])
+    if not _courier_scope_ok(request, tg_id):
+        return web.json_response({"error": "forbidden"}, status=403)
+    date_str = request.query.get("date") or _today()
+    cash_day = await _retry_sheets(sheets.get_courier_cash_for_day, tg_id, date_str)
+    earned_day = await _retry_sheets(sheets.get_logistics_total_for_courier, tg_id, date_str, date_str)
+    balance_as_of = await _retry_sheets(sheets.get_courier_cash_balance_as_of, tg_id, date_str)
+    return web.json_response({
+        "date": date_str, "cash_day": cash_day, "earned_day": earned_day, "balance_as_of": balance_as_of,
+    })
+
+
+async def api_courier_cash_by_day(request: web.Request):
+    """История "Наличные у курьера"/"Общая сумма у курьера" по дням (без
+    контактов клиентов — их видит только админ, см.
+    api_courier_cash_day_entries) — для раскрытия списка по нажатию на
+    любой из этих двух прямоугольников."""
+    tg_id = request.query.get("courier_tg_id") or str(request["tg_id"])
+    if not _courier_scope_ok(request, tg_id):
+        return web.json_response({"error": "forbidden"}, status=403)
+    days = await _retry_sheets(sheets.get_courier_cash_by_day, tg_id)
+    return web.json_response({"days": days})
+
+
+async def api_courier_cash_day_entries(request: web.Request):
+    """Кто из клиентов, сколько и с какой точки дал наличные В ОДИН
+    конкретный день — ТОЛЬКО для админа (контакты клиента: ID, имя,
+    телефон, tg), по прямой просьбе."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.query.get("courier_tg_id") or ""
+    date_str = request.query.get("date") or _today()
+    entries = await _retry_sheets(sheets.get_cash_entries, tg_id, date_str, date_str)
+    return web.json_response({"entries": entries})
+
+
+async def api_courier_earnings_by_day(request: web.Request):
+    """История "Доход курьера" по дням — для раскрытия списка по нажатию
+    на прямоугольник "Доход курьера"."""
+    tg_id = request.query.get("courier_tg_id") or str(request["tg_id"])
+    if not _courier_scope_ok(request, tg_id):
+        return web.json_response({"error": "forbidden"}, status=403)
+    days = await _retry_sheets(sheets.get_courier_earnings_by_day, tg_id)
+    return web.json_response({"days": days})
+
+
+async def api_courier_withdraw_cash(request: web.Request):
+    """"Забрать наличные" — админ отмечает дни (чекбоксы, см. app.js),
+    по каждому списывается его текущий остаток или часть (см.
+    sheets.withdraw_courier_cash)."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    days = body.get("days") or {}
+    if not isinstance(days, dict) or not days:
+        return web.json_response({"error": "bad_request"}, status=400)
+    couriers = await _retry_sheets(sheets.get_couriers)
+    courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
+    if not courier:
+        return web.json_response({"error": "not_found"}, status=404)
+    total = await _retry_sheets(sheets.withdraw_courier_cash, tg_id, courier["name"], days)
+    return web.json_response({"ok": True, "total": total})
+
+
+async def api_courier_pay_shift(request: web.Request):
+    """"Заработок"/"Оплата за смену" — с выбором источника: "из уже
+    собранных курьером наличных" (from_cash=True, списывает ту же сумму
+    с остатка наличных ЗА ЭТОТ ЖЕ ДЕНЬ, отклоняется, если наличных не
+    хватает) или "отдельно" (from_cash=False, остаток не трогает) — см.
+    sheets.pay_courier_shift."""
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
     tg_id = request.match_info.get("tg_id", "")
@@ -554,62 +623,17 @@ async def api_courier_earnings_set(request: web.Request):
         amount = int(body.get("amount") or 0)
     except (TypeError, ValueError):
         amount = 0
-    couriers = await _retry_sheets(sheets.get_couriers)
-    courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
-    if not courier:
-        return web.json_response({"error": "not_found"}, status=404)
-    await _retry_sheets(sheets.set_logistics_expense, date_str, tg_id, courier["name"], amount)
-    return web.json_response({"ok": True})
-
-
-async def api_courier_finance_get(request: web.Request):
-    """Заработано/собрано наличными за период + текущий баланс (за всё
-    время, не за период — см. sheets.get_courier_balance). Курьер видит
-    только свои данные и без контактов клиентов (entries); admin —
-    любого курьера, с контактами (см. прямую просьбу — контакты видно
-    только админу)."""
-    is_admin = request["is_route_admin"]
-    tg_id = request.query.get("courier_tg_id") or str(request["tg_id"])
-    if not is_admin and tg_id != str(request["tg_id"]):
-        return web.json_response({"error": "forbidden"}, status=403)
-    date_from = request.query.get("from") or _today()
-    date_to = request.query.get("to") or date_from
-    earned = await _retry_sheets(sheets.get_logistics_total_for_courier, tg_id, date_from, date_to)
-    collected = await _retry_sheets(sheets.get_cash_total, tg_id, date_from, date_to)
-    balance = await _retry_sheets(sheets.get_courier_balance, tg_id)
-    result = {
-        "earned": earned, "collected": collected, "balance": balance["balance"],
-        "total_cash": balance["total_cash"], "total_earned": balance["total_earned"],
-    }
-    if is_admin:
-        result["entries"] = await _retry_sheets(sheets.get_cash_entries, tg_id, date_from, date_to)
-    return web.json_response(result)
-
-
-async def api_courier_settle(request: web.Request):
-    """Админ отмечает физическую передачу денег — "Забрал наличные у
-    курьера" или "Доплатил курьеру" (см. config.SETTLEMENT_TYPE_*),
-    целиком или частями, уменьшает баланс (см. sheets.get_courier_balance)."""
-    if not request["is_route_admin"]:
-        return web.json_response({"error": "forbidden"}, status=403)
-    tg_id = request.match_info.get("tg_id", "")
-    body = await request.json()
-    settlement_type = body.get("type")
-    if settlement_type not in (config.SETTLEMENT_TYPE_CASH_RECEIVED, config.SETTLEMENT_TYPE_PAID_COURIER):
-        return web.json_response({"error": "bad_type"}, status=400)
-    try:
-        amount = int(body.get("amount") or 0)
-    except (TypeError, ValueError):
-        amount = 0
     if amount <= 0:
         return web.json_response({"error": "bad_amount"}, status=400)
+    from_cash = bool(body.get("from_cash"))
     couriers = await _retry_sheets(sheets.get_couriers)
     courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
     if not courier:
         return web.json_response({"error": "not_found"}, status=404)
-    await _retry_sheets(sheets.record_courier_settlement, tg_id, courier["name"], settlement_type, amount)
-    balance = await _retry_sheets(sheets.get_courier_balance, tg_id)
-    return web.json_response({"ok": True, "balance": balance["balance"]})
+    result = await _retry_sheets(sheets.pay_courier_shift, tg_id, courier["name"], date_str, amount, from_cash)
+    if "error" in result:
+        return web.json_response(result, status=400)
+    return web.json_response(result)
 
 
 # ---------------------------------------------------------------------------
@@ -920,9 +944,12 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/couriers/manage/{tg_id}/kpi-hidden", api_courier_kpi_hidden_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/route-admin", api_courier_route_admin_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/disabled", api_courier_disabled_set)
-    app.router.add_post("/api/couriers/manage/{tg_id}/earnings", api_courier_earnings_set)
-    app.router.add_post("/api/couriers/manage/{tg_id}/settle", api_courier_settle)
-    app.router.add_get("/api/finance", api_courier_finance_get)
+    app.router.add_post("/api/couriers/manage/{tg_id}/withdraw-cash", api_courier_withdraw_cash)
+    app.router.add_post("/api/couriers/manage/{tg_id}/pay-shift", api_courier_pay_shift)
+    app.router.add_get("/api/courier/cash-summary", api_courier_cash_summary)
+    app.router.add_get("/api/courier/cash-by-day", api_courier_cash_by_day)
+    app.router.add_get("/api/courier/cash-day-entries", api_courier_cash_day_entries)
+    app.router.add_get("/api/courier/earnings-by-day", api_courier_earnings_by_day)
     app.router.add_post("/api/cash", api_cash_record)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_post("/api/route/reorder", api_route_reorder)

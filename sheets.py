@@ -2604,12 +2604,13 @@ def get_couriers() -> list:
     return out
 
 
-def _ensure_courier_columns(ws, col: int):
-    """Расширяет лист "Курьеры" до нужного числа столбцов, если нужно.
-    Эта таблица изначально заводилась только на 4 столбца (A-D: ID/имя/
-    статус/телефон) — "kpi_hidden"/"is_route_admin"/"disabled" (E/F/G)
-    появились только в этом коде, и в реальной таблице колонок под них
-    могло не быть вовсе. Google Sheets API отклоняет запись ЗА пределами
+def _ensure_sheet_columns(ws, col: int):
+    """Расширяет лист до нужного числа столбцов, если нужно. Несколько
+    листов этого проекта (например "Курьеры", "Расходы на логистику")
+    изначально заводились на меньшее число столбцов, чем сейчас нужно
+    коду — новые поля (kpi_hidden/is_route_admin/disabled у "Курьеры",
+    from_cash у "Расходы на логистику") добавлялись только в код, не в
+    реальную таблицу. Google Sheets API отклоняет запись ЗА пределами
     текущей сетки листа (gspread.exceptions.APIError на values.update,
     "exceeds grid limits") — именно это и ловилось при первом нажатии на
     переключатели "Курьеры" (воспроизведено и подтверждено на реальной
@@ -2623,10 +2624,10 @@ def _set_courier_flag(tg_id: str, col: int, value: str) -> bool:
     """Общая часть set_courier_kpi_hidden/set_courier_route_admin/
     set_courier_disabled — находит строку курьера по tg_id и пишет
     значение в указанный столбец, расширяя лист при необходимости (см.
-    _ensure_courier_columns). Возвращает False, если такого курьера нет
+    _ensure_sheet_columns). Возвращает False, если такого курьера нет
     (не создаёт строку — курьер должен уже существовать)."""
     ws = _ws(config.SHEET_COURIERS)
-    _ensure_courier_columns(ws, col)
+    _ensure_sheet_columns(ws, col)
     rows = ws.get_all_values()
     target = str(tg_id).strip()
     for i, row in enumerate(rows):
@@ -2658,9 +2659,8 @@ def set_courier_route_admin(tg_id: str, is_admin: bool) -> bool:
 def is_courier_route_admin(tg_id) -> bool:
     """True, если этот курьер назначен администратором "Маршрута" (см.
     set_courier_route_admin) И не отключён (см. set_courier_disabled) —
-    используется в webapp._role_for наравне со статическим
-    config.ROUTE_ADMIN_IDS. Отключённый курьер-администратор теряет
-    права администратора вместе с обычным доступом — "доступ исчезает
+    используется в webapp._role_for. Отключённый курьер-администратор
+    теряет права администратора вместе с обычным доступом — "доступ исчезает
     вообще", без исключения для админских прав."""
     target = str(tg_id)
     return any(c["tg_id"] == target and c["is_route_admin"] and not c["disabled"] for c in get_couriers())
@@ -3207,9 +3207,13 @@ def get_route_kpi(date_from: str, date_to: str) -> dict:
        значение в общее среднее, скрытые из интерфейса (kpi_hidden)
        курьеры в нём тоже участвуют — по прямой просьбе.
 
-    Возвращает {"deadline", "overall", "couriers": [{"tg_id","name",
-    "score","hidden","days_count"}, ...]} — couriers отсортирован по
-    убыванию score, без данных — в конце."""
+    Возвращает {"deadline", "overall", "avg_delivery_time", "couriers":
+    [{"tg_id","name","score","hidden","days_count"}, ...]} — couriers
+    отсортирован по убыванию score, без данных — в конце.
+    avg_delivery_time ("ЧЧ:ММ" или None) — среднее время последней сдачи
+    по ТОМУ ЖЕ датасету, что и overall (last_delivered ниже, по всем
+    курьерам и дням периода) — для всплывающего окна при нажатии на
+    главный кружок KPI в Профиле (см. app.js: renderKpiBody)."""
     deadline = get_delivery_deadline()
     ws = _ws(config.SHEET_ROUTE)
     rows = ws.get_all_values()
@@ -3268,7 +3272,25 @@ def get_route_kpi(date_from: str, date_to: str) -> dict:
     overall = round(sum(period_scores) / len(period_scores), 1) if period_scores else None
     out_couriers.sort(key=lambda c: (c["score"] is None, -(c["score"] or 0)))
 
-    return {"deadline": deadline, "overall": overall, "couriers": out_couriers}
+    avg_delivery_time = None
+    if last_delivered:
+        total_minutes = 0
+        count = 0
+        for delivered_at in last_delivered.values():
+            try:
+                t = dt.datetime.strptime(delivered_at, "%H:%M")
+            except ValueError:
+                continue
+            total_minutes += t.hour * 60 + t.minute
+            count += 1
+        if count:
+            avg_min = round(total_minutes / count)
+            avg_delivery_time = "%02d:%02d" % (avg_min // 60, avg_min % 60)
+
+    return {
+        "deadline": deadline, "overall": overall, "avg_delivery_time": avg_delivery_time,
+        "couriers": out_couriers,
+    }
 
 
 def reorder_route(date_str: str, order_map: dict):
@@ -3498,41 +3520,68 @@ def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
 #   - SHEET_CASH_COLLECTIONS — кто из курьеров, у какого клиента и сколько
 #     собрал наличными (видно только админу, см. get_cash_entries).
 #   - SHEET_LOGISTICS_EXPENSES (уже существует выше, "Оплата за смену") —
-#     "Заработок": сколько админ начислил курьеру за день. Используется ТА
-#     ЖЕ запись/поле, что и в "Расходы на логистику" — по прямой просьбе
-#     это полностью независимо от расчёта по ставкам (get_courier_earnings
-#     выше), который эту карточку не трогает.
-#   - SHEET_COURIER_SETTLEMENTS — отметки админа "Забрал наличные у
-#     курьера" / "Доплатил курьеру", когда деньги физически передали.
+#     "Заработок"/"Доход курьера": сколько админ начислил курьеру за день.
+#     Используется ТА ЖЕ запись/поле, что и в "Расходы на логистику" — по
+#     прямой просьбе это полностью независимо от расчёта по ставкам
+#     (get_courier_earnings выше), который эту карточку не трогает.
+#   - SHEET_COURIER_SETTLEMENTS — события, уменьшающие "Наличные у
+#     курьера": явное "Забрал наличные" (кнопка с выбором дней) и "Оплата
+#     из наличных" (когда "Заработок" оплачен из уже собранных курьером
+#     денег, а не отдельно — см. pay_courier_shift).
 #
-# Баланс (get_courier_balance) — НАКОПИТЕЛЬНЫЙ, за всё время, не привязан к
-# периоду, который сейчас смотрит админ/курьер на экране: собранные
-# наличные и начисленный заработок копятся сами по себе, а расчёты —
-# единственное, что их уменьшает. Положительный баланс значит "курьер
-# должен передать деньги", отрицательный — "админ должен доплатить
-# курьеру". Это намеренно НЕ автоматика: сумма в балансе — просто
-# памятка, кто кому сколько должен прямо сейчас, а отметить физическую
-# передачу денег (целиком или частями) может только админ.
+# "Наличные у курьера" / "Общая сумма у курьера" — ПО ДНЯМ, не единый
+# накопительный баланс (как было раньше): get_courier_cash_for_day — сколько
+# собрано/осталось ЗА ОДИН конкретный день; get_courier_cash_balance_as_of —
+# нарастающий остаток "по состоянию на" этот день включительно (сумма всех
+# сборов минус все списания с датой не позже него). "Доплатил курьеру" как
+# отдельное действие убрано — теперь выбор "оплатить из наличных или
+# отдельно" делается прямо при вводе "Заработка" (см. pay_courier_shift).
 # ---------------------------------------------------------------------------
 
 _CASH_HEADER = ["date", "courier_tg_id", "courier_name", "point", "client_id", "name", "contact", "telegram", "amount", "time"]
 _SETL_HEADER = ["date", "courier_tg_id", "courier_name", "type", "amount", "time"]
+_SETL_WITHDRAW_TYPES = (config.SETTLEMENT_TYPE_CASH_RECEIVED, config.SETTLEMENT_TYPE_PAID_FROM_CASH)
+
+
+def _date_bounds(date_from, date_to):
+    """Парсит независимые (каждая необязательна) границы периода в
+    datetime — None, None значит "без ограничений". Возвращает None,
+    если переданная строка не парсится (вызывающий код тогда должен
+    прекратить итерацию — см. использование ниже)."""
+    d_from = d_to = None
+    if date_from:
+        d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
+    if date_to:
+        d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
+    return d_from, d_to
+
+
+def _in_bounds(date_str, d_from, d_to):
+    if d_from is None and d_to is None:
+        return True
+    try:
+        d = dt.datetime.strptime(date_str, "%d.%m.%Y")
+    except ValueError:
+        return False
+    if d_from is not None and d < d_from:
+        return False
+    if d_to is not None and d > d_to:
+        return False
+    return True
 
 
 def _iter_cash_rows(courier_tg_id=None, date_from: str = None, date_to: str = None):
-    """Сырые строки "Наличные", отфильтрованные по курьеру и/или периоду
-    (оба необязательны — без них отдаёт вообще все строки, для баланса за
-    всё время, см. get_courier_balance)."""
+    """Сырые строки "Наличные", отфильтрованные по курьеру и/или периоду.
+    Все параметры необязательны и независимы: без них — все строки, с
+    одним только date_to — "по состоянию на дату" (см.
+    get_courier_cash_balance_as_of), с date_from==date_to — один день."""
     ws = _ws_or_create(config.SHEET_CASH_COLLECTIONS, _CASH_HEADER)
     rows = ws.get_all_values()
     target = str(courier_tg_id) if courier_tg_id is not None else None
-    d_from = d_to = None
-    if date_from and date_to:
-        try:
-            d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
-            d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
-        except ValueError:
-            return
+    try:
+        d_from, d_to = _date_bounds(date_from, date_to)
+    except ValueError:
+        return
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.CASH_DATA_START_ROW:
@@ -3541,13 +3590,8 @@ def _iter_cash_rows(courier_tg_id=None, date_from: str = None, date_to: str = No
             continue
         if target is not None and row[config.CASH_COURIER_TG_ID - 1].strip() != target:
             continue
-        if d_from is not None:
-            try:
-                d = dt.datetime.strptime(row[config.CASH_DATE - 1].strip(), "%d.%m.%Y")
-            except ValueError:
-                continue
-            if not (d_from <= d <= d_to):
-                continue
+        if not _in_bounds(row[config.CASH_DATE - 1].strip(), d_from, d_to):
+            continue
         yield row
 
 
@@ -3660,19 +3704,13 @@ def get_route_cash_totals(date_str: str) -> dict:
 def _iter_logistics_rows(courier_tg_id=None, date_from: str = None, date_to: str = None):
     """Как _iter_cash_rows, но по SHEET_LOGISTICS_EXPENSES ("Заработок" /
     "Оплата за смену") — см. get_logistics_total_for_courier."""
-    ws = _ws_or_create(
-        config.SHEET_LOGISTICS_EXPENSES,
-        ["date", "courier_tg_id", "courier_name", "shift_pay", "updated"],
-    )
+    ws = _ws_or_create(config.SHEET_LOGISTICS_EXPENSES, _LOG_HEADER)
     rows = ws.get_all_values()
     target = str(courier_tg_id) if courier_tg_id is not None else None
-    d_from = d_to = None
-    if date_from and date_to:
-        try:
-            d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
-            d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
-        except ValueError:
-            return
+    try:
+        d_from, d_to = _date_bounds(date_from, date_to)
+    except ValueError:
+        return
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.LOG_DATA_START_ROW:
@@ -3681,20 +3719,15 @@ def _iter_logistics_rows(courier_tg_id=None, date_from: str = None, date_to: str
             continue
         if target is not None and row[config.LOG_COURIER_TG_ID - 1].strip() != target:
             continue
-        if d_from is not None:
-            try:
-                d = dt.datetime.strptime(row[config.LOG_DATE - 1].strip(), "%d.%m.%Y")
-            except ValueError:
-                continue
-            if not (d_from <= d <= d_to):
-                continue
+        if not _in_bounds(row[config.LOG_DATE - 1].strip(), d_from, d_to):
+            continue
         yield row
 
 
 def get_logistics_total_for_courier(courier_tg_id, date_from: str = None, date_to: str = None) -> int:
     """Сумма "Заработок" (= "Оплата за смену", см. set_logistics_expense —
-    то же поле, что и в "Расходы на логистику") курьера за период, либо за
-    всё время без date_from/date_to (для баланса, см. get_courier_balance)."""
+    то же поле, что и в "Расходы на логистику") курьера за период, либо
+    за всё время без date_from/date_to."""
     total = 0
     for row in _iter_logistics_rows(courier_tg_id, date_from, date_to):
         try:
@@ -3704,62 +3737,177 @@ def get_logistics_total_for_courier(courier_tg_id, date_from: str = None, date_t
     return total
 
 
-def record_courier_settlement(courier_tg_id, courier_name: str, settlement_type: str, amount: int):
-    """Админ отметил физическую передачу денег — "Забрал наличные у
-    курьера" или "Доплатил курьеру" (см. config.SETTLEMENT_TYPE_*),
-    целиком или частями. Уменьшает баланс (см. get_courier_balance)."""
-    ws = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER)
-    now = _now()
-    ws.append_row([
-        today_date_str(), str(courier_tg_id), courier_name or "", settlement_type,
-        str(int(amount)), now.strftime("%H:%M"),
-    ], value_input_option="RAW")
+def get_courier_earnings_by_day(courier_tg_id) -> list:
+    """[{"date","amount","from_cash"}, ...] — "Заработок"/"Оплата за
+    смену" курьера по дням, новые сверху — для истории по нажатию на
+    "Доход курьера" (см. webapp.api_courier_earnings_by_day)."""
+    out = []
+    for row in _iter_logistics_rows(courier_tg_id):
+        try:
+            amount = int(row[config.LOG_SHIFT_PAY - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        from_cash = len(row) >= config.LOG_FROM_CASH and row[config.LOG_FROM_CASH - 1].strip().lower() == "да"
+        out.append({"date": row[config.LOG_DATE - 1].strip(), "amount": amount, "from_cash": from_cash})
+    out.sort(key=lambda e: _parse_ru_date_safe(e["date"]), reverse=True)
+    return out
 
 
-def get_courier_settlement_totals(courier_tg_id) -> dict:
-    """{"cash_received": сколько админ забрал наличными у курьера,
-    "paid": сколько доплатил курьеру} — за всё время (расчёты не
-    привязаны к периоду просмотра, см. get_courier_balance)."""
+def _parse_ru_date_safe(date_str):
+    try:
+        return dt.datetime.strptime(date_str, "%d.%m.%Y")
+    except ValueError:
+        return dt.datetime.min
+
+
+def _iter_settlement_rows(courier_tg_id=None, date_from: str = None, date_to: str = None):
+    """Как _iter_cash_rows, но по SHEET_COURIER_SETTLEMENTS ("Забрал
+    наличные"/"Оплата из наличных")."""
     ws = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER)
     rows = ws.get_all_values()
-    target = str(courier_tg_id)
-    cash_received = 0
-    paid = 0
+    target = str(courier_tg_id) if courier_tg_id is not None else None
+    try:
+        d_from, d_to = _date_bounds(date_from, date_to)
+    except ValueError:
+        return
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.SETL_DATA_START_ROW:
             continue
         if len(row) < config.SETL_TIME:
             continue
-        if row[config.SETL_COURIER_TG_ID - 1].strip() != target:
+        if target is not None and row[config.SETL_COURIER_TG_ID - 1].strip() != target:
             continue
+        if not _in_bounds(row[config.SETL_DATE - 1].strip(), d_from, d_to):
+            continue
+        yield row
+
+
+def record_courier_settlement(courier_tg_id, courier_name: str, settlement_type: str, amount: int, date_str: str = None):
+    """Пишет строку в "Расчёты с курьерами" — date_str это ДЕНЬ, С
+    КОТОРОГО списываются наличные (не обязательно сегодня — см.
+    комментарий в начале раздела), по умолчанию сегодняшний. Время
+    (SETL_TIME) — когда реально сделана запись, для справки, всегда
+    "сейчас"."""
+    ws = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER)
+    now = _now()
+    ws.append_row([
+        date_str or today_date_str(), str(courier_tg_id), courier_name or "", settlement_type,
+        str(int(amount)), now.strftime("%H:%M"),
+    ], value_input_option="RAW")
+
+
+def _withdrawn_total(courier_tg_id, date_from: str = None, date_to: str = None) -> int:
+    total = 0
+    for row in _iter_settlement_rows(courier_tg_id, date_from, date_to):
+        if row[config.SETL_TYPE - 1].strip() not in _SETL_WITHDRAW_TYPES:
+            continue
+        try:
+            total += int(row[config.SETL_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            pass
+    return total
+
+
+def get_courier_cash_for_day(courier_tg_id, date_str: str) -> int:
+    """"Наличные у курьера" ЗА ОДИН конкретный день — собрано в этот день
+    минус списано (SETTLEMENT_TYPE_CASH_RECEIVED/PAID_FROM_CASH) с датой
+    ровно этого дня. Может быть отрицательным (списали больше, чем в тот
+    конкретный день собрали — например, если забрали сразу остаток за
+    несколько дней одной отметкой на один день)."""
+    collected = get_cash_total(courier_tg_id, date_str, date_str)
+    withdrawn = _withdrawn_total(courier_tg_id, date_str, date_str)
+    return collected - withdrawn
+
+
+def get_courier_cash_balance_as_of(courier_tg_id, date_str: str = None) -> int:
+    """"Общая сумма у курьера" — остаток наличных на руках нарастающим
+    итогом по состоянию на КОНЕЦ date_str включительно (все сборы и
+    списания с датой не позже него) — без date_str это сегодняшний,
+    "актуальный прямо сейчас" остаток (используется для проверки при
+    оплате "из наличных", см. pay_courier_shift)."""
+    date_str = date_str or today_date_str()
+    collected = get_cash_total(courier_tg_id, None, date_str)
+    withdrawn = _withdrawn_total(courier_tg_id, None, date_str)
+    return collected - withdrawn
+
+
+def get_courier_cash_by_day(courier_tg_id) -> list:
+    """[{"date","collected","withdrawn","remaining"}, ...] — по всем
+    дням, где у курьера было хоть какое-то движение (сбор или списание),
+    новые сверху — для истории по нажатию на "Наличные у курьера"/
+    "Общая сумма у курьера" и для выбора дней в "Забрать наличные" (см.
+    webapp.api_courier_cash_by_day/api_courier_withdraw_cash)."""
+    collected_by_day = {}
+    for row in _iter_cash_rows(courier_tg_id):
+        date_str = row[config.CASH_DATE - 1].strip()
+        try:
+            amount = int(row[config.CASH_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        collected_by_day[date_str] = collected_by_day.get(date_str, 0) + amount
+
+    withdrawn_by_day = {}
+    for row in _iter_settlement_rows(courier_tg_id):
+        if row[config.SETL_TYPE - 1].strip() not in _SETL_WITHDRAW_TYPES:
+            continue
+        date_str = row[config.SETL_DATE - 1].strip()
         try:
             amount = int(row[config.SETL_AMOUNT - 1].strip() or 0)
         except ValueError:
             amount = 0
-        settlement_type = row[config.SETL_TYPE - 1].strip()
-        if settlement_type == config.SETTLEMENT_TYPE_CASH_RECEIVED:
-            cash_received += amount
-        elif settlement_type == config.SETTLEMENT_TYPE_PAID_COURIER:
-            paid += amount
-    return {"cash_received": cash_received, "paid": paid}
+        withdrawn_by_day[date_str] = withdrawn_by_day.get(date_str, 0) + amount
+
+    all_dates = set(collected_by_day) | set(withdrawn_by_day)
+    out = []
+    for date_str in all_dates:
+        collected = collected_by_day.get(date_str, 0)
+        withdrawn = withdrawn_by_day.get(date_str, 0)
+        out.append({
+            "date": date_str, "collected": collected, "withdrawn": withdrawn,
+            "remaining": collected - withdrawn,
+        })
+    out.sort(key=lambda e: _parse_ru_date_safe(e["date"]), reverse=True)
+    return out
 
 
-def get_courier_balance(courier_tg_id) -> dict:
-    """Текущий баланс курьера — см. комментарий в начале этого раздела.
-    balance > 0 — курьер должен передать деньги админу; balance < 0 —
-    админ должен доплатить курьеру."""
-    total_cash = get_cash_total(courier_tg_id)
-    total_earned = get_logistics_total_for_courier(courier_tg_id)
-    settlements = get_courier_settlement_totals(courier_tg_id)
-    balance = (total_cash - settlements["cash_received"]) - (total_earned - settlements["paid"])
-    return {
-        "total_cash": total_cash,
-        "total_earned": total_earned,
-        "cash_received_by_admin": settlements["cash_received"],
-        "paid_to_courier": settlements["paid"],
-        "balance": balance,
-    }
+def pay_courier_shift(courier_tg_id, courier_name: str, date_str: str, amount: int, from_cash: bool) -> dict:
+    """Записывает "Заработок"/"Оплата за смену" за date_str (см.
+    set_logistics_expense). Если from_cash=True — оплата выбрана "из уже
+    собранных курьером наличных": сумма ДОПОЛНИТЕЛЬНО списывается с
+    "Наличные у курьера" (SETTLEMENT_TYPE_PAID_FROM_CASH, дата та же —
+    date_str), а если наличных на руках у курьера СЕЙЧАС меньше amount —
+    отклоняет запись целиком, ничего не пишет (по прямой просьбе: сумма
+    "из наличных" не может быть больше того, что реально у него на
+    руках). Возвращает {"ok": True} или {"error": "insufficient_cash",
+    "available": N}."""
+    if from_cash:
+        available = get_courier_cash_balance_as_of(courier_tg_id)
+        if amount > available:
+            return {"error": "insufficient_cash", "available": available}
+    set_logistics_expense(date_str, courier_tg_id, courier_name, amount, from_cash=from_cash)
+    if from_cash:
+        record_courier_settlement(
+            courier_tg_id, courier_name, config.SETTLEMENT_TYPE_PAID_FROM_CASH, amount, date_str=date_str,
+        )
+    return {"ok": True}
+
+
+def withdraw_courier_cash(courier_tg_id, courier_name: str, day_amounts: dict) -> int:
+    """"Забрать наличные" — day_amounts: {"ДД.ММ.ГГГГ": сумма, ...},
+    одна запись SETTLEMENT_TYPE_CASH_RECEIVED на каждый день (так в
+    истории по дням видно, с какого именно дня забрали, см.
+    get_courier_cash_by_day). Нулевые/отрицательные суммы и пустой
+    day_amounts пропускаются без записи. Возвращает сумму всех
+    записанных строк."""
+    total = 0
+    for date_str, amount in day_amounts.items():
+        amount = int(amount or 0)
+        if amount <= 0:
+            continue
+        record_courier_settlement(courier_tg_id, courier_name, config.SETTLEMENT_TYPE_CASH_RECEIVED, amount, date_str=date_str)
+        total += amount
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -3834,8 +3982,9 @@ def delete_feed_post(post_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Mini App "Маршрут" — режим админов (config.ROUTE_ADMIN_IDS) и расходы на
-# логистику. Оба листа — новые, не часть исходной таблицы PAUSE, поэтому
+# Mini App "Маршрут" — режим админов (владелец/назначенные курьеры-
+# администраторы) и расходы на логистику. Оба листа — новые, не часть
+# исходной таблицы PAUSE, поэтому
 # заводятся автоматически (см. _ws_or_create), как и листы долгов выше.
 # ---------------------------------------------------------------------------
 
@@ -3874,10 +4023,7 @@ def set_route_admin_mode(tg_id, name: str, mode: str):
 def get_logistics_expenses(date_str: str) -> dict:
     """{courier_tg_id: сумма оплаты за смену} на дату — для экрана "Расходы
     на логистику" в Mini App "Маршрут"."""
-    ws = _ws_or_create(
-        config.SHEET_LOGISTICS_EXPENSES,
-        ["date", "courier_tg_id", "courier_name", "shift_pay", "updated"],
-    )
+    ws = _ws_or_create(config.SHEET_LOGISTICS_EXPENSES, _LOG_HEADER)
     rows = ws.get_all_values()
     out = {}
     for i, row in enumerate(rows):
@@ -3897,14 +4043,23 @@ def get_logistics_expenses(date_str: str) -> dict:
     return out
 
 
-def set_logistics_expense(date_str: str, courier_tg_id, courier_name: str, amount: int):
-    ws = _ws_or_create(
-        config.SHEET_LOGISTICS_EXPENSES,
-        ["date", "courier_tg_id", "courier_name", "shift_pay", "updated"],
-    )
+_LOG_HEADER = ["date", "courier_tg_id", "courier_name", "shift_pay", "updated", "from_cash"]
+
+
+def set_logistics_expense(date_str: str, courier_tg_id, courier_name: str, amount: int, from_cash: bool = False):
+    """"Заработок"/"Оплата за смену" — один и тот же вызов из "Расходы на
+    логистику" (общий экран, from_cash всегда False) и из карточки
+    курьера в "Курьеры" (см. webapp.api_courier_pay_shift), где админ
+    может выбрать оплатить из уже собранных курьером наличных —
+    from_cash=True пишет отметку в LOG_FROM_CASH (сама сумма при этом
+    дополнительно списывается с "Наличные у курьера" вызывающим кодом,
+    см. record_courier_settlement/SETTLEMENT_TYPE_PAID_FROM_CASH)."""
+    ws = _ws_or_create(config.SHEET_LOGISTICS_EXPENSES, _LOG_HEADER)
+    _ensure_sheet_columns(ws, config.LOG_FROM_CASH)
     rows = ws.get_all_values()
     target = str(courier_tg_id)
     now_str = _now().strftime("%d.%m.%Y %H:%M")
+    from_cash_val = "Да" if from_cash else ""
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.LOG_DATA_START_ROW:
@@ -3915,8 +4070,9 @@ def set_logistics_expense(date_str: str, courier_tg_id, courier_name: str, amoun
             ws.update_cell(r, config.LOG_COURIER_NAME, courier_name or "")
             ws.update_cell(r, config.LOG_SHIFT_PAY, amount)
             ws.update_cell(r, config.LOG_UPDATED, now_str)
+            ws.update_cell(r, config.LOG_FROM_CASH, from_cash_val)
             return
-    ws.append_row([date_str, target, courier_name or "", amount, now_str], value_input_option="RAW")
+    ws.append_row([date_str, target, courier_name or "", amount, now_str, from_cash_val], value_input_option="RAW")
 
 
 def get_delivery_expense(date_str: str) -> int:

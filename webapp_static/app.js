@@ -26,8 +26,8 @@
                          // курьеров на экране "Маршрут"; при false всё как было раньше
     courierTab: "all",  // "all" | tg_id курьера — какая вкладка сейчас активна (только админ)
     isRouteAdmin: false, // видит ли "Профиль" как у админа (центр управления) —
-                          // true и для основного админа бота, и для админов Mini App
-                          // "Маршрут" (см. config.ROUTE_ADMIN_IDS), не меняется при
+                          // true и для основного админа бота, и для владельца/назначенных
+                          // администраторов Mini App "Маршрут", не меняется при
                           // переключении "Режима" (иначе некому было бы его переключить назад)
     canToggleMode: false, // может ли менять "Режим" ("Администратор"/"Курьер") — только у
                            // админов именно этого Mini App, не у основного админа бота
@@ -36,12 +36,9 @@
     logisticsDateISO: null,
     starts: {},          // {courier_tg_id: "ЧЧ:ММ"} — время "Старта" на state.date, см. renderStartBadge
     cash: {},             // {точка: сумма наличных, собранных на ней за state.date}, см. buildCard
-    kpiPeriod: "today",   // "today" | "7d" | "30d" | "custom" — период для шкалы эффективности в Профиле
+    kpiPeriod: "today",   // "today" | "yesterday" | "day2".."day5" | "7d" | "30d" | "custom" — период для шкалы эффективности в Профиле
     kpiCustomFrom: null,  // ISO (YYYY-MM-DD) — для kpiPeriod "custom"
     kpiCustomTo: null,
-    financePeriod: "today",   // то же самое, но для "Заработок и наличные" (Мои доходы / Курьеры)
-    financeCustomFrom: null,
-    financeCustomTo: null,
   };
 
   // Тёплая палитра для цветов курьеров на вкладке "Все" (см. renderMap,
@@ -116,6 +113,7 @@
         return resp.json().catch(function () { return {}; }).then(function (data) {
           var err = new Error(data.error || ("HTTP " + resp.status));
           err.status = resp.status;
+          err.data = data;
           throw err;
         });
       }
@@ -1434,220 +1432,564 @@
   }
 
   // -------------------------------------------------------------------
-  // "Заработок и наличные" — "Мои доходы" (курьер, свои данные без
-  // контактов клиентов) и карточка курьера в "Курьеры" (админ, видит
-  // контакты из get_cash_entries и может отмечать расчёты) — один и тот
-  // же UI (см. renderFinanceSection), отличается только courierTgId
-  // (null = свои данные) и isAdmin (показывать entries/кнопки расчёта).
+  // Касса курьера — "Наличные у курьера"/"Доход курьера"/"Общая сумма у
+  // курьера" (по дням), "Забрать наличные" и "Заработок"/"Оплата за
+  // смену" (с выбором источника — из уже собранных наличных или
+  // отдельно). Карточка курьера в "Курьеры" (админ, см.
+  // renderCourierCashCard) и "Мои доходы" (курьер, см.
+  // renderMyEarningsCarousel) — один и тот же набор эндпоинтов
+  // (/api/courier/cash-*), разное представление: у админа три
+  // прямоугольника видны сразу, у курьера — карусель с стрелками.
   //
-  // "К расчёту" — баланс за ВСЁ ВРЕМЯ (balance из /api/finance), не
-  // зависит от выбранного периода чипов ("Сегодня"/"7 дней"/…) — те
-  // влияют только на "Заработано"/"Собрано наличными" ниже. positive —
-  // курьер должен передать деньги, negative — нужно доплатить курьеру
-  // (см. config.py: get_courier_balance).
+  // Однодневный "фильтр по датам, как и для маршрутов" — та же пилюля
+  // .date-pill, что и у ленты дат на "Маршруте" (см. renderDatePicker/
+  // dateLabel), просто со своим набором дат (объединение дней из кассы
+  // и заработка, плюс сегодня).
   // -------------------------------------------------------------------
 
-  function financeRangeForPeriod() {
+  function buildSingleDayPicker(selectedRu, dates, onSelect) {
     var today = todayRuDate();
-    if (state.financePeriod === "7d") return { from: shiftRuDate(today, -6), to: today };
-    if (state.financePeriod === "30d") return { from: shiftRuDate(today, -29), to: today };
-    if (state.financePeriod === "custom" && state.financeCustomFrom && state.financeCustomTo) {
-      return { from: isoToRu(state.financeCustomFrom), to: isoToRu(state.financeCustomTo) };
-    }
-    return { from: today, to: today };
-  }
-
-  function renderFinanceSection(container, courierTgId, isAdmin) {
-    container.innerHTML = "";
-
-    var periodRow = el("div", "feed-filters");
-    KPI_PERIODS.forEach(function (p) {
-      var chip = el("button", "filter-chip" + (state.financePeriod === p[0] ? " active" : ""), p[1]);
-      chip.addEventListener("click", function () {
+    var all = dates.slice();
+    if (all.indexOf(today) === -1) all.push(today);
+    all.sort(function (a, b) { return ruToIso(b) < ruToIso(a) ? -1 : 1; });
+    var row = el("div", "date-pills");
+    all.forEach(function (d) {
+      var btn = el("button", "date-pill" + (d === selectedRu ? " active" : ""), dateLabel(d));
+      btn.addEventListener("click", function () {
+        if (d === selectedRu) return;
         haptic("select");
-        state.financePeriod = p[0];
-        renderFinanceSection(container, courierTgId, isAdmin);
+        onSelect(d);
       });
-      periodRow.appendChild(chip);
+      row.appendChild(btn);
     });
-    container.appendChild(periodRow);
-
-    if (state.financePeriod === "custom") {
-      var rangeRow = el("div", "date-picker-row");
-      var fromField = el("div", "field");
-      fromField.innerHTML = "<label>С</label>";
-      var fromInput = document.createElement("input");
-      fromInput.type = "date";
-      fromInput.value = state.financeCustomFrom || ruToIso(todayRuDate());
-      fromField.appendChild(fromInput);
-      var toField = el("div", "field");
-      toField.innerHTML = "<label>По</label>";
-      var toInput = document.createElement("input");
-      toInput.type = "date";
-      toInput.value = state.financeCustomTo || ruToIso(todayRuDate());
-      toField.appendChild(toInput);
-      rangeRow.appendChild(fromField);
-      rangeRow.appendChild(toField);
-      container.appendChild(rangeRow);
-
-      var applyBtn = el("button", "btn-ghost", "Показать");
-      applyBtn.addEventListener("click", function () {
-        state.financeCustomFrom = fromInput.value;
-        state.financeCustomTo = toInput.value;
-        loadFinance(body, courierTgId, isAdmin);
-      });
-      container.appendChild(applyBtn);
-    }
-
-    var body = el("div", "finance-body");
-    body.appendChild(el("div", "skeleton-block"));
-    container.appendChild(body);
-
-    if (state.financePeriod !== "custom" || (state.financeCustomFrom && state.financeCustomTo)) {
-      loadFinance(body, courierTgId, isAdmin);
-    }
+    return row;
   }
 
-  function loadFinance(body, courierTgId, isAdmin) {
-    var range = financeRangeForPeriod();
-    var url = "/api/finance?from=" + encodeURIComponent(range.from) + "&to=" + encodeURIComponent(range.to);
+  // Лёгкая нижняя шторка поверх текущего экрана (те же классы .modal/
+  // .modal-sheet, что и у "cash-modal" на "Маршруте", просто собирается
+  // динамически — не привязана к одному фиксированному месту в разметке).
+  function openModalSheet(buildFn) {
+    var overlay = el("div", "modal");
+    var sheet = el("div", "modal-sheet");
+    overlay.appendChild(sheet);
+    function close() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+    document.body.appendChild(overlay);
+    buildFn(sheet, close);
+    return close;
+  }
+
+  function confirmSheet(title, text, buttons) {
+    openModalSheet(function (sheet, close) {
+      sheet.appendChild(el("div", "modal-title", title));
+      if (text) sheet.appendChild(el("div", "modal-text", text));
+      var actions = el("div", "modal-actions");
+      buttons.forEach(function (b) {
+        var btn = el("button", b.className || "btn-ghost", b.label);
+        btn.addEventListener("click", function () {
+          close();
+          if (b.onClick) b.onClick();
+        });
+        actions.appendChild(btn);
+      });
+      sheet.appendChild(actions);
+    });
+  }
+
+  function cashSummaryUrl(courierTgId, dateRu) {
+    var url = "/api/courier/cash-summary?date=" + encodeURIComponent(dateRu);
     if (courierTgId) url += "&courier_tg_id=" + encodeURIComponent(courierTgId);
-    api(url).then(function (data) {
-      renderFinanceBody(body, data, courierTgId, isAdmin);
+    return url;
+  }
+  function cashByDayUrl(courierTgId) {
+    return "/api/courier/cash-by-day" + (courierTgId ? "?courier_tg_id=" + encodeURIComponent(courierTgId) : "");
+  }
+  function earningsByDayUrl(courierTgId) {
+    return "/api/courier/earnings-by-day" + (courierTgId ? "?courier_tg_id=" + encodeURIComponent(courierTgId) : "");
+  }
+
+  // "Оплатить курьеру наличными?" — перед сохранением "Заработка"/"Оплаты
+  // за смену" админа всегда спрашивают, откуда платить, и показывают,
+  // сколько у курьера сейчас собрано наличными (по прямой просьбе).
+  // "Да, из наличных" списывает сумму с остатка (может быть отклонено
+  // сервером, если наличных не хватает, см. sheets.pay_courier_shift) —
+  // "Оплатить отдельно" остаток не трогает совсем.
+  function confirmAndPayShift(courierTgId, dateRu, amount, onSaved) {
+    api(cashSummaryUrl(courierTgId, todayRuDate())).then(function (summary) {
+      confirmSheet(
+        "Оплатить курьеру наличными?",
+        "Собрано наличными у курьера: " + fmtSum(summary.balance_as_of) + ". Сумма оплаты за смену: " + fmtSum(amount) + ".",
+        [
+          { label: "Да, из наличных", className: "btn-primary", onClick: function () { doPay(true); } },
+          { label: "Оплатить отдельно", className: "btn-ghost", onClick: function () { doPay(false); } },
+        ]
+      );
     }).catch(function (err) {
-      body.innerHTML = "";
-      body.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      toast("Не удалось загрузить остаток наличных: " + err.message);
+    });
+
+    function doPay(fromCash) {
+      api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/pay-shift", {
+        method: "POST", body: { date: dateRu, amount: amount, from_cash: fromCash },
+      }).then(function () {
+        haptic("success");
+        toast("Оплата сохранена");
+        if (onSaved) onSaved();
+      }).catch(function (err) {
+        if (err.data && err.data.error === "insufficient_cash") {
+          toast("Недостаточно наличных у курьера: доступно " + fmtSum(err.data.available));
+        } else {
+          toast("Не удалось сохранить: " + err.message);
+        }
+      });
+    }
+  }
+
+  function openPayShiftScreen(courierTgId, defaultDateRu, onDone) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", "Заработок"));
+
+      var dateField = el("div", "field");
+      dateField.innerHTML = "<label>Дата</label>";
+      var dateInput = document.createElement("input");
+      dateInput.type = "date";
+      dateInput.value = ruToIso(defaultDateRu);
+      dateField.appendChild(dateInput);
+      body.appendChild(dateField);
+
+      var amountField = el("div", "field");
+      amountField.innerHTML = "<label>Сумма за смену</label>";
+      var amountInput = document.createElement("input");
+      amountInput.type = "number";
+      amountInput.inputMode = "numeric";
+      amountInput.min = "0";
+      amountInput.placeholder = "0";
+      amountField.appendChild(amountInput);
+      body.appendChild(amountField);
+
+      var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+      saveBtn.addEventListener("click", function () {
+        var amount = parseInt(amountInput.value, 10) || 0;
+        if (amount <= 0) { toast("Введите сумму"); return; }
+        confirmAndPayShift(courierTgId, isoToRu(dateInput.value), amount, function () {
+          onDone();
+          wizardBack();
+        });
+      });
+      body.appendChild(saveBtn);
     });
   }
 
-  function financeBalanceInfo(balance) {
-    if (balance > 0) return { text: "Курьер должен передать " + fmtSum(balance), color: "var(--accent-warm)" };
-    if (balance < 0) return { text: "Нужно доплатить курьеру " + fmtSum(-balance), color: "var(--info)" };
-    return { text: "Рассчитались", color: "var(--success)" };
+  function openWithdrawCashScreen(courierTgId, onDone) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", "Забрать наличные"));
+      var listWrap = el("div");
+      body.appendChild(listWrap);
+      listWrap.appendChild(el("div", "skeleton-block"));
+
+      var allBtn = el("button", "btn-ghost", "Забрать все наличные");
+      allBtn.hidden = true;
+      var confirmBtn = el("button", "btn-primary wizard-footer-btn", "Забрать выбранное");
+      confirmBtn.hidden = true;
+
+      function doWithdraw(days) {
+        confirmBtn.disabled = true;
+        allBtn.disabled = true;
+        api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/withdraw-cash", {
+          method: "POST", body: { days: days },
+        }).then(function (res) {
+          haptic("success");
+          toast("Забрано наличных: " + fmtSum(res.total));
+          onDone();
+          wizardBack();
+        }).catch(function (err) {
+          confirmBtn.disabled = false;
+          allBtn.disabled = false;
+          toast("Не удалось: " + err.message);
+        });
+      }
+
+      api(cashByDayUrl(courierTgId)).then(function (data) {
+        listWrap.innerHTML = "";
+        var days = (data.days || []).filter(function (d) { return d.remaining > 0; });
+        if (!days.length) {
+          listWrap.appendChild(el("div", "empty-note", "У курьера сейчас нет наличных на руках."));
+          return;
+        }
+        var card = el("div", "card");
+        var checks = [];
+        days.forEach(function (d) {
+          var row = el("div", "visibility-row");
+          row.appendChild(el("div", "visibility-row-label", d.date + " · " + fmtSum(d.remaining)));
+          var checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.className = "withdraw-checkbox";
+          checks.push({ date: d.date, amount: d.remaining, input: checkbox });
+          row.appendChild(checkbox);
+          card.appendChild(row);
+        });
+        listWrap.appendChild(card);
+
+        allBtn.hidden = false;
+        confirmBtn.hidden = false;
+        allBtn.addEventListener("click", function () {
+          var dayAmounts = {};
+          days.forEach(function (d) { dayAmounts[d.date] = d.remaining; });
+          doWithdraw(dayAmounts);
+        });
+        confirmBtn.addEventListener("click", function () {
+          var dayAmounts = {};
+          checks.forEach(function (c) { if (c.input.checked) dayAmounts[c.date] = c.amount; });
+          if (!Object.keys(dayAmounts).length) { toast("Отметьте хотя бы один день"); return; }
+          doWithdraw(dayAmounts);
+        });
+      }).catch(function (err) {
+        listWrap.innerHTML = "";
+        listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      });
+
+      body.appendChild(allBtn);
+      body.appendChild(confirmBtn);
+    });
   }
 
-  function renderFinanceBody(body, data, courierTgId, isAdmin) {
-    body.innerHTML = "";
+  // Контакты клиента (ID, имя, телефон, тг) — ТОЛЬКО для админа, по
+  // прямой просьбе (см. sheets.get_cash_entries) — те же .cash-entry-*
+  // классы, что были у старого списка "Кто дал наличные".
+  function renderCashEntries(container, entries) {
+    container.innerHTML = "";
+    if (!entries.length) {
+      container.appendChild(el("div", "modal-list-empty", "Нет записей от клиентов за этот день."));
+      return;
+    }
+    entries.forEach(function (e, idx) {
+      var row = el("div", "cash-entry" + (idx ? " cash-entry-sep" : ""));
+      var head = el("div", "cash-entry-head");
+      var nameParts = [e.client_id, e.name].filter(Boolean).join(" · ");
+      head.appendChild(el("div", "cash-entry-name", escapeHtml(nameParts)));
+      head.appendChild(el("strong", "cash-entry-amount", fmtSum(e.amount)));
+      row.appendChild(head);
+      row.appendChild(el("div", "cash-entry-sub", escapeHtml(e.point || "") + " · " + escapeHtml(e.time || "")));
 
-    var statsCard = el("div", "card finance-stats-card");
-    var earnedRow = el("div", "finance-stat-row");
-    earnedRow.appendChild(el("span", null, "Заработано"));
-    earnedRow.appendChild(el("strong", null, fmtSum(data.earned)));
-    statsCard.appendChild(earnedRow);
-    var collectedRow = el("div", "finance-stat-row");
-    collectedRow.appendChild(el("span", null, "Собрано наличными"));
-    collectedRow.appendChild(el("strong", null, fmtSum(data.collected)));
-    statsCard.appendChild(collectedRow);
-    body.appendChild(statsCard);
-
-    var info = financeBalanceInfo(data.balance);
-    var balanceCard = el("div", "card finance-balance-card");
-    balanceCard.appendChild(el("div", "finance-balance-label", "К расчёту"));
-    var balanceValue = el("div", "finance-balance-value", info.text);
-    balanceValue.style.color = info.color;
-    balanceCard.appendChild(balanceValue);
-
-    if (isAdmin) {
-      var formWrap = el("div", "finance-settle-form");
-      formWrap.hidden = true;
-
-      function openSettleForm(type, label, defaultAmount) {
-        formWrap.innerHTML = "";
-        formWrap.hidden = false;
-        var field = el("div", "field");
-        field.innerHTML = "<label>" + escapeHtml(label) + "</label>";
-        var input = document.createElement("input");
-        input.type = "number";
-        input.inputMode = "numeric";
-        input.min = "0";
-        input.value = defaultAmount > 0 ? defaultAmount : "";
-        field.appendChild(input);
-        formWrap.appendChild(field);
-
-        var actionsRow = el("div", "finance-settle-actions");
-        var confirmBtn = el("button", "btn-primary", "Подтвердить");
-        var cancelBtn = el("button", "btn-ghost", "Отмена");
-        confirmBtn.addEventListener("click", function () {
-          var amount = parseInt(input.value, 10);
-          if (!amount || amount <= 0) { toast("Введите сумму"); return; }
-          confirmBtn.disabled = true;
-          api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/settle", {
-            method: "POST", body: { type: type, amount: amount },
-          }).then(function () {
-            haptic("success");
-            toast("Записано");
-            loadFinance(body, courierTgId, isAdmin);
-          }).catch(function (err) {
-            confirmBtn.disabled = false;
-            toast("Не удалось: " + err.message);
-          });
+      var contactsRow = el("div", "cash-entry-contacts");
+      var tel = telHref(e.contact);
+      if (tel) {
+        var phoneLink = document.createElement("a");
+        phoneLink.href = tel;
+        phoneLink.className = "cash-entry-contact-btn";
+        phoneLink.textContent = e.contact;
+        contactsRow.appendChild(phoneLink);
+      }
+      if (e.telegram) {
+        var username = e.telegram.replace(/^@/, "");
+        var tgBtn = el("button", "cash-entry-contact-btn", "@" + escapeHtml(username));
+        tgBtn.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          window.location.href = "tg://resolve?domain=" + username;
         });
-        cancelBtn.addEventListener("click", function () { formWrap.hidden = true; });
-        actionsRow.appendChild(confirmBtn);
-        actionsRow.appendChild(cancelBtn);
-        formWrap.appendChild(actionsRow);
+        contactsRow.appendChild(tgBtn);
+      }
+      if (contactsRow.childNodes.length) row.appendChild(contactsRow);
+      container.appendChild(row);
+    });
+  }
+
+  // Список по дням — общий для "Наличные у курьера" и "Общая сумма у
+  // курьера" (идентичный, по прямой просьбе). У админа каждый день можно
+  // развернуть — подтягивает контакты клиентов за этот день отдельным
+  // запросом (см. api_courier_cash_day_entries), лениво, при первом клике.
+  function renderCashDayList(root, courierTgId, days, isAdmin) {
+    root.innerHTML = "";
+    if (!days.length) {
+      root.appendChild(el("div", "empty-note", "Пока нет записей."));
+      return;
+    }
+    var card = el("div", "card");
+    days.forEach(function (d, idx) {
+      var row = el("div", "cash-day-row" + (idx ? " cash-day-row-sep" : "") + (isAdmin ? " cash-day-row-clickable" : ""));
+      var head = el("div", "cash-day-head");
+      head.appendChild(el("div", "cash-day-date", d.date));
+      head.appendChild(el("strong", "cash-day-remaining", fmtSum(d.remaining)));
+      row.appendChild(head);
+      row.appendChild(el("div", "cash-day-sub", "Получено от клиентов: " + fmtSum(d.collected)));
+      if (d.withdrawn > 0) {
+        row.appendChild(el("div", "cash-day-sub", "Забрано администратором: " + fmtSum(d.withdrawn)));
       }
 
-      var settleRow = el("div", "finance-settle-row");
-      var cashBtn = el("button", "btn-ghost", "Забрал наличные");
-      cashBtn.addEventListener("click", function () {
-        openSettleForm("Забрал наличные", "Сколько наличных забрали у курьера",
-          data.balance > 0 ? data.balance : 0);
-      });
-      var payBtn = el("button", "btn-ghost", "Доплатил курьеру");
-      payBtn.addEventListener("click", function () {
-        openSettleForm("Доплатил курьеру", "Сколько доплатили курьеру",
-          data.balance < 0 ? -data.balance : 0);
-      });
-      settleRow.appendChild(cashBtn);
-      settleRow.appendChild(payBtn);
-      balanceCard.appendChild(settleRow);
-      balanceCard.appendChild(formWrap);
-    }
+      if (isAdmin) {
+        var detailWrap = el("div", "cash-day-detail");
+        detailWrap.hidden = true;
+        row.appendChild(detailWrap);
+        var loaded = false;
+        row.addEventListener("click", function (e) {
+          if (e.target.closest(".cash-entry-contact-btn")) return;
+          haptic("select");
+          detailWrap.hidden = !detailWrap.hidden;
+          if (!detailWrap.hidden && !loaded) {
+            loaded = true;
+            detailWrap.innerHTML = '<div class="modal-list-empty">Загрузка…</div>';
+            api("/api/courier/cash-day-entries?courier_tg_id=" + encodeURIComponent(courierTgId) + "&date=" + encodeURIComponent(d.date))
+              .then(function (data) { renderCashEntries(detailWrap, data.entries || []); })
+              .catch(function (err) {
+                detailWrap.innerHTML = "";
+                detailWrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+              });
+          }
+        });
+      }
 
-    body.appendChild(balanceCard);
+      card.appendChild(row);
+    });
+    root.appendChild(card);
+  }
 
-    if (isAdmin && data.entries) {
-      body.appendChild(el("div", "profile-section-title", "Кто дал наличные"));
-      if (!data.entries.length) {
-        body.appendChild(el("div", "empty-note", "За выбранный период наличных не было."));
-      } else {
-        var entriesCard = el("div", "card");
-        data.entries.forEach(function (e, idx) {
-          var row = el("div", "cash-entry" + (idx ? " cash-entry-sep" : ""));
-          var head = el("div", "cash-entry-head");
-          head.appendChild(el("div", "cash-entry-name", escapeHtml(e.name || e.client_id)));
-          head.appendChild(el("strong", "cash-entry-amount", fmtSum(e.amount)));
+  function openCashDayHistory(courierTgId, isAdmin, title) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", title));
+      var listWrap = el("div");
+      body.appendChild(listWrap);
+      listWrap.appendChild(el("div", "skeleton-block"));
+      api(cashByDayUrl(courierTgId)).then(function (data) {
+        renderCashDayList(listWrap, courierTgId, data.days || [], isAdmin);
+      }).catch(function (err) {
+        listWrap.innerHTML = "";
+        listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      });
+    });
+  }
+
+  function openEarningsHistory(courierTgId) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", "Доход курьера"));
+      var listWrap = el("div");
+      body.appendChild(listWrap);
+      listWrap.appendChild(el("div", "skeleton-block"));
+      api(earningsByDayUrl(courierTgId)).then(function (data) {
+        listWrap.innerHTML = "";
+        var days = data.days || [];
+        if (!days.length) {
+          listWrap.appendChild(el("div", "empty-note", "Пока нет записей."));
+          return;
+        }
+        var card = el("div", "card");
+        days.forEach(function (d, idx) {
+          var row = el("div", "cash-day-row" + (idx ? " cash-day-row-sep" : ""));
+          var head = el("div", "cash-day-head");
+          head.appendChild(el("div", "cash-day-date", d.date));
+          head.appendChild(el("strong", "cash-day-remaining", fmtSum(d.amount)));
           row.appendChild(head);
-          row.appendChild(el(
-            "div", "cash-entry-sub",
-            escapeHtml(e.point) + " · " + escapeHtml(e.date) + " " + escapeHtml(e.time)
-          ));
-
-          var contactsRow = el("div", "cash-entry-contacts");
-          var tel = telHref(e.contact);
-          if (tel) {
-            var phoneLink = document.createElement("a");
-            phoneLink.href = tel;
-            phoneLink.className = "cash-entry-contact-btn";
-            phoneLink.textContent = e.contact;
-            contactsRow.appendChild(phoneLink);
-          }
-          if (e.telegram) {
-            var username = e.telegram.replace(/^@/, "");
-            var tgBtn = el("button", "cash-entry-contact-btn", "@" + escapeHtml(username));
-            tgBtn.addEventListener("click", function () {
-              window.location.href = "tg://resolve?domain=" + username;
-            });
-            contactsRow.appendChild(tgBtn);
-          }
-          if (contactsRow.childNodes.length) row.appendChild(contactsRow);
-
-          entriesCard.appendChild(row);
+          row.appendChild(el("div", "cash-day-sub", d.from_cash ? "Оплачено из наличных клиентов" : "Оплачено отдельно"));
+          card.appendChild(row);
         });
-        body.appendChild(entriesCard);
-      }
+        listWrap.appendChild(card);
+      }).catch(function (err) {
+        listWrap.innerHTML = "";
+        listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      });
+    });
+  }
+
+  // Карточка курьера в "Курьеры" (админ) — заголовок "Общая сумма у
+  // курьера" (накопительно по состоянию на выбранный день) + два
+  // прямоугольника "Наличные у курьера"/"Доход курьера" ЗА этот день,
+  // разным цветом шрифта (по прямой просьбе) — плюс "Забрать наличные" и
+  // "Заработок" ниже.
+  function renderCourierCashCard(root, courier) {
+    var wrap = el("div", "card cash-card");
+    var pickerHolder = el("div");
+    var boxesHolder = el("div");
+    wrap.appendChild(pickerHolder);
+    wrap.appendChild(boxesHolder);
+
+    var actionsRow = el("div", "cash-actions-row");
+    var withdrawBtn = el("button", "btn-ghost", "Забрать наличные");
+    var payBtn = el("button", "btn-ghost", "Заработок");
+    actionsRow.appendChild(withdrawBtn);
+    actionsRow.appendChild(payBtn);
+    wrap.appendChild(actionsRow);
+    root.appendChild(wrap);
+
+    var selectedDate = todayRuDate();
+    var cashDays = [];
+    var earnDays = [];
+
+    function datesUnion() {
+      var set = {};
+      cashDays.forEach(function (d) { set[d.date] = true; });
+      earnDays.forEach(function (d) { set[d.date] = true; });
+      return Object.keys(set);
     }
+
+    function renderPicker() {
+      pickerHolder.innerHTML = "";
+      pickerHolder.appendChild(buildSingleDayPicker(selectedDate, datesUnion(), function (d) {
+        selectedDate = d;
+        renderPicker();
+        loadSummary();
+      }));
+    }
+
+    function renderBoxes(data) {
+      boxesHolder.innerHTML = "";
+      var totalBox = el("div", "cash-box cash-box-total");
+      totalBox.appendChild(el("div", "cash-box-label", "Общая сумма у курьера"));
+      totalBox.appendChild(el("div", "cash-box-value", fmtSum(data.balance_as_of)));
+      totalBox.addEventListener("click", function () {
+        haptic("select");
+        openCashDayHistory(courier.tg_id, true, "Общая сумма у курьера");
+      });
+      boxesHolder.appendChild(totalBox);
+
+      var pairRow = el("div", "cash-box-pair");
+      var cashBox = el("div", "cash-box cash-box-cash");
+      cashBox.appendChild(el("div", "cash-box-label", "Наличные у курьера"));
+      cashBox.appendChild(el("div", "cash-box-value", fmtSum(data.cash_day)));
+      cashBox.addEventListener("click", function () {
+        haptic("select");
+        openCashDayHistory(courier.tg_id, true, "Наличные у курьера");
+      });
+      var earnBox = el("div", "cash-box cash-box-earn");
+      earnBox.appendChild(el("div", "cash-box-label", "Доход курьера"));
+      earnBox.appendChild(el("div", "cash-box-value", fmtSum(data.earned_day)));
+      earnBox.addEventListener("click", function () {
+        haptic("select");
+        openEarningsHistory(courier.tg_id);
+      });
+      pairRow.appendChild(cashBox);
+      pairRow.appendChild(earnBox);
+      boxesHolder.appendChild(pairRow);
+    }
+
+    function loadSummary() {
+      boxesHolder.innerHTML = "";
+      boxesHolder.appendChild(el("div", "skeleton-block"));
+      api(cashSummaryUrl(courier.tg_id, selectedDate)).then(renderBoxes).catch(function (err) {
+        boxesHolder.innerHTML = "";
+        boxesHolder.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      });
+    }
+
+    function loadAll() {
+      Promise.all([api(cashByDayUrl(courier.tg_id)), api(earningsByDayUrl(courier.tg_id))]).then(function (res) {
+        cashDays = res[0].days || [];
+        earnDays = res[1].days || [];
+        renderPicker();
+        loadSummary();
+      }).catch(function (err) {
+        pickerHolder.innerHTML = "";
+        boxesHolder.innerHTML = "";
+        boxesHolder.appendChild(el("div", "empty-note", "Не удалось загрузить кассу: " + err.message));
+      });
+    }
+
+    withdrawBtn.addEventListener("click", function () { openWithdrawCashScreen(courier.tg_id, loadAll); });
+    payBtn.addEventListener("click", function () { openPayShiftScreen(courier.tg_id, selectedDate, loadAll); });
+
+    loadAll();
+  }
+
+  // "Мои доходы" (курьер) — та же касса, но своя подача, по прямой
+  // просьбе: карусель из трёх прямоугольников со стрелками по бокам,
+  // вместо сразу всех трёх, как у админа. Без контактов клиентов —
+  // курьер видит только свои суммы по дням, см. renderCashDayList(…,
+  // isAdmin=false) — строки не разворачиваются.
+  var MY_EARNINGS_BOXES = [
+    { key: "earned_day", label: "Мой заработок", cls: "cash-box-earn" },
+    { key: "cash_day", label: "Наличные от клиентов", cls: "cash-box-cash" },
+    { key: "balance_as_of", label: "Общая сумма денег от клиентов", cls: "cash-box-total" },
+  ];
+
+  function renderMyEarningsCarousel(root) {
+    root.innerHTML = "";
+    var pickerHolder = el("div");
+    root.appendChild(pickerHolder);
+
+    var carousel = el("div", "cash-carousel");
+    var prevBtn = el("button", "icon-btn cash-carousel-arrow", "‹");
+    var boxHolder = el("div", "cash-carousel-box-holder");
+    var nextBtn = el("button", "icon-btn cash-carousel-arrow", "›");
+    carousel.appendChild(prevBtn);
+    carousel.appendChild(boxHolder);
+    carousel.appendChild(nextBtn);
+    root.appendChild(carousel);
+
+    var dotsRow = el("div", "cash-carousel-dots");
+    MY_EARNINGS_BOXES.forEach(function () { dotsRow.appendChild(el("span", "cash-carousel-dot")); });
+    root.appendChild(dotsRow);
+
+    var selectedDate = todayRuDate();
+    var activeIdx = 0;
+    var lastData = null;
+    var cashDays = [];
+    var earnDays = [];
+
+    function datesUnion() {
+      var set = {};
+      cashDays.forEach(function (d) { set[d.date] = true; });
+      earnDays.forEach(function (d) { set[d.date] = true; });
+      return Object.keys(set);
+    }
+
+    function renderPicker() {
+      pickerHolder.innerHTML = "";
+      pickerHolder.appendChild(buildSingleDayPicker(selectedDate, datesUnion(), function (d) {
+        selectedDate = d;
+        renderPicker();
+        loadSummary();
+      }));
+    }
+
+    function renderBox() {
+      boxHolder.innerHTML = "";
+      if (!lastData) return;
+      var spec = MY_EARNINGS_BOXES[activeIdx];
+      var box = el("div", "cash-box " + spec.cls);
+      box.appendChild(el("div", "cash-box-label", spec.label));
+      box.appendChild(el("div", "cash-box-value", fmtSum(lastData[spec.key])));
+      box.addEventListener("click", function () {
+        haptic("select");
+        if (spec.key === "earned_day") openEarningsHistory(null);
+        else openCashDayHistory(null, false, spec.label);
+      });
+      boxHolder.appendChild(box);
+      Array.prototype.forEach.call(dotsRow.children, function (dot, idx) {
+        dot.classList.toggle("active", idx === activeIdx);
+      });
+    }
+
+    prevBtn.addEventListener("click", function () {
+      haptic("select");
+      activeIdx = (activeIdx + MY_EARNINGS_BOXES.length - 1) % MY_EARNINGS_BOXES.length;
+      renderBox();
+    });
+    nextBtn.addEventListener("click", function () {
+      haptic("select");
+      activeIdx = (activeIdx + 1) % MY_EARNINGS_BOXES.length;
+      renderBox();
+    });
+
+    function loadSummary() {
+      boxHolder.innerHTML = "";
+      boxHolder.appendChild(el("div", "skeleton-block"));
+      api(cashSummaryUrl(null, selectedDate)).then(function (data) {
+        lastData = data;
+        renderBox();
+      }).catch(function (err) {
+        boxHolder.innerHTML = "";
+        boxHolder.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      });
+    }
+
+    Promise.all([api(cashByDayUrl(null)), api(earningsByDayUrl(null))]).then(function (res) {
+      cashDays = res[0].days || [];
+      earnDays = res[1].days || [];
+      renderPicker();
+      loadSummary();
+    }).catch(function (err) {
+      pickerHolder.innerHTML = "";
+      boxHolder.innerHTML = "";
+      boxHolder.appendChild(el("div", "empty-note", "Не удалось загрузить доходы: " + err.message));
+    });
   }
 
   // -------------------------------------------------------------------
@@ -1772,8 +2114,8 @@
   }
 
   // -------------------------------------------------------------------
-  // "Режим" (Администратор/Курьер) — только у админов этого Mini App
-  // (см. config.ROUTE_ADMIN_IDS, state.canToggleMode), экран "Профиль"
+  // "Режим" (Администратор/Курьер) — только у владельца/назначенных
+  // администраторов этого Mini App (см. state.canToggleMode), экран "Профиль"
   // -------------------------------------------------------------------
 
   function setRouteAdminMode(mode) {
@@ -1833,9 +2175,13 @@
     expenseCard.appendChild(expenseRow);
     root.appendChild(expenseCard);
 
-    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить расходы на доставку");
     root.appendChild(saveBtn);
 
+    // "Оплата за смену" — у каждого курьера своя кнопка "Оплатить" (не
+    // общий "Сохранить" молча для всех): перед записью всегда спрашивают
+    // "Оплатить курьеру наличными?" (см. confirmAndPayShift), по прямой
+    // просьбе.
     function renderCouriersList(couriers) {
       couriersList.innerHTML = "";
       if (!couriers.length) {
@@ -1851,10 +2197,17 @@
         input.min = "0";
         input.placeholder = "0";
         input.value = c.shift_pay ? c.shift_pay : "";
-        input.dataset.tgId = c.tg_id;
-        input.dataset.name = c.name || "";
         row.appendChild(input);
         row.appendChild(el("span", "logistics-field-suffix", "сум"));
+        var payBtn = el("button", "btn-text logistics-pay-btn", "Оплатить");
+        payBtn.addEventListener("click", function () {
+          var amount = parseInt(input.value, 10) || 0;
+          if (amount <= 0) { toast("Введите сумму"); return; }
+          confirmAndPayShift(c.tg_id, isoToRu(state.logisticsDateISO), amount, function () {
+            loadForDate(state.logisticsDateISO);
+          });
+        });
+        row.appendChild(payBtn);
         couriersList.appendChild(row);
       });
     }
@@ -1889,14 +2242,10 @@
 
     saveBtn.addEventListener("click", function () {
       saveBtn.disabled = true;
-      var shifts = [];
-      Array.prototype.forEach.call(couriersList.querySelectorAll("input[type=number]"), function (input) {
-        shifts.push({ tg_id: input.dataset.tgId, name: input.dataset.name, amount: parseInt(input.value, 10) || 0 });
-      });
       var deliveryExpense = parseInt(expenseInput.value, 10) || 0;
       api("/api/logistics", {
         method: "POST",
-        body: { date: isoToRu(state.logisticsDateISO), shifts: shifts, delivery_expense: deliveryExpense },
+        body: { date: isoToRu(state.logisticsDateISO), delivery_expense: deliveryExpense },
       }).then(function () {
         toast("Расходы сохранены");
       }).catch(function (err) {
@@ -2171,8 +2520,31 @@
     return isoToRu(d.toISOString().slice(0, 10));
   }
 
+  // Дневные "пилюли" ("Сегодня", "Вчера", потом 4 даты дд.мм) — та же
+  // идея, что у ленты дат на "Маршруте" (см. dateLabel), плюс диапазоны
+  // "7 дней"/"30 дней"/"Свой период" — все в одном прокручиваемом ряду,
+  // по прямой просьбе.
+  function kpiDayPeriods() {
+    var today = todayRuDate();
+    var out = [["today", "Сегодня"], ["yesterday", "Вчера"]];
+    for (var i = 2; i <= 5; i++) {
+      out.push(["day" + i, dateLabel(shiftRuDate(today, -i))]);
+    }
+    return out;
+  }
+  var KPI_RANGE_PERIODS = [["7d", "7 дней"], ["30d", "30 дней"], ["custom", "Свой период"]];
+
   function kpiRangeForPeriod() {
     var today = todayRuDate();
+    if (state.kpiPeriod === "yesterday") {
+      var y = shiftRuDate(today, -1);
+      return { from: y, to: y };
+    }
+    var dayMatch = /^day(\d)$/.exec(state.kpiPeriod);
+    if (dayMatch) {
+      var d = shiftRuDate(today, -parseInt(dayMatch[1], 10));
+      return { from: d, to: d };
+    }
     if (state.kpiPeriod === "7d") return { from: shiftRuDate(today, -6), to: today };
     if (state.kpiPeriod === "30d") return { from: shiftRuDate(today, -29), to: today };
     if (state.kpiPeriod === "custom" && state.kpiCustomFrom && state.kpiCustomTo) {
@@ -2181,14 +2553,12 @@
     return { from: today, to: today };
   }
 
-  var KPI_PERIODS = [["today", "Сегодня"], ["7d", "7 дней"], ["30d", "30 дней"], ["custom", "Свой период"]];
-
   function renderKpiSection(container) {
     container.innerHTML = "";
     container.appendChild(el("div", "profile-section-title", "Эффективность доставки"));
 
     var periodRow = el("div", "feed-filters");
-    KPI_PERIODS.forEach(function (p) {
+    kpiDayPeriods().concat(KPI_RANGE_PERIODS).forEach(function (p) {
       var chip = el("button", "filter-chip" + (state.kpiPeriod === p[0] ? " active" : ""), p[1]);
       chip.addEventListener("click", function () {
         haptic("select");
@@ -2245,6 +2615,23 @@
       });
   }
 
+  function openCourierCardByTgId(tgId) {
+    // Вызывается прямо с экрана "Профиль" (клик по мини-кружку KPI),
+    // где визард ещё НЕ открыт — в отличие от клика по строке в списке
+    // "Курьеры" (там визард уже открыт из "Центр управления", и нужен
+    // именно wizardStep, чтобы добавить шаг, а не открыть поверх новый).
+    api("/api/couriers/manage").then(function (data) {
+      var c = (data.couriers || []).filter(function (x) { return x.tg_id === String(tgId); })[0];
+      if (!c) { toast("Курьер не найден"); return; }
+      openWizard(function (body) {
+        body.appendChild(el("h2", "wizard-title", c.name || c.tg_id));
+        renderCourierDetail(body, c);
+      });
+    }).catch(function (err) {
+      toast("Не удалось открыть карточку курьера: " + err.message);
+    });
+  }
+
   function renderKpiBody(body, data) {
     body.innerHTML = "";
     var visibleCouriers = (data.couriers || []).filter(function (c) { return !c.hidden; });
@@ -2256,11 +2643,23 @@
         var item = el("div", "kpi-mini-item");
         item.appendChild(buildKpiGauge(c.score, 56, 6));
         item.appendChild(el("div", "kpi-mini-name", escapeHtml(c.name || c.tg_id)));
+        item.addEventListener("click", function () {
+          haptic("select");
+          openCourierCardByTgId(c.tg_id);
+        });
         miniRow.appendChild(item);
       });
       wrap.appendChild(miniRow);
     }
-    wrap.appendChild(buildKpiGauge(data.overall, 160, 14, "kpi-gauge-main"));
+    var mainGauge = buildKpiGauge(data.overall, 160, 14, "kpi-gauge-main");
+    mainGauge.addEventListener("click", function () {
+      haptic("select");
+      var text = data.avg_delivery_time
+        ? "Среднее время сдачи за период: " + data.avg_delivery_time
+        : "За этот период ещё нет ни одной сданной точки.";
+      toast(text);
+    });
+    wrap.appendChild(mainGauge);
     body.appendChild(wrap);
 
     if (data.overall == null) {
@@ -2288,18 +2687,43 @@
     return digits ? "tel:" + digits : "";
   }
 
-  function buildCourierAvatar(tgId, name) {
-    var wrap = el("div", "ops-card-avatar");
-    var img = document.createElement("img");
-    img.alt = "";
-    wrap.appendChild(img);
-    fetchAuthedImageBlobUrl("/miniapp/api/avatar/" + encodeURIComponent(tgId))
-      .then(function (blobUrl) { img.src = blobUrl; })
-      .catch(function () {
-        wrap.innerHTML = "";
-        wrap.textContent = initials(name);
+  // Компактная строка-переключатель с (i)-пояснением — та же "пилюля"
+  // info-кнопки, что и у "Дедлайна" (см. loadDeadlineScreen), просто
+  // внутри .visibility-row, чтобы несколько включателей помещались в
+  // одну карточку без лишнего воздуха на экране.
+  function buildToggleRow(label, infoText, checked, onChange) {
+    var row = el("div", "visibility-row");
+    var labelWrap = el("div", "visibility-row-label-wrap");
+    labelWrap.appendChild(el("div", "visibility-row-label", label));
+    if (infoText) {
+      var infoBtn = el("button", "header-icon-btn deadline-info-btn", ICON_INFO);
+      infoBtn.setAttribute("aria-label", "Что это значит");
+      infoBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        haptic("select");
+        toast(infoText);
       });
-    return wrap;
+      labelWrap.appendChild(infoBtn);
+    }
+    row.appendChild(labelWrap);
+
+    var switchLabel = el("label", "switch");
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    var slider = el("span", "switch-slider");
+    switchLabel.appendChild(input);
+    switchLabel.appendChild(slider);
+    input.addEventListener("change", function () {
+      input.disabled = true;
+      onChange(input.checked).then(function () {
+        input.disabled = false;
+      }).catch(function () {
+        input.disabled = false;
+      });
+    });
+    row.appendChild(switchLabel);
+    return row;
   }
 
   function loadCouriersManageScreen(root) {
@@ -2383,9 +2807,11 @@
         var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
         var nameDiv = el("div", "ops-breakdown-name");
         nameDiv.appendChild(document.createTextNode(c.name || c.tg_id));
-        var roleBadge = el("span", "courier-role-badge" + (c.effective_admin ? " admin" : ""), c.effective_admin ? "Админ" : "Курьер");
-        nameDiv.appendChild(roleBadge);
         row.appendChild(nameDiv);
+        // Статус — справа, в конце строки (row уже flex space-between, см.
+        // .ops-breakdown-row), отдельным элементом от имени.
+        var roleBadge = el("span", "courier-role-badge" + (c.effective_admin ? " admin" : ""), c.effective_admin ? "Админ" : "Курьер");
+        row.appendChild(roleBadge);
         row.addEventListener("click", function () {
           haptic("select");
           wizardStep(function (body) {
@@ -2402,19 +2828,16 @@
   }
 
   function renderCourierDetail(root, courier) {
-    var card = el("div", "card");
-    var head = el("div", "ops-card-head");
-    head.appendChild(buildCourierAvatar(courier.tg_id, courier.name));
-    var info = el("div");
-    info.innerHTML =
-      '<div class="ops-card-name">' + escapeHtml(courier.name || courier.tg_id) + "</div>" +
-      (courier.phone ? '<div class="ops-card-line">' + escapeHtml(courier.phone) + "</div>" : "");
-    head.appendChild(info);
-    card.appendChild(head);
+    // Имя курьера уже показано заголовком визарда (wizard-title) — сама
+    // карточка больше не повторяет имя/телефон/аватар, по прямой просьбе.
+    // Карточка отличается цветом от основного интерфейса (ivory-deep —
+    // уже существующий в палитре оттенок, не новый цвет).
+    var card = el("div", "card courier-card");
 
     var actionsRow = el("div", "ops-contact-actions");
-    var writeBtn = el("button", "ops-contact-btn ops-contact-btn-primary");
-    writeBtn.innerHTML = ICON_COURIER_MESSAGE + "<span>Написать</span>";
+    var writeBtn = el("button", "ops-contact-btn");
+    writeBtn.innerHTML = ICON_COURIER_MESSAGE;
+    writeBtn.setAttribute("aria-label", "Написать курьеру");
     writeBtn.addEventListener("click", function () { window.location.href = "tg://user?id=" + courier.tg_id; });
 
     // "Позвонить" — обычная <a href="tel:..."> (не программная навигация),
@@ -2431,157 +2854,81 @@
       callBtn.disabled = true;
       callBtn.title = "Номер телефона не указан";
     }
-    callBtn.innerHTML = ICON_COURIER_CALL + "<span>Позвонить</span>";
+    callBtn.innerHTML = ICON_COURIER_CALL;
+    callBtn.setAttribute("aria-label", "Позвонить курьеру");
     actionsRow.appendChild(writeBtn);
     actionsRow.appendChild(callBtn);
     card.appendChild(actionsRow);
 
-    root.appendChild(card);
+    // Три включателя — компактно, в ОДНОЙ карточке (были 3 отдельные,
+    // занимали много места), каждый с (i)-пояснением, как у "Дедлайна".
+    card.appendChild(buildToggleRow(
+      "Доступ к Mini App Маршрут",
+      "Полностью включает или выключает доступ курьера к Mini App «Маршрут». При выключении курьер не может открыть приложение, но его данные не удаляются.",
+      !courier.disabled,
+      function (checkedNow) {
+        var disabled = !checkedNow;
+        return api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/disabled", { method: "POST", body: { disabled: disabled } })
+          .then(function () {
+            courier.disabled = disabled;
+            toast(disabled ? "Доступ к Mini App отключён" : "Доступ к Mini App включён");
+          })
+          .catch(function (err) {
+            toggleRevert(accessInputRef);
+            toast("Не удалось изменить: " + err.message);
+          });
+      }
+    ));
+    var accessInputRef = card.lastChild.querySelector("input");
 
-    // "Доступ к Mini App Маршрут" — полностью включает/выключает курьера
-    // (см. sheets.is_courier/set_courier_disabled), без удаления строки.
-    // Доступно ЛЮБОМУ администратору "Маршрута" (не только владельцу, в
-    // отличие от "Администратор Маршрута" ниже).
-    var accessCard = el("div", "card");
-    var accessRow = el("div", "visibility-row");
-    accessRow.appendChild(el("div", "visibility-row-label", "Доступ к Mini App Маршрут"));
-    var accessSwitchLabel = el("label", "switch");
-    var accessInput = document.createElement("input");
-    accessInput.type = "checkbox";
-    accessInput.checked = !courier.disabled;
-    var accessSlider = el("span", "switch-slider");
-    accessSwitchLabel.appendChild(accessInput);
-    accessSwitchLabel.appendChild(accessSlider);
-    accessInput.addEventListener("change", function () {
-      var disabled = !accessInput.checked;
-      accessInput.disabled = true;
-      api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/disabled", { method: "POST", body: { disabled: disabled } })
-        .then(function () {
-          courier.disabled = disabled;
-          toast(disabled ? "Доступ к Mini App отключён" : "Доступ к Mini App включён");
-        })
-        .catch(function (err) {
-          accessInput.checked = !accessInput.checked;
-          toast("Не удалось изменить: " + err.message);
-        })
-        .then(function () { accessInput.disabled = false; });
-    });
-    accessRow.appendChild(accessSwitchLabel);
-    accessCard.appendChild(accessRow);
-    root.appendChild(accessCard);
-
-    // "Показать"/"Скрыть с главного экрана" — показатель эффективности
-    // этого курьера на главном экране KPI в Профиле (см. renderKpiSection).
-    // Скрытый курьер продолжает учитываться в общем среднем — скрывается
-    // только его собственный кружок, не он сам из расчёта.
-    var kpiCard = el("div", "card");
-    var kpiRow = el("div", "visibility-row");
-    kpiRow.appendChild(el("div", "visibility-row-label", "Показывать на главном экране KPI"));
-    var switchLabel = el("label", "switch");
-    var kpiInput = document.createElement("input");
-    kpiInput.type = "checkbox";
-    kpiInput.checked = !courier.kpi_hidden;
-    var slider = el("span", "switch-slider");
-    switchLabel.appendChild(kpiInput);
-    switchLabel.appendChild(slider);
-    kpiInput.addEventListener("change", function () {
-      var hidden = !kpiInput.checked;
-      kpiInput.disabled = true;
-      api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/kpi-hidden", { method: "POST", body: { hidden: hidden } })
-        .then(function () {
-          courier.kpi_hidden = hidden;
-          toast(hidden ? "Скрыт с главного экрана KPI" : "Снова виден на главном экране KPI");
-        })
-        .catch(function (err) {
-          kpiInput.checked = !kpiInput.checked;
-          toast("Не удалось изменить: " + err.message);
-        })
-        .then(function () { kpiInput.disabled = false; });
-    });
-    kpiRow.appendChild(switchLabel);
-    kpiCard.appendChild(kpiRow);
-    root.appendChild(kpiCard);
+    card.appendChild(buildToggleRow(
+      "Показывать на главном экране KPI",
+      "Показывает или скрывает кружок эффективности этого курьера на главном экране KPI в Профиле. Скрытый курьер продолжает учитываться в общем среднем — скрывается только его собственный кружок.",
+      !courier.kpi_hidden,
+      function (checkedNow) {
+        var hidden = !checkedNow;
+        return api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/kpi-hidden", { method: "POST", body: { hidden: hidden } })
+          .then(function () {
+            courier.kpi_hidden = hidden;
+            toast(hidden ? "Скрыт с главного экрана KPI" : "Снова виден на главном экране KPI");
+          })
+          .catch(function (err) {
+            toggleRevert(kpiInputRef);
+            toast("Не удалось изменить: " + err.message);
+          });
+      }
+    ));
+    var kpiInputRef = card.lastChild.querySelector("input");
 
     // "Администратор Маршрута" — назначает/снимает ТОЛЬКО владелец бота
     // (config.OWNER_TG_ID, state.isOwner) — у остальных, даже действующих
-    // администраторов "Маршрута", карточки совсем нет, по прямой просьбе.
+    // администраторов "Маршрута", строки совсем нет, по прямой просьбе.
     if (state.isOwner) {
-      var adminCard = el("div", "card");
-      var adminRow = el("div", "visibility-row");
-      adminRow.appendChild(el("div", "visibility-row-label", "Администратор Маршрута"));
-      var adminSwitchLabel = el("label", "switch");
-      var adminInput = document.createElement("input");
-      adminInput.type = "checkbox";
-      adminInput.checked = !!courier.is_route_admin;
-      var adminSlider = el("span", "switch-slider");
-      adminSwitchLabel.appendChild(adminInput);
-      adminSwitchLabel.appendChild(adminSlider);
-      adminInput.addEventListener("change", function () {
-        var isAdmin = adminInput.checked;
-        adminInput.disabled = true;
-        api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/route-admin", { method: "POST", body: { is_admin: isAdmin } })
-          .then(function () {
-            courier.is_route_admin = isAdmin;
-            toast(isAdmin ? "Назначен администратором Маршрута" : "Снят с администратора Маршрута");
-          })
-          .catch(function (err) {
-            adminInput.checked = !adminInput.checked;
-            toast("Не удалось изменить: " + err.message);
-          })
-          .then(function () { adminInput.disabled = false; });
-      });
-      adminRow.appendChild(adminSwitchLabel);
-      adminCard.appendChild(adminRow);
-      root.appendChild(adminCard);
+      card.appendChild(buildToggleRow(
+        "Администратор Маршрута",
+        "Даёт курьеру доступ к «Центру управления» — курьерами, кассой и расходами на логистику, как у главного администратора.",
+        !!courier.is_route_admin,
+        function (checkedNow) {
+          return api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/route-admin", { method: "POST", body: { is_admin: checkedNow } })
+            .then(function () {
+              courier.is_route_admin = checkedNow;
+              toast(checkedNow ? "Назначен администратором Маршрута" : "Снят с администратора Маршрута");
+            })
+            .catch(function (err) {
+              toggleRevert(adminInputRef);
+              toast("Не удалось изменить: " + err.message);
+            });
+        }
+      ));
+      var adminInputRef = card.lastChild.querySelector("input");
     }
 
-    // "Заработок" — то, что админ начислил курьеру за конкретный день
-    // (то же поле, что и "Расходы на логистику" → "Оплата за смену", см.
-    // sheets.set_logistics_expense) — полностью независимо от расчёта по
-    // ставкам за сданные точки, по прямой просьбе.
-    var earningsCard = el("div", "card");
-    earningsCard.appendChild(el("div", "profile-section-title", "Заработок"));
-    var earningsRow = el("div", "date-picker-row");
-    var earningsDateField = el("div", "field");
-    earningsDateField.innerHTML = "<label>Дата</label>";
-    var earningsDateInput = document.createElement("input");
-    earningsDateInput.type = "date";
-    earningsDateInput.value = ruToIso(todayRuDate());
-    earningsDateField.appendChild(earningsDateInput);
-    var earningsAmountField = el("div", "field");
-    earningsAmountField.innerHTML = "<label>Сумма за день</label>";
-    var earningsAmountInput = document.createElement("input");
-    earningsAmountInput.type = "number";
-    earningsAmountInput.inputMode = "numeric";
-    earningsAmountInput.min = "0";
-    earningsAmountInput.placeholder = "0";
-    earningsAmountField.appendChild(earningsAmountInput);
-    earningsRow.appendChild(earningsDateField);
-    earningsRow.appendChild(earningsAmountField);
-    earningsCard.appendChild(earningsRow);
-    var earningsSaveBtn = el("button", "btn-ghost", "Сохранить");
-    earningsSaveBtn.addEventListener("click", function () {
-      var amount = parseInt(earningsAmountInput.value, 10) || 0;
-      earningsSaveBtn.disabled = true;
-      api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/earnings", {
-        method: "POST",
-        body: { date: isoToRu(earningsDateInput.value), amount: amount },
-      }).then(function () {
-        haptic("success");
-        toast("Заработок сохранён");
-        financeContainer.innerHTML = "";
-        renderFinanceSection(financeContainer, courier.tg_id, true);
-      }).catch(function (err) {
-        toast("Не удалось сохранить: " + err.message);
-      }).then(function () { earningsSaveBtn.disabled = false; });
-    });
-    earningsCard.appendChild(earningsSaveBtn);
-    root.appendChild(earningsCard);
+    root.appendChild(card);
 
-    var financeContainer = el("div");
-    root.appendChild(financeContainer);
-    renderFinanceSection(financeContainer, courier.tg_id, true);
+    renderCourierCashCard(root, courier);
   }
+
+  function toggleRevert(input) { input.checked = !input.checked; }
 
   // -------------------------------------------------------------------
   // Шапка экрана — своя на каждой вкладке, тот же компонент, что и в
@@ -2650,7 +2997,7 @@
     } else {
       rows.appendChild(buildProfileRow(ICON_WALLET, "Мои доходы", function () {
         openProfileSubscreen("Мои доходы", function (root) {
-          renderFinanceSection(root, null, false);
+          renderMyEarningsCarousel(root);
         });
       }));
     }
