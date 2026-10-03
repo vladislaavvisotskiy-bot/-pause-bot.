@@ -150,26 +150,34 @@ async def _retry_sheets(fn, *args, retries: int = 2, delay: float = 1.2, **kwarg
     raise last_exc
 
 
-async def _role_for(tg_id):
+async def _role_for(tg_id, is_dynamic_route_admin):
     """Возвращает (role, is_route_admin). role — что показывает раздел
     "Заказы": "admin" (управление точками/курьерами) или "courier" (меню
     "Поехали"/"Сдал"). is_route_admin — видит ли человек админский
     "Профиль" (видимость маршрута, расходы на логистику) — true и для
     основного админа бота (ADMIN_IDS), и для админов этого Mini App
-    (ROUTE_ADMIN_IDS), и остаётся true даже когда ROUTE_ADMIN_IDS-админ
+    (ROUTE_ADMIN_IDS/OWNER_TG_ID/курьеров, назначенных через "Курьеры" —
+    см. is_dynamic_route_admin), и остаётся true даже когда такой админ
     переключился в режим "Курьер" (иначе он не смог бы вернуться обратно —
     "Профиль" в этом режиме показывал бы courier-экран без переключателя).
 
-    ROUTE_ADMIN_IDS проверяем ПЕРЕД ADMIN_IDS: основной админ бота (Влад)
-    обычно одновременно и в ROUTE_ADMIN_IDS — если проверять ADMIN_IDS
-    первым, для него role всегда оказывался бы "admin" независимо от
-    сохранённого режима, и переключение в "Курьер" молча не действовало бы
-    (воспроизведено: запись в "Режим Маршрута" сохранялась, но раздел
-    "Заказы" после перезагрузки всё равно показывал админский интерфейс
-    с перетаскиванием карточек). Основному админу, который НЕ в
-    ROUTE_ADMIN_IDS, самого переключения режима не показываем (см.
+    is_dynamic_route_admin — результат sheets.is_courier_route_admin(tg_id)
+    (см. auth_middleware), вычисляется ДО вызова этой функции, а не внутри
+    неё — тот же самый результат нужен ещё раз чуть ниже для
+    can_toggle_mode, а get_couriers() всё равно кэширован, второй вызов
+    был бы лишним только по читаемости, не по нагрузке на Sheets.
+
+    ROUTE_ADMIN_IDS/OWNER_TG_ID/is_dynamic_route_admin проверяем ПЕРЕД
+    ADMIN_IDS: основной админ бота (Влад) обычно одновременно и в
+    ROUTE_ADMIN_IDS — если проверять ADMIN_IDS первым, для него role
+    всегда оказывался бы "admin" независимо от сохранённого режима, и
+    переключение в "Курьер" молча не действовало бы (воспроизведено:
+    запись в "Режим Маршрута" сохранялась, но раздел "Заказы" после
+    перезагрузки всё равно показывал админский интерфейс с
+    перетаскиванием карточек). Основному админу, который ни в одной из
+    этих трёх категорий, самого переключения режима не показываем (см.
     api_route_admin_mode_set) — у него role всегда "admin", как и раньше."""
-    if tg_id in config.ROUTE_ADMIN_IDS:
+    if tg_id in config.ROUTE_ADMIN_IDS or tg_id == config.OWNER_TG_ID or is_dynamic_route_admin:
         mode = await _retry_sheets(sheets.get_route_admin_mode, tg_id)
         return mode, True
     if tg_id in config.ADMIN_IDS:
@@ -222,16 +230,26 @@ async def auth_middleware(request: web.Request, handler):
         tg_id, tg_name = _extract_tg_user(request)
         if tg_id is None:
             return web.json_response({"error": "unauthorized"}, status=401)
-        role, is_route_admin = await _role_for(tg_id)
+        is_dynamic_route_admin = await _retry_sheets(sheets.is_courier_route_admin, tg_id)
+        role, is_route_admin = await _role_for(tg_id, is_dynamic_route_admin)
         if not role:
             return web.json_response({"error": "forbidden"}, status=403)
         request["tg_id"] = tg_id
         request["tg_name"] = tg_name
         request["role"] = role
         request["is_route_admin"] = is_route_admin
-        # Переключатель "Режим" (admin/courier) — только у админов ЭТОГО
-        # Mini App (ROUTE_ADMIN_IDS), не у основного админа бота.
-        request["can_toggle_mode"] = tg_id in config.ROUTE_ADMIN_IDS
+        # Владелец бота (config.OWNER_TG_ID) — единственный, кто может
+        # назначать/снимать курьеров-администраторов (см.
+        # api_courier_route_admin_set) — отдельно от is_route_admin, у
+        # которого таких людей может быть много.
+        request["is_owner"] = tg_id == config.OWNER_TG_ID
+        # Переключатель "Режим" (admin/courier) — админам ЭТОГО Mini App
+        # (ROUTE_ADMIN_IDS), владельцу и курьерам, назначенным
+        # администраторами через "Курьеры" — НЕ основному админу бота
+        # (ADMIN_IDS) просто по умолчанию.
+        request["can_toggle_mode"] = (
+            tg_id in config.ROUTE_ADMIN_IDS or request["is_owner"] or is_dynamic_route_admin
+        )
     return await handler(request)
 
 
@@ -250,6 +268,7 @@ async def api_me(request: web.Request):
         "route_split_view": config.ROUTE_SPLIT_VIEW,
         "is_route_admin": request["is_route_admin"],
         "can_toggle_mode": request["can_toggle_mode"],
+        "is_owner": request["is_owner"],
     })
 
 
@@ -440,6 +459,21 @@ async def api_courier_kpi_hidden_set(request: web.Request):
     tg_id = request.match_info.get("tg_id", "")
     body = await request.json()
     ok = await _retry_sheets(sheets.set_courier_kpi_hidden, tg_id, bool(body.get("hidden")))
+    if not ok:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True})
+
+
+async def api_courier_route_admin_set(request: web.Request):
+    """Назначает/снимает курьера администратором "Маршрута" (карточка
+    курьера в "Курьеры" → "Администратор Маршрута") — доступно ТОЛЬКО
+    владельцу бота (config.OWNER_TG_ID), по прямой просьбе: даже у других
+    действующих администраторов "Маршрута" этого права нет."""
+    if not request["is_owner"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    ok = await _retry_sheets(sheets.set_courier_route_admin, tg_id, bool(body.get("is_admin")))
     if not ok:
         return web.json_response({"error": "not_found"}, status=404)
     return web.json_response({"ok": True})
@@ -831,6 +865,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/couriers/manage", api_couriers_manage_list)
     app.router.add_post("/api/couriers/manage", api_couriers_manage_add)
     app.router.add_post("/api/couriers/manage/{tg_id}/kpi-hidden", api_courier_kpi_hidden_set)
+    app.router.add_post("/api/couriers/manage/{tg_id}/route-admin", api_courier_route_admin_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/earnings", api_courier_earnings_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/settle", api_courier_settle)
     app.router.add_get("/api/finance", api_courier_finance_get)

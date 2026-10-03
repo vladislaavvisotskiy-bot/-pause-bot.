@@ -2562,15 +2562,18 @@ def create_or_update_delivery_point(name: str, address: str, lat, lon):
 
 
 def get_couriers() -> list:
-    """Все записи из "Курьеры" — [{"tg_id","name","status","phone","kpi_hidden"}].
-    "status" — свободная текстовая заметка админа (см. config.COURIER_STATUS),
-    ни на что технически не влияет — доступ определяется самим наличием
-    строки (см. is_courier). "kpi_hidden" — скрыт ли показатель
-    эффективности этого курьера с главного экрана KPI (см.
-    set_courier_kpi_hidden/get_route_kpi) — сам курьер при этом
-    продолжает учитываться в общем среднем. Кэшируется на _CACHE_TTL
-    секунд — is_courier() дёргается на каждом показе главного меню бота,
-    каждый раз ходить в Sheets незачем."""
+    """Все записи из "Курьеры" — [{"tg_id","name","status","phone",
+    "kpi_hidden","is_route_admin"}]. "status" — свободная текстовая
+    заметка админа (см. config.COURIER_STATUS), ни на что технически не
+    влияет — доступ определяется самим наличием строки (см. is_courier).
+    "kpi_hidden" — скрыт ли показатель эффективности этого курьера с
+    главного экрана KPI (см. set_courier_kpi_hidden/get_route_kpi) — сам
+    курьер при этом продолжает учитываться в общем среднем.
+    "is_route_admin" — назначен ли этот курьер администратором "Маршрута"
+    (см. set_courier_route_admin/is_courier_route_admin, webapp._role_for)
+    — назначать/снимать может только config.OWNER_TG_ID. Кэшируется на
+    _CACHE_TTL секунд — is_courier() дёргается на каждом показе главного
+    меню бота, каждый раз ходить в Sheets незачем."""
     now = time.time()
     if _cache["couriers"] is not None and now - _cache["couriers_ts"] < _CACHE_TTL:
         return _cache["couriers"]
@@ -2590,6 +2593,7 @@ def get_couriers() -> list:
             "status": row[config.COURIER_STATUS - 1].strip() if len(row) >= config.COURIER_STATUS else "",
             "phone": row[config.COURIER_PHONE - 1].strip() if len(row) >= config.COURIER_PHONE else "",
             "kpi_hidden": (row[config.COURIER_KPI_HIDDEN - 1].strip().lower() == "да") if len(row) >= config.COURIER_KPI_HIDDEN else False,
+            "is_route_admin": (row[config.COURIER_IS_ROUTE_ADMIN - 1].strip().lower() == "да") if len(row) >= config.COURIER_IS_ROUTE_ADMIN else False,
         })
     _cache["couriers"] = out
     _cache["couriers_ts"] = now
@@ -2613,6 +2617,34 @@ def set_courier_kpi_hidden(tg_id: str, hidden: bool) -> bool:
             _cache["couriers"] = None
             return True
     return False
+
+
+def set_courier_route_admin(tg_id: str, is_admin: bool) -> bool:
+    """Назначает/снимает курьера администратором "Маршрута" (см.
+    config.COURIER_IS_ROUTE_ADMIN) — вызывающий код (webapp.
+    api_courier_route_admin_set) сам проверяет, что это делает
+    config.OWNER_TG_ID, эта функция прав не проверяет. Возвращает False,
+    если такого курьера нет."""
+    ws = _ws(config.SHEET_COURIERS)
+    rows = ws.get_all_values()
+    target = str(tg_id).strip()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.COURIER_DATA_START_ROW:
+            continue
+        if len(row) >= config.COURIER_TG_ID and row[config.COURIER_TG_ID - 1].strip() == target:
+            ws.update_cell(r, config.COURIER_IS_ROUTE_ADMIN, "Да" if is_admin else "")
+            _cache["couriers"] = None
+            return True
+    return False
+
+
+def is_courier_route_admin(tg_id) -> bool:
+    """True, если этот курьер назначен администратором "Маршрута" (см.
+    set_courier_route_admin) — используется в webapp._role_for наравне со
+    статическим config.ROUTE_ADMIN_IDS."""
+    target = str(tg_id)
+    return any(c["tg_id"] == target and c["is_route_admin"] for c in get_couriers())
 
 
 def add_courier(tg_id: str, name: str, phone: str = ""):

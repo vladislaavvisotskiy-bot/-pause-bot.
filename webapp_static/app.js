@@ -31,6 +31,8 @@
                           // переключении "Режима" (иначе некому было бы его переключить назад)
     canToggleMode: false, // может ли менять "Режим" ("Администратор"/"Курьер") — только у
                            // админов именно этого Mini App, не у основного админа бота
+    isOwner: false,       // config.OWNER_TG_ID — единственный, кто может назначать/снимать
+                           // курьеров-администраторов (см. renderCourierDetail)
     logisticsDateISO: null,
     starts: {},          // {courier_tg_id: "ЧЧ:ММ"} — время "Старта" на state.date, см. renderStartBadge
     cash: {},             // {точка: сумма наличных, собранных на ней за state.date}, см. buildCard
@@ -2451,6 +2453,39 @@
     kpiCard.appendChild(kpiRow);
     root.appendChild(kpiCard);
 
+    // "Администратор Маршрута" — назначает/снимает ТОЛЬКО владелец бота
+    // (config.OWNER_TG_ID, state.isOwner) — у остальных, даже действующих
+    // администраторов "Маршрута", карточки совсем нет, по прямой просьбе.
+    if (state.isOwner) {
+      var adminCard = el("div", "card");
+      var adminRow = el("div", "visibility-row");
+      adminRow.appendChild(el("div", "visibility-row-label", "Администратор Маршрута"));
+      var adminSwitchLabel = el("label", "switch");
+      var adminInput = document.createElement("input");
+      adminInput.type = "checkbox";
+      adminInput.checked = !!courier.is_route_admin;
+      var adminSlider = el("span", "switch-slider");
+      adminSwitchLabel.appendChild(adminInput);
+      adminSwitchLabel.appendChild(adminSlider);
+      adminInput.addEventListener("change", function () {
+        var isAdmin = adminInput.checked;
+        adminInput.disabled = true;
+        api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/route-admin", { method: "POST", body: { is_admin: isAdmin } })
+          .then(function () {
+            courier.is_route_admin = isAdmin;
+            toast(isAdmin ? "Назначен администратором Маршрута" : "Снят с администратора Маршрута");
+          })
+          .catch(function (err) {
+            adminInput.checked = !adminInput.checked;
+            toast("Не удалось изменить: " + err.message);
+          })
+          .then(function () { adminInput.disabled = false; });
+      });
+      adminRow.appendChild(adminSwitchLabel);
+      adminCard.appendChild(adminRow);
+      root.appendChild(adminCard);
+    }
+
     // "Заработок" — то, что админ начислил курьеру за конкретный день
     // (то же поле, что и "Расходы на логистику" → "Оплата за смену", см.
     // sheets.set_logistics_expense) — полностью независимо от расчёта по
@@ -2692,6 +2727,7 @@
       state.splitView = !!me.route_split_view;
       state.isRouteAdmin = !!me.is_route_admin;
       state.canToggleMode = !!me.can_toggle_mode;
+      state.isOwner = !!me.is_owner;
       showScreen("route");
       loadRouteDates();
       if (state.role === "admin") loadCouriers();
