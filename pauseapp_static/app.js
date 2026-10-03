@@ -3270,11 +3270,28 @@
       root.appendChild(card);
 
       // --- история долга ---
+      // Чекбоксы — только у непогашенных строк, для частичной оплаты
+      // ("отметил несколько дней — одной кнопкой Оплатить отмеченные").
+      // "Закрыть весь долг" рядом — тот же самый массовый эндпоинт
+      // (/lines/pay), просто со ВСЕМИ непогашенными row сразу, без
+      // необходимости сначала всё отмечать галочками по одной.
+      var selected = new Set();
       root.appendChild(el("h3", "ops-section-title", "История долга"));
       var linesCard = el("div", "card");
+      var unresolvedLines = data.lines.filter(function (l) { return !l.resolved; });
       if (data.lines.length) {
         data.lines.forEach(function (l, idx) {
           var row = el("div", "ops-debt-line" + (idx ? " ops-breakdown-row-sep" : "") + (l.resolved ? " ops-debt-line-resolved" : ""));
+          if (!l.resolved) {
+            var cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.className = "ops-debt-line-check";
+            cb.addEventListener("change", function () {
+              if (cb.checked) selected.add(l.row); else selected.delete(l.row);
+              updateBulkPayBtn();
+            });
+            row.appendChild(cb);
+          }
           var info = el("div", "ops-debt-line-info");
           info.innerHTML =
             '<div class="ops-breakdown-name">' + l.date + ' — ' + escapeHtml(l.display_name) + (l.qty ? ' ×' + l.qty : '') + '</div>';
@@ -3320,6 +3337,41 @@
       }
       root.appendChild(linesCard);
       root.appendChild(el("div", "ops-debtor-total", "Итого долг: " + fmtSum(data.total)));
+
+      function bulkPay(rows, confirmText) {
+        showConfirm(confirmText, "Оплатил", function () {
+          hideConfirm();
+          api("/api/ops/debtors/" + encodeURIComponent(clientId) + "/lines/pay", { method: "POST", body: { rows: rows } })
+            .then(function () { haptic("success"); load(); })
+            .catch(function (err) { toast("Не удалось сохранить: " + err.message); });
+        });
+      }
+
+      var bulkPayBtn = null;
+      function updateBulkPayBtn() {
+        if (!bulkPayBtn) return;
+        var n = selected.size;
+        bulkPayBtn.disabled = n === 0;
+        bulkPayBtn.textContent = n ? "Оплатить отмеченные (" + n + ")" : "Оплатить отмеченные";
+      }
+
+      if (unresolvedLines.length) {
+        bulkPayBtn = el("button", "btn-ghost ops-debt-bulk-btn", "Оплатить отмеченные");
+        bulkPayBtn.disabled = true;
+        bulkPayBtn.addEventListener("click", function () {
+          var rows = Array.from(selected);
+          var sum = data.lines.filter(function (l) { return rows.indexOf(l.row) !== -1; }).reduce(function (s, l) { return s + l.sum; }, 0);
+          bulkPay(rows, "Отметить оплаченными выбранные дни (" + rows.length + ") на сумму " + fmtSum(sum) + "?");
+        });
+        root.appendChild(bulkPayBtn);
+
+        var closeAllBtn = el("button", "ops-close-debt-btn", "Закрыть весь долг");
+        closeAllBtn.addEventListener("click", function () {
+          var rows = unresolvedLines.map(function (l) { return l.row; });
+          bulkPay(rows, "Точно хотите закрыть весь долг (" + fmtSum(data.total) + ") целиком?");
+        });
+        root.appendChild(closeAllBtn);
+      }
 
       // --- комментарии ---
       root.appendChild(el("h3", "ops-section-title", "Комментарии"));

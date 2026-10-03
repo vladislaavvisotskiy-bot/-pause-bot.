@@ -1260,6 +1260,30 @@ async def api_ops_debtor_line_pay(request: web.Request):
     })
 
 
+async def api_ops_debtor_lines_pay(request: web.Request):
+    """Пакетная версия api_ops_debtor_line_pay — отмечает оплаченными
+    сразу несколько дней долга (галочки + кнопка "Оплатить отмеченные",
+    либо "Закрыть весь долг" со всеми непогашенными row разом)."""
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    rows = body.get("rows")
+    if not isinstance(rows, list) or not rows or not all(isinstance(r, int) for r in rows):
+        return web.json_response({"error": "rows_required"}, status=400)
+    await _retry_sheets(sheets.mark_debt_lines_paid, rows)
+    lines = await _retry_sheets(sheets.get_debtor_lines, client_id)
+    return web.json_response({
+        "lines": [
+            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]),
+             "qty": l["qty"], "sum": l["sum"], "resolved": l["resolved"]}
+            for l in lines
+        ],
+        "total": sum(l["sum"] for l in lines if not l["resolved"]),
+        "all_resolved": bool(lines) and all(l["resolved"] for l in lines),
+    })
+
+
 async def api_ops_debtor_line_unpay(request: web.Request):
     if not request["pa_debtors"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -1380,6 +1404,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/debtors/{client_id}/reminder", api_ops_debtor_reminder_set)
     app.router.add_post("/api/ops/debtors/{client_id}/reminder/delete", api_ops_debtor_reminder_delete)
     app.router.add_post("/api/ops/debtors/{client_id}/line/pay", api_ops_debtor_line_pay)
+    app.router.add_post("/api/ops/debtors/{client_id}/lines/pay", api_ops_debtor_lines_pay)
     app.router.add_post("/api/ops/debtors/{client_id}/line/unpay", api_ops_debtor_line_unpay)
     app.router.add_post("/api/ops/debtors/{client_id}/delete-history", api_ops_debtor_delete_history)
     app.router.add_get("/api/pause-admins", api_pause_admins_list)

@@ -1118,6 +1118,19 @@ p { margin: 0; color: var(--ink-soft); }
 .ops-debt-line-resolved .ops-breakdown-name { color: var(--ink-soft); }
 .ops-debt-line-resolved .ops-debt-line-sum { color: var(--success); text-decoration: none; }
 .ops-debt-line-unpay { flex: 0 0 100%; text-align: right; }
+.ops-debt-line-check { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--ink); cursor: pointer; }
+
+.ops-debt-bulk-btn { margin-top: 14px; }
+.ops-debt-bulk-btn[disabled] { opacity: .45; }
+
+.ops-close-debt-btn {
+  display: block; width: 100%;
+  background: var(--success); color: var(--ivory);
+  border: none; border-radius: 999px;
+  padding: 13px 20px; font-weight: 700; font-size: 14px;
+  margin-top: 10px;
+}
+.ops-close-debt-btn:active { opacity: .85; }
 
 .ops-delete-history-btn {
   display: block; width: 100%;

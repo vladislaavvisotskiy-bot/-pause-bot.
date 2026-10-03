@@ -519,6 +519,16 @@ def mark_debt_line_paid(row: int):
         ws.update_cell(row, config.O_COMMENT, new)
 
 
+def mark_debt_lines_paid(rows: list):
+    """Пакетная версия mark_debt_line_paid — отмечает оплаченными сразу
+    несколько дней долга разом (галочки на карточке должника + "Закрыть
+    весь долг" в PAUSE App). Построчно, той же механикой, что и
+    одиночная версия — обычно это всего несколько строк за раз, отдельный
+    batch-путь ради этого не нужен."""
+    for row in rows:
+        mark_debt_line_paid(row)
+
+
 def unmark_debt_line_paid(row: int):
     """Отмена mark_debt_line_paid — возвращает payment (столбец K) в "В
     долг" и убирает маркер из комментария (остальной текст, если он там
