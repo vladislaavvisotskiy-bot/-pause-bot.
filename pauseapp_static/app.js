@@ -3192,6 +3192,15 @@
         root.appendChild(el("div", "empty-note", "Должников нет — приятная новость 🪴"));
         return;
       }
+      var totalDebt = data.debtors.reduce(function (sum, d) { return sum + d.sum; }, 0);
+      var totalRow = el("div", "profile-stat-row");
+      var totalTile = el("div", "profile-stat");
+      totalTile.innerHTML =
+        '<div class="profile-stat-value">' + fmtSum(totalDebt) + '</div>' +
+        '<div class="profile-stat-label">Общая сумма долгов</div>';
+      totalRow.appendChild(totalTile);
+      root.appendChild(totalRow);
+
       data.debtors.forEach(function (d) {
         var card = el("div", "card ops-debtor-row");
         card.innerHTML =
