@@ -32,6 +32,10 @@
     canToggleMode: false, // может ли менять "Режим" ("Администратор"/"Курьер") — только у
                            // админов именно этого Mini App, не у основного админа бота
     logisticsDateISO: null,
+    starts: {},          // {courier_tg_id: "ЧЧ:ММ"} — время "Старта" на state.date, см. renderStartBadge
+    kpiPeriod: "today",   // "today" | "7d" | "30d" | "custom" — период для шкалы эффективности в Профиле
+    kpiCustomFrom: null,  // ISO (YYYY-MM-DD) — для kpiPeriod "custom"
+    kpiCustomTo: null,
   };
 
   // Тёплая палитра для цветов курьеров на вкладке "Все" (см. renderMap,
@@ -774,7 +778,7 @@
       var goBtn = document.createElement("button");
       goBtn.className = "btn-primary";
       goBtn.textContent = "Поехали";
-      goBtn.addEventListener("click", function () { openLink(yandexMapsUrl(point)); });
+      goBtn.addEventListener("click", function () { openLink(yandexMapsUrl(point)); recordRouteStart(); });
       var doneBtn = document.createElement("button");
       doneBtn.className = "btn-primary success";
       doneBtn.textContent = "Сдано";
@@ -825,6 +829,7 @@
 
     document.getElementById("map").hidden = hiddenFromCourier;
     document.getElementById("add-point-btn").hidden = state.role !== "admin" || hiddenFromCourier;
+    renderStartBadge();
 
     if (hiddenFromCourier) {
       document.getElementById("cards").hidden = true;
@@ -862,6 +867,56 @@
   // Действия
   // -------------------------------------------------------------------
 
+  // "Старт" — время первого "Поехали" за день у курьера (см.
+  // sheets.record_route_start), чисто информационная метка, видна и
+  // курьеру (свой старт), и админу (старт выбранного курьера на вкладке,
+  // см. ROUTE_SPLIT_VIEW) — на вкладке "Все" показать было бы нечего
+  // (старт у каждого свой), поэтому там бейдж просто скрыт.
+  function renderStartBadge() {
+    var badge = document.getElementById("route-start-badge");
+    var relevantTgId = null;
+    if (state.role === "courier") {
+      relevantTgId = String(state.tgId);
+    } else if (state.role === "admin" && state.splitView && state.courierTab !== "all") {
+      relevantTgId = state.courierTab;
+    }
+    var time = relevantTgId ? (state.starts || {})[relevantTgId] : null;
+    if (!time) {
+      badge.hidden = true;
+      return;
+    }
+    badge.hidden = false;
+    badge.textContent = "Старт: " + time;
+  }
+
+  function _nowHHMM() {
+    var d = new Date();
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+
+  // Отправляется при каждом клике "Поехали" — сервер сам игнорирует
+  // повторные за тот же день (см. sheets.record_route_start), поэтому
+  // здесь не нужно проверять, был ли уже старт, вызываем всегда. Не
+  // блокирует открытие карты (см. buildCard: вызывается следом за
+  // openLink, не вместо него) — курьеру не нужно ждать ответа сервера,
+  // чтобы поехать.
+  function recordRouteStart() {
+    var date = state.date;
+    api("/api/route/start", { method: "POST", body: { date: date } })
+      .then(function () {
+        state.starts = state.starts || {};
+        var key = String(state.tgId);
+        if (!state.starts[key]) {
+          state.starts[key] = _nowHHMM();
+          renderStartBadge();
+        }
+      })
+      .catch(function () {
+        // Не критично — просто бейдж не обновится прямо сейчас, подтянется
+        // актуальным при следующей загрузке маршрута (см. loadRoute).
+      });
+  }
+
   function loadRoute(dateOverride) {
     var url = "/api/route" + (dateOverride ? "?date=" + encodeURIComponent(dateOverride) : "");
     return api(url).then(function (data) {
@@ -869,6 +924,7 @@
       state.points = data.points;
       state.depot = data.depot || null;
       state.visible = data.visible !== false;
+      state.starts = data.starts || {};
       render();
     }).catch(function (err) {
       toast("Не удалось загрузить маршрут: " + err.message);
@@ -1609,6 +1665,7 @@
   var ICON_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
   var ICON_WALLET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>';
   var ICON_COURIERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M2.5 19c0.8-3.6 2.8-5.4 5.5-5.4s4.7 1.8 5.5 5.4"/><circle cx="17" cy="8" r="2.4"/><path d="M14.8 13.8c0.6-0.3 1.3-0.5 2.2-0.5 2.3 0 3.9 1.5 4.5 4.4"/></svg>';
+  var ICON_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>';
   var ICON_CHEVRON_RIGHT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>';
 
   function buildProfileRow(icon, label, onClick) {
@@ -1648,7 +1705,249 @@
         loadCouriersManageScreen(sub);
       });
     }));
+    rows.appendChild(buildProfileRow(ICON_CLOCK, "Время сдачи заказов", function () {
+      wizardStep(function (body) {
+        body.appendChild(el("h2", "wizard-title", "Время сдачи заказов"));
+        var sub = el("div");
+        body.appendChild(sub);
+        loadDeadlineScreen(sub);
+      });
+    }));
     root.appendChild(rows);
+  }
+
+  // -------------------------------------------------------------------
+  // "Время сдачи заказов" (isRouteAdmin) — дедлайн для KPI доставки (см.
+  // get_route_kpi ниже). (i) рядом с заголовком — короткое пояснение,
+  // что это значит, по прямой просьбе.
+  // -------------------------------------------------------------------
+
+  var ICON_INFO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="8" r="0.6" fill="currentColor" stroke="none"/></svg>';
+
+  function loadDeadlineScreen(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/route/deadline").then(function (data) {
+      root.innerHTML = "";
+
+      var headRow = el("div", "deadline-head-row");
+      headRow.appendChild(el("div", "field-label-row", "Дедлайн"));
+      var infoBtn = el("button", "header-icon-btn deadline-info-btn", ICON_INFO);
+      infoBtn.setAttribute("aria-label", "Что это значит");
+      infoBtn.addEventListener("click", function () {
+        haptic("select");
+        toast("Время, после которого каждая минута считается опозданием и снижает показатель эффективности доставки.");
+      });
+      headRow.appendChild(infoBtn);
+      root.appendChild(headRow);
+
+      var field = el("div", "field");
+      var input = document.createElement("input");
+      input.type = "time";
+      input.value = data.deadline;
+      field.appendChild(input);
+      root.appendChild(field);
+
+      var saveBtn = el("button", "btn-primary", "Сохранить");
+      saveBtn.addEventListener("click", function () {
+        if (!input.value) { toast("Укажите время"); return; }
+        saveBtn.disabled = true;
+        api("/api/route/deadline", { method: "POST", body: { deadline: input.value } })
+          .then(function () { haptic("success"); toast("Дедлайн сохранён"); })
+          .catch(function (err) { toast("Не удалось сохранить: " + err.message); })
+          .then(function () { saveBtn.disabled = false; });
+      });
+      root.appendChild(saveBtn);
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // KPI доставки — круговая шкала эффективности (см. sheets.get_route_kpi).
+  // Геометрия кольца, по зонам:
+  //   100-95%  — кольцо целиком замкнуто (без разрыва), зелёное.
+  //   94-80%   — разрыв появляется у "12 часов" и растёт по часовой
+  //              стрелке (визуально "отсоединяется сверху и сползает
+  //              вниз"), жёлтое; к 80% разрыв — четверть кольца (90°).
+  //   79-55%   — тот же разрыв продолжает расти, но теперь СИММЕТРИЧНО в
+  //              обе стороны от своей середины ("с обеих сторон"),
+  //              оранжево-красное; к 55% разрыв — уже половина кольца (180°).
+  //   < 55%    — геометрия замирает на состоянии 55%, сплошной красный.
+  // -------------------------------------------------------------------
+
+  var KPI_COLORS = { green: "#3f7d4f", yellow: "#c9962b", orange: "#c9672b", red: "#b1442e" };
+
+  function kpiGaugeGeometry(score) {
+    if (score === null || score === undefined) {
+      return { visibleDeg: 360, rotationDeg: -90, color: "var(--line)", empty: true };
+    }
+    var gapStart, gapSpan, color;
+    if (score >= 95) {
+      gapStart = 0; gapSpan = 0; color = KPI_COLORS.green;
+    } else if (score >= 80) {
+      var t = (95 - score) / 15;
+      gapStart = 0; gapSpan = 90 * t; color = KPI_COLORS.yellow;
+    } else if (score >= 55) {
+      var t2 = (80 - score) / 25;
+      gapStart = -45 * t2; gapSpan = 90 + 90 * t2; color = KPI_COLORS.orange;
+    } else {
+      gapStart = -45; gapSpan = 180; color = KPI_COLORS.red;
+    }
+    return { visibleDeg: 360 - gapSpan, rotationDeg: -90 + gapStart + gapSpan, color: color };
+  }
+
+  var SVG_NS = "http://www.w3.org/2000/svg";
+
+  function buildKpiGauge(score, sizePx, strokeWidth, extraClass) {
+    var geo = kpiGaugeGeometry(score);
+    var r = (sizePx - strokeWidth) / 2;
+    var c = sizePx / 2;
+    var circumference = 2 * Math.PI * r;
+    var visibleLen = circumference * geo.visibleDeg / 360;
+
+    var wrap = el("div", "kpi-gauge" + (extraClass ? " " + extraClass : ""));
+    wrap.style.width = sizePx + "px";
+    wrap.style.height = sizePx + "px";
+
+    var svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("width", sizePx);
+    svg.setAttribute("height", sizePx);
+    svg.setAttribute("viewBox", "0 0 " + sizePx + " " + sizePx);
+
+    var track = document.createElementNS(SVG_NS, "circle");
+    track.setAttribute("cx", c); track.setAttribute("cy", c); track.setAttribute("r", r);
+    track.setAttribute("fill", "none");
+    track.setAttribute("stroke", "var(--line)");
+    track.setAttribute("stroke-width", strokeWidth);
+    svg.appendChild(track);
+
+    if (geo.visibleDeg > 0) {
+      var arc = document.createElementNS(SVG_NS, "circle");
+      arc.setAttribute("cx", c); arc.setAttribute("cy", c); arc.setAttribute("r", r);
+      arc.setAttribute("fill", "none");
+      arc.setAttribute("stroke", geo.color);
+      arc.setAttribute("stroke-width", strokeWidth);
+      arc.setAttribute("stroke-linecap", "round");
+      arc.setAttribute("stroke-dasharray", visibleLen + " " + (circumference - visibleLen));
+      arc.setAttribute("transform", "rotate(" + geo.rotationDeg + " " + c + " " + c + ")");
+      svg.appendChild(arc);
+    }
+    wrap.appendChild(svg);
+
+    var label = el("div", "kpi-gauge-label", score == null ? "—" : Math.round(score) + "%");
+    label.style.color = score == null ? "var(--ink-soft)" : geo.color;
+    wrap.appendChild(label);
+    return wrap;
+  }
+
+  function todayRuDate() {
+    var d = new Date();
+    return String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + "." + d.getFullYear();
+  }
+
+  function shiftRuDate(ruDate, days) {
+    var d = new Date(ruToIso(ruDate) + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return isoToRu(d.toISOString().slice(0, 10));
+  }
+
+  function kpiRangeForPeriod() {
+    var today = todayRuDate();
+    if (state.kpiPeriod === "7d") return { from: shiftRuDate(today, -6), to: today };
+    if (state.kpiPeriod === "30d") return { from: shiftRuDate(today, -29), to: today };
+    if (state.kpiPeriod === "custom" && state.kpiCustomFrom && state.kpiCustomTo) {
+      return { from: isoToRu(state.kpiCustomFrom), to: isoToRu(state.kpiCustomTo) };
+    }
+    return { from: today, to: today };
+  }
+
+  var KPI_PERIODS = [["today", "Сегодня"], ["7d", "7 дней"], ["30d", "30 дней"], ["custom", "Свой период"]];
+
+  function renderKpiSection(container) {
+    container.innerHTML = "";
+    container.appendChild(el("div", "profile-section-title", "Эффективность доставки"));
+
+    var periodRow = el("div", "feed-filters");
+    KPI_PERIODS.forEach(function (p) {
+      var chip = el("button", "filter-chip" + (state.kpiPeriod === p[0] ? " active" : ""), p[1]);
+      chip.addEventListener("click", function () {
+        haptic("select");
+        state.kpiPeriod = p[0];
+        renderKpiSection(container);
+      });
+      periodRow.appendChild(chip);
+    });
+    container.appendChild(periodRow);
+
+    if (state.kpiPeriod === "custom") {
+      var rangeRow = el("div", "date-picker-row");
+      var fromField = el("div", "field");
+      fromField.innerHTML = "<label>С</label>";
+      var fromInput = document.createElement("input");
+      fromInput.type = "date";
+      fromInput.value = state.kpiCustomFrom || ruToIso(todayRuDate());
+      fromField.appendChild(fromInput);
+      var toField = el("div", "field");
+      toField.innerHTML = "<label>По</label>";
+      var toInput = document.createElement("input");
+      toInput.type = "date";
+      toInput.value = state.kpiCustomTo || ruToIso(todayRuDate());
+      toField.appendChild(toInput);
+      rangeRow.appendChild(fromField);
+      rangeRow.appendChild(toField);
+      container.appendChild(rangeRow);
+
+      var applyBtn = el("button", "btn-ghost", "Показать");
+      applyBtn.addEventListener("click", function () {
+        state.kpiCustomFrom = fromInput.value;
+        state.kpiCustomTo = toInput.value;
+        loadKpi(body);
+      });
+      container.appendChild(applyBtn);
+    }
+
+    var body = el("div", "kpi-body");
+    body.appendChild(el("div", "skeleton-block"));
+    container.appendChild(body);
+
+    if (state.kpiPeriod !== "custom" || (state.kpiCustomFrom && state.kpiCustomTo)) {
+      loadKpi(body);
+    }
+  }
+
+  function loadKpi(body) {
+    var range = kpiRangeForPeriod();
+    api("/api/route/kpi?from=" + encodeURIComponent(range.from) + "&to=" + encodeURIComponent(range.to))
+      .then(function (data) { renderKpiBody(body, data); })
+      .catch(function (err) {
+        body.innerHTML = "";
+        body.appendChild(el("div", "empty-note", "Не удалось загрузить показатели: " + err.message));
+      });
+  }
+
+  function renderKpiBody(body, data) {
+    body.innerHTML = "";
+    var visibleCouriers = (data.couriers || []).filter(function (c) { return !c.hidden; });
+
+    var wrap = el("div", "kpi-main-wrap");
+    if (visibleCouriers.length) {
+      var miniRow = el("div", "kpi-mini-row");
+      visibleCouriers.forEach(function (c) {
+        var item = el("div", "kpi-mini-item");
+        item.appendChild(buildKpiGauge(c.score, 56, 6));
+        item.appendChild(el("div", "kpi-mini-name", escapeHtml(c.name || c.tg_id)));
+        miniRow.appendChild(item);
+      });
+      wrap.appendChild(miniRow);
+    }
+    wrap.appendChild(buildKpiGauge(data.overall, 160, 14, "kpi-gauge-main"));
+    body.appendChild(wrap);
+
+    if (data.overall == null) {
+      body.appendChild(el("div", "empty-note", "За этот период ещё нет ни одной сданной точки."));
+    }
   }
 
   // -------------------------------------------------------------------
@@ -1803,6 +2102,38 @@
     card.appendChild(actionsRow);
 
     root.appendChild(card);
+
+    // "Показать"/"Скрыть с главного экрана" — показатель эффективности
+    // этого курьера на главном экране KPI в Профиле (см. renderKpiSection).
+    // Скрытый курьер продолжает учитываться в общем среднем — скрывается
+    // только его собственный кружок, не он сам из расчёта.
+    var kpiCard = el("div", "card");
+    var kpiRow = el("div", "visibility-row");
+    kpiRow.appendChild(el("div", "visibility-row-label", "Показывать на главном экране KPI"));
+    var switchLabel = el("label", "switch");
+    var kpiInput = document.createElement("input");
+    kpiInput.type = "checkbox";
+    kpiInput.checked = !courier.kpi_hidden;
+    var slider = el("span", "switch-slider");
+    switchLabel.appendChild(kpiInput);
+    switchLabel.appendChild(slider);
+    kpiInput.addEventListener("change", function () {
+      var hidden = !kpiInput.checked;
+      kpiInput.disabled = true;
+      api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/kpi-hidden", { method: "POST", body: { hidden: hidden } })
+        .then(function () {
+          courier.kpi_hidden = hidden;
+          toast(hidden ? "Скрыт с главного экрана KPI" : "Снова виден на главном экране KPI");
+        })
+        .catch(function (err) {
+          kpiInput.checked = !kpiInput.checked;
+          toast("Не удалось изменить: " + err.message);
+        })
+        .then(function () { kpiInput.disabled = false; });
+    });
+    kpiRow.appendChild(switchLabel);
+    kpiCard.appendChild(kpiRow);
+    root.appendChild(kpiCard);
   }
 
   // -------------------------------------------------------------------
@@ -1875,6 +2206,14 @@
       }));
     }
     root.appendChild(rows);
+
+    // Шкала эффективности доставки — СРАЗУ под "Центр управления" на самом
+    // экране "Профиль" (не отдельный под-экран визарда), по прямой просьбе.
+    if (state.isRouteAdmin) {
+      var kpiSection = el("div", "kpi-section");
+      root.appendChild(kpiSection);
+      renderKpiSection(kpiSection);
+    }
   }
 
   // -------------------------------------------------------------------

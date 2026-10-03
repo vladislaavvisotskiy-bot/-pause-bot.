@@ -267,10 +267,15 @@ async def api_route_get(request: web.Request):
 
     async with _route_lock:
         route = await _retry_sheets(sheets.get_route_for_date, date_str)
+    # "Старт" (время первого "Поехали" за день, см. api_route_start) —
+    # по курьеру, не по точке, поэтому отдельным словарём, а не полем
+    # точки; видно и курьеру (свой старт), и админу (старты всех, по
+    # вкладкам курьеров), см. app.js: renderStartBadge.
+    starts = await _retry_sheets(sheets.get_route_starts, date_str)
     if role == "courier":
         tg_id = str(request["tg_id"])
         route = [p for p in route if tg_id in p["courier_tg_ids"]]
-    return web.json_response({"date": date_str, "role": role, "points": route, "depot": depot, "visible": visible})
+    return web.json_response({"date": date_str, "role": role, "points": route, "depot": depot, "visible": visible, "starts": starts})
 
 
 async def api_route_visibility_get(request: web.Request):
@@ -414,6 +419,52 @@ async def api_couriers_manage_add(request: web.Request):
     if not name:
         return web.json_response({"error": "name_required"}, status=400)
     await _retry_sheets(sheets.add_courier, tg_id, name, phone)
+    return web.json_response({"ok": True})
+
+
+async def api_courier_kpi_hidden_set(request: web.Request):
+    """"Показать"/"Скрыть с главного экрана" у конкретного курьера (см.
+    карточку курьера в "Курьеры") — скрытый курьер пропадает из мелких
+    кружков под главным показателем, но продолжает учитываться в общем
+    среднем (см. sheets.get_route_kpi)."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    ok = await _retry_sheets(sheets.set_courier_kpi_hidden, tg_id, bool(body.get("hidden")))
+    if not ok:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# KPI доставки (только isRouteAdmin) — экран "Профиль" → "Центр управления"
+# → шкала эффективности под ней, и настройка "Время сдачи заказов".
+# ---------------------------------------------------------------------------
+
+async def api_route_kpi_get(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    date_from = request.query.get("from") or _today()
+    date_to = request.query.get("to") or date_from
+    data = await _retry_sheets(sheets.get_route_kpi, date_from, date_to, retries=2)
+    return web.json_response(data)
+
+
+async def api_route_deadline_get(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    deadline = await _retry_sheets(sheets.get_delivery_deadline)
+    return web.json_response({"deadline": deadline})
+
+
+async def api_route_deadline_set(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    ok = await _retry_sheets(sheets.set_delivery_deadline, body.get("deadline") or "")
+    if not ok:
+        return web.json_response({"error": "bad_time"}, status=400)
     return web.json_response({"ok": True})
 
 
@@ -573,6 +624,18 @@ async def api_route_complete(request: web.Request):
     return web.json_response({"ok": True})
 
 
+async def api_route_start(request: web.Request):
+    """"Поехали" — время первого за день нажатия (см. sheets.record_route_start).
+    Только курьер: это его личная метка старта, у админа кнопки "Поехали"
+    в интерфейсе нет вовсе (см. app.js: buildCard)."""
+    if request["role"] != "courier":
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or _today()
+    await _retry_sheets(sheets.record_route_start, date_str, request["tg_id"])
+    return web.json_response({"ok": True})
+
+
 async def api_earnings(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
@@ -645,6 +708,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/couriers", api_couriers)
     app.router.add_get("/api/couriers/manage", api_couriers_manage_list)
     app.router.add_post("/api/couriers/manage", api_couriers_manage_add)
+    app.router.add_post("/api/couriers/manage/{tg_id}/kpi-hidden", api_courier_kpi_hidden_set)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_post("/api/route/reorder", api_route_reorder)
     app.router.add_post("/api/route/pin", api_route_pin)
@@ -653,6 +717,10 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/route/comment", api_route_comment)
     app.router.add_post("/api/route/assign", api_route_assign)
     app.router.add_post("/api/route/complete", api_route_complete)
+    app.router.add_post("/api/route/start", api_route_start)
+    app.router.add_get("/api/route/kpi", api_route_kpi_get)
+    app.router.add_get("/api/route/deadline", api_route_deadline_get)
+    app.router.add_post("/api/route/deadline", api_route_deadline_set)
     app.router.add_get("/api/earnings", api_earnings)
     app.router.add_get("/api/earnings/month", api_earnings_month)
     return app

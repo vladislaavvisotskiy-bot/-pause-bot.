@@ -4,6 +4,7 @@
 через эти функции — если завтра поменяются столбцы, править нужно только тут.
 """
 import json
+import re
 import time
 import datetime as dt
 from typing import Optional
@@ -2561,12 +2562,15 @@ def create_or_update_delivery_point(name: str, address: str, lat, lon):
 
 
 def get_couriers() -> list:
-    """Все записи из "Курьеры" — [{"tg_id","name","status","phone"}]. "status" —
-    свободная текстовая заметка админа (см. config.COURIER_STATUS), ни на
-    что технически не влияет — доступ определяется самим наличием строки
-    (см. is_courier). Кэшируется на _CACHE_TTL секунд — is_courier()
-    дёргается на каждом показе главного меню бота, каждый раз ходить в
-    Sheets незачем."""
+    """Все записи из "Курьеры" — [{"tg_id","name","status","phone","kpi_hidden"}].
+    "status" — свободная текстовая заметка админа (см. config.COURIER_STATUS),
+    ни на что технически не влияет — доступ определяется самим наличием
+    строки (см. is_courier). "kpi_hidden" — скрыт ли показатель
+    эффективности этого курьера с главного экрана KPI (см.
+    set_courier_kpi_hidden/get_route_kpi) — сам курьер при этом
+    продолжает учитываться в общем среднем. Кэшируется на _CACHE_TTL
+    секунд — is_courier() дёргается на каждом показе главного меню бота,
+    каждый раз ходить в Sheets незачем."""
     now = time.time()
     if _cache["couriers"] is not None and now - _cache["couriers_ts"] < _CACHE_TTL:
         return _cache["couriers"]
@@ -2585,10 +2589,30 @@ def get_couriers() -> list:
             "name": row[config.COURIER_NAME - 1].strip() if len(row) >= config.COURIER_NAME else "",
             "status": row[config.COURIER_STATUS - 1].strip() if len(row) >= config.COURIER_STATUS else "",
             "phone": row[config.COURIER_PHONE - 1].strip() if len(row) >= config.COURIER_PHONE else "",
+            "kpi_hidden": (row[config.COURIER_KPI_HIDDEN - 1].strip().lower() == "да") if len(row) >= config.COURIER_KPI_HIDDEN else False,
         })
     _cache["couriers"] = out
     _cache["couriers_ts"] = now
     return out
+
+
+def set_courier_kpi_hidden(tg_id: str, hidden: bool) -> bool:
+    """Скрывает/возвращает показатель эффективности курьера на главном
+    экране KPI (см. "Центр управления" → "Курьеры" → карточка курьера →
+    "Показать"/"Скрыть с главного экрана"). Возвращает False, если такого
+    курьера нет (не создаёт строку — курьер должен уже существовать)."""
+    ws = _ws(config.SHEET_COURIERS)
+    rows = ws.get_all_values()
+    target = str(tg_id).strip()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.COURIER_DATA_START_ROW:
+            continue
+        if len(row) >= config.COURIER_TG_ID and row[config.COURIER_TG_ID - 1].strip() == target:
+            ws.update_cell(r, config.COURIER_KPI_HIDDEN, "Да" if hidden else "")
+            _cache["couriers"] = None
+            return True
+    return False
 
 
 def add_courier(tg_id: str, name: str, phone: str = ""):
@@ -3009,6 +3033,171 @@ def get_route_visibility_status() -> list:
     visibility = _route_visibility_map()
     dates = list(reversed(get_route_available_dates()))
     return [{"date": d, "visible": visibility.get(d, False)} for d in dates]
+
+
+# ---------------------------------------------------------------------------
+# KPI доставки — "Старт" (информационная метка) + эффективность относительно
+# дедлайна сдачи заказов (см. "Профиль" → "Центр управления" → KPI).
+# ---------------------------------------------------------------------------
+
+_TIME_RE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
+
+
+def get_delivery_deadline() -> str:
+    """"ЧЧ:ММ" — дедлайн сдачи заказов, после которого считается опоздание
+    (см. config.ROUTE_KPI_PENALTY_PER_MINUTE). Хранится в "Справочники"
+    (см. config.REF_DELIVERY_DEADLINE_CELL); пустая/битая ячейка —
+    действует config.ROUTE_DEFAULT_DELIVERY_DEADLINE."""
+    ws = _ws(config.SHEET_REFERENCE)
+    raw = (ws.acell(config.REF_DELIVERY_DEADLINE_CELL).value or "").strip()
+    return raw if _TIME_RE.match(raw) else config.ROUTE_DEFAULT_DELIVERY_DEADLINE
+
+
+def set_delivery_deadline(time_str: str) -> bool:
+    """Возвращает False, если time_str не похож на "ЧЧ:ММ" — ничего не
+    пишет в этом случае."""
+    time_str = (time_str or "").strip()
+    if not _TIME_RE.match(time_str):
+        return False
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_DELIVERY_DEADLINE_CELL, time_str)
+    return True
+
+
+def record_route_start(date_str: str, courier_tg_id):
+    """Время первого за день нажатия "Поехали" у курьера — пишет СТРОГО
+    один раз: повторные нажатия (на других точках того же дня) уже
+    записанное время не трогают. Чисто информационная метка (видна и
+    курьеру, и админу, как и время "Сдал") — в расчёт эффективности (см.
+    get_route_kpi) не входит."""
+    ws = _ws_or_create(config.SHEET_ROUTE_START, ["date", "courier_tg_id", "time"])
+    rows = ws.get_all_values()
+    target = str(courier_tg_id)
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.RS_DATA_START_ROW:
+            continue
+        if len(row) < config.RS_COURIER_TG_ID:
+            continue
+        if row[config.RS_DATE - 1].strip() == date_str and row[config.RS_COURIER_TG_ID - 1].strip() == target:
+            return
+    ws.append_row([date_str, target, _now().strftime("%H:%M")], value_input_option="RAW")
+
+
+def get_route_starts(date_str: str) -> dict:
+    """{courier_tg_id: "ЧЧ:ММ"} — время старта каждого курьера на дату
+    (см. record_route_start)."""
+    ws = _ws_or_create(config.SHEET_ROUTE_START, ["date", "courier_tg_id", "time"])
+    rows = ws.get_all_values()
+    out = {}
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.RS_DATA_START_ROW:
+            continue
+        if len(row) < config.RS_TIME:
+            continue
+        if row[config.RS_DATE - 1].strip() != date_str:
+            continue
+        out[row[config.RS_COURIER_TG_ID - 1].strip()] = row[config.RS_TIME - 1].strip()
+    return out
+
+
+def compute_kpi_score(delivered_at: str, deadline: str) -> float:
+    """Процент эффективности ОДНОЙ сданной точки/дня относительно
+    дедлайна (оба — "ЧЧ:ММ", в пределах одного дня) — 100%, если сдано до
+    дедлайна включительно; иначе минус config.ROUTE_KPI_PENALTY_PER_MINUTE
+    за каждую ПОЛНУЮ минуту опоздания (секунды не учитываются — время
+    "Сдано" и так хранится без них, см. mark_route_delivered), не ниже 0.
+    Например: дедлайн 12:30, сдано в 12:45 (15 минут опоздания) —
+    15 × 0.6 = 9%, то есть 91%."""
+    try:
+        delivered = dt.datetime.strptime(delivered_at, "%H:%M")
+        dl = dt.datetime.strptime(deadline, "%H:%M")
+    except ValueError:
+        return 100.0
+    late_minutes = (delivered - dl).total_seconds() / 60
+    if late_minutes <= 0:
+        return 100.0
+    return max(0.0, 100.0 - late_minutes * config.ROUTE_KPI_PENALTY_PER_MINUTE)
+
+
+def get_route_kpi(date_from: str, date_to: str) -> dict:
+    """KPI доставки за период [date_from, date_to] (оба "ДД.ММ.ГГГГ",
+    включительно) — один проход по "Маршрут":
+
+    1. Для каждого (курьер, дата) в диапазоне берём время ПОСЛЕДНЕЙ
+       сданной им в этот день точки (точка, назначенная нескольким
+       курьерам сразу, засчитывается каждому — та же логика, что у
+       get_courier_earnings) и считаем её % через compute_kpi_score.
+    2. У каждого курьера — среднее по всем дням периода, где у него была
+       хоть одна сдача (дни без сдач не портят и не улучшают среднее).
+    3. Общий показатель — среднее ПО КУРЬЕРАМ (не по дням): каждый
+       курьер, у которого есть хоть один день с данными, даёт ровно одно
+       значение в общее среднее, скрытые из интерфейса (kpi_hidden)
+       курьеры в нём тоже участвуют — по прямой просьбе.
+
+    Возвращает {"deadline", "overall", "couriers": [{"tg_id","name",
+    "score","hidden","days_count"}, ...]} — couriers отсортирован по
+    убыванию score, без данных — в конце."""
+    deadline = get_delivery_deadline()
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+
+    try:
+        d1 = dt.datetime.strptime(date_from, "%d.%m.%Y").date()
+        d2 = dt.datetime.strptime(date_to, "%d.%m.%Y").date()
+    except ValueError:
+        d1 = d2 = None
+
+    last_delivered = {}  # (courier_tg_id, date_str) -> "ЧЧ:ММ" последней сдачи
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_DELIVERED_AT:
+            continue
+        if row[config.ROUTE_STATUS - 1].strip() != config.ROUTE_STATUS_DELIVERED:
+            continue
+        date_str = row[config.ROUTE_DATE - 1].strip()
+        try:
+            d = dt.datetime.strptime(date_str, "%d.%m.%Y").date()
+        except ValueError:
+            continue
+        if d1 and not (d1 <= d <= d2):
+            continue
+        delivered_at = row[config.ROUTE_DELIVERED_AT - 1].strip()
+        if not delivered_at:
+            continue
+        for cid in _parse_courier_ids(row[config.ROUTE_COURIER_TG_ID - 1]):
+            key = (cid, date_str)
+            cur = last_delivered.get(key)
+            if cur is None or delivered_at > cur:
+                last_delivered[key] = delivered_at
+
+    scores_by_courier = {}  # courier_tg_id -> {date_str: score}
+    for (cid, date_str), delivered_at in last_delivered.items():
+        score = compute_kpi_score(delivered_at, deadline)
+        scores_by_courier.setdefault(cid, {})[date_str] = score
+
+    out_couriers = []
+    period_scores = []
+    for c in get_couriers():
+        day_scores = scores_by_courier.get(c["tg_id"], {})
+        score = round(sum(day_scores.values()) / len(day_scores), 1) if day_scores else None
+        out_couriers.append({
+            "tg_id": c["tg_id"],
+            "name": c["name"],
+            "hidden": c["kpi_hidden"],
+            "score": score,
+            "days_count": len(day_scores),
+        })
+        if score is not None:
+            period_scores.append(score)
+
+    overall = round(sum(period_scores) / len(period_scores), 1) if period_scores else None
+    out_couriers.sort(key=lambda c: (c["score"] is None, -(c["score"] or 0)))
+
+    return {"deadline": deadline, "overall": overall, "couriers": out_couriers}
 
 
 def reorder_route(date_str: str, order_map: dict):

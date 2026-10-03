@@ -357,6 +357,45 @@ p { margin: 0; color: var(--ink-soft); }
 .ops-contact-btn-primary { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
 
 /* ------------------------------------------------------------------ */
+/* "Время сдачи заказов" — дедлайн для KPI (см. loadDeadlineScreen)    */
+/* ------------------------------------------------------------------ */
+
+.deadline-head-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.field-label-row { font-size: 12px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.deadline-info-btn { width: 30px; height: 30px; color: var(--ink-soft); }
+
+/* ------------------------------------------------------------------ */
+/* KPI доставки — круговая шкала эффективности (см. app.js:             */
+/* renderKpiSection/buildKpiGauge) — экран "Профиль", под "Центр        */
+/* управления", и мелкие кружки по каждому курьеру.                    */
+/* ------------------------------------------------------------------ */
+
+.kpi-section { margin-top: 26px; }
+.kpi-body { margin-top: 4px; }
+.kpi-main-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 8px 0 4px; }
+
+.kpi-gauge { position: relative; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.kpi-gauge svg { transform: none; }
+.kpi-gauge-label {
+  position: absolute;
+  font-weight: 700;
+  font-size: 15px;
+}
+.kpi-gauge-main .kpi-gauge-label { font-size: 32px; }
+
+.kpi-mini-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; width: 100%; }
+.kpi-mini-item { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 0 0 auto; }
+.kpi-mini-name {
+  font-size: 11px;
+  color: var(--ink-soft);
+  max-width: 64px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
 /* Профиль — аватар (фото из Telegram или инициалы), имя, роль          */
 /* ------------------------------------------------------------------ */
 
@@ -608,6 +647,18 @@ p { margin: 0; color: var(--ink-soft); }
   padding: calc(var(--safe-top) + 56px) 18px calc(30px + var(--safe-bottom));
 }
 .wizard-title { margin-bottom: 16px; }
+
+/* "Старт" — время первого "Поехали" за день (см. app.js: renderStartBadge) */
+.route-start-badge {
+  display: inline-block;
+  background: var(--ink-soft-bg);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
 
 /* ------------------------------------------------------------------ */
 /* Карта маршрута                                                      */
