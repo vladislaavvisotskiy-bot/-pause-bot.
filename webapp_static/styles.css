@@ -323,6 +323,22 @@ p { margin: 0; color: var(--ink-soft); }
 .ops-breakdown-row-sep { border-top: 1px solid var(--line); }
 .ops-breakdown-name { font-size: 14.5px; font-weight: 600; color: var(--ink); min-width: 0; }
 
+/* "Админ"/"Курьер" рядом с именем в списке "Курьеры" — тот же приём, что
+   и у "Сдано" на карточке точки (card-status-tag.done): мягкая заливка
+   + текст того же цвета, просто отдельный класс, т.к. означает другое. */
+.courier-role-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: var(--ink-soft-bg);
+  color: var(--ink-soft);
+  vertical-align: middle;
+}
+.courier-role-badge.admin { background: var(--success-soft); color: var(--success); }
+
 .ops-card-head { display: flex; align-items: center; gap: 14px; }
 .ops-card-avatar {
   flex: 0 0 auto;

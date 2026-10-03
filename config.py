@@ -426,6 +426,12 @@ COURIER_KPI_HIDDEN = 5  # E
 # "Курьер") — назначается/снимается ТОЛЬКО владельцем (config.OWNER_TG_ID),
 # см. sheets.set_courier_route_admin/is_courier_route_admin.
 COURIER_IS_ROUTE_ADMIN = 6  # F
+# "Да" — у курьера ПОЛНОСТЬЮ отключён доступ к Mini App "Маршрут" (и к
+# кнопке в меню бота) — строка при этом остаётся в "Курьеры" (не удалена),
+# просто временно выключена. Включать/выключать может ЛЮБОЙ администратор
+# "Маршрута" (не только владелец) — см. sheets.set_courier_disabled,
+# is_courier/is_courier_route_admin (оба учитывают этот флаг).
+COURIER_DISABLED = 7  # G
 
 SHEET_ROUTE = "Маршрут"
 ROUTE_HEADER_ROW = 1

@@ -2563,17 +2563,20 @@ def create_or_update_delivery_point(name: str, address: str, lat, lon):
 
 def get_couriers() -> list:
     """Все записи из "Курьеры" — [{"tg_id","name","status","phone",
-    "kpi_hidden","is_route_admin"}]. "status" — свободная текстовая
-    заметка админа (см. config.COURIER_STATUS), ни на что технически не
-    влияет — доступ определяется самим наличием строки (см. is_courier).
-    "kpi_hidden" — скрыт ли показатель эффективности этого курьера с
-    главного экрана KPI (см. set_courier_kpi_hidden/get_route_kpi) — сам
-    курьер при этом продолжает учитываться в общем среднем.
-    "is_route_admin" — назначен ли этот курьер администратором "Маршрута"
-    (см. set_courier_route_admin/is_courier_route_admin, webapp._role_for)
-    — назначать/снимать может только config.OWNER_TG_ID. Кэшируется на
-    _CACHE_TTL секунд — is_courier() дёргается на каждом показе главного
-    меню бота, каждый раз ходить в Sheets незачем."""
+    "kpi_hidden","is_route_admin","disabled"}]. "status" — свободная
+    текстовая заметка админа (см. config.COURIER_STATUS), ни на что
+    технически не влияет. "kpi_hidden" — скрыт ли показатель
+    эффективности этого курьера с главного экрана KPI (см.
+    set_courier_kpi_hidden/get_route_kpi) — сам курьер при этом
+    продолжает учитываться в общем среднем. "is_route_admin" — назначен
+    ли этот курьер администратором "Маршрута" (см.
+    set_courier_route_admin/is_courier_route_admin, webapp._role_for) —
+    назначать/снимать может только config.OWNER_TG_ID. "disabled" —
+    полностью ли отключён доступ к Mini App (см. set_courier_disabled,
+    is_courier) — включать/выключать может любой администратор
+    "Маршрута". Кэшируется на _CACHE_TTL секунд — is_courier() дёргается
+    на каждом показе главного меню бота, каждый раз ходить в Sheets
+    незачем."""
     now = time.time()
     if _cache["couriers"] is not None and now - _cache["couriers_ts"] < _CACHE_TTL:
         return _cache["couriers"]
@@ -2594,6 +2597,7 @@ def get_couriers() -> list:
             "phone": row[config.COURIER_PHONE - 1].strip() if len(row) >= config.COURIER_PHONE else "",
             "kpi_hidden": (row[config.COURIER_KPI_HIDDEN - 1].strip().lower() == "да") if len(row) >= config.COURIER_KPI_HIDDEN else False,
             "is_route_admin": (row[config.COURIER_IS_ROUTE_ADMIN - 1].strip().lower() == "да") if len(row) >= config.COURIER_IS_ROUTE_ADMIN else False,
+            "disabled": (row[config.COURIER_DISABLED - 1].strip().lower() == "да") if len(row) >= config.COURIER_DISABLED else False,
         })
     _cache["couriers"] = out
     _cache["couriers_ts"] = now
@@ -2641,10 +2645,33 @@ def set_courier_route_admin(tg_id: str, is_admin: bool) -> bool:
 
 def is_courier_route_admin(tg_id) -> bool:
     """True, если этот курьер назначен администратором "Маршрута" (см.
-    set_courier_route_admin) — используется в webapp._role_for наравне со
-    статическим config.ROUTE_ADMIN_IDS."""
+    set_courier_route_admin) И не отключён (см. set_courier_disabled) —
+    используется в webapp._role_for наравне со статическим
+    config.ROUTE_ADMIN_IDS. Отключённый курьер-администратор теряет
+    права администратора вместе с обычным доступом — "доступ исчезает
+    вообще", без исключения для админских прав."""
     target = str(tg_id)
-    return any(c["tg_id"] == target and c["is_route_admin"] for c in get_couriers())
+    return any(c["tg_id"] == target and c["is_route_admin"] and not c["disabled"] for c in get_couriers())
+
+
+def set_courier_disabled(tg_id: str, disabled: bool) -> bool:
+    """Полностью включает/выключает доступ курьера к Mini App "Маршрут"
+    (и кнопке в меню бота, см. is_courier) — строка в "Курьеры" остаётся
+    (курьер не удалён, просто временно отключён). Доступно ЛЮБОМУ
+    администратору "Маршрута", не только владельцу (в отличие от
+    set_courier_route_admin). Возвращает False, если такого курьера нет."""
+    ws = _ws(config.SHEET_COURIERS)
+    rows = ws.get_all_values()
+    target = str(tg_id).strip()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.COURIER_DATA_START_ROW:
+            continue
+        if len(row) >= config.COURIER_TG_ID and row[config.COURIER_TG_ID - 1].strip() == target:
+            ws.update_cell(r, config.COURIER_DISABLED, "Да" if disabled else "")
+            _cache["couriers"] = None
+            return True
+    return False
 
 
 def add_courier(tg_id: str, name: str, phone: str = ""):
@@ -2678,14 +2705,16 @@ def add_courier(tg_id: str, name: str, phone: str = ""):
 
 
 def is_courier(tg_id) -> bool:
-    """Доступ к Mini App/меню курьера — просто по факту наличия строки с
-    этим Telegram ID в "Курьеры", без проверки текста в "Статус" (раньше
-    сверялись с точным текстом "Активен" — ненадёжно: опечатка или другой
-    регистр в ячейке молча оставляли курьера без доступа без понятной
-    причины). Убрать курьера — значит удалить его строку целиком, а не
-    поменять текст статуса."""
+    """Доступ к Mini App/меню курьера — по факту наличия строки с этим
+    Telegram ID в "Курьеры" И отсутствию отметки "отключён" (см.
+    config.COURIER_DISABLED/set_courier_disabled) — без проверки текста в
+    "Статус" (раньше сверялись с точным текстом "Активен" — ненадёжно:
+    опечатка или другой регистр в ячейке молча оставляли курьера без
+    доступа без понятной причины). Убрать курьера НАВСЕГДА — значит
+    удалить его строку целиком; временно — отключить через
+    set_courier_disabled, не трогая строку."""
     target = str(tg_id)
-    return any(c["tg_id"] == target for c in get_couriers())
+    return any(c["tg_id"] == target and not c["disabled"] for c in get_couriers())
 
 
 def get_route_people(date_str: str) -> dict:

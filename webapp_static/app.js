@@ -2317,8 +2317,16 @@
     function render(couriers) {
       root.innerHTML = "";
 
-      // --- добавить курьера ---
+      // --- добавить курьера — кнопка всегда сверху, форма скрыта, пока
+      // по ней не нажали (раньше поля ввода были видны постоянно, даже
+      // когда ничего не добавляют — по прямой просьбе спрятать за
+      // кнопкой). btn-primary (сплошной), чтобы цветом явно отличаться
+      // от списка курьеров ниже (простые строки, без заливки).
+      var addBtn = el("button", "btn-primary", "+ Добавить курьера");
+      root.appendChild(addBtn);
+
       var addBox = el("div", "ops-input-box ops-input-box-comment");
+      addBox.hidden = true;
       var addRow = el("div", "ops-select-row");
       var idField = el("div", "field");
       idField.innerHTML = "<label>Telegram ID</label>";
@@ -2345,19 +2353,24 @@
       phoneField.appendChild(phoneInput);
       addBox.appendChild(phoneField);
 
-      var addBtn = el("button", "btn-ghost", "Добавить курьера");
-      addBtn.addEventListener("click", function () {
+      var saveBtn = el("button", "btn-ghost", "Сохранить");
+      saveBtn.addEventListener("click", function () {
         var tgId = idInput.value.trim();
         var name = nameInput.value.trim();
         if (!tgId || !/^-?\d+$/.test(tgId)) { toast("Введите Telegram ID числом"); return; }
         if (!name) { toast("Введите имя курьера"); return; }
-        addBtn.disabled = true;
+        saveBtn.disabled = true;
         api("/api/couriers/manage", { method: "POST", body: { tg_id: tgId, name: name, phone: phoneInput.value.trim() } })
           .then(function () { haptic("success"); toast("Курьер добавлен"); load(); })
-          .catch(function (err) { addBtn.disabled = false; toast("Не удалось добавить: " + err.message); });
+          .catch(function (err) { saveBtn.disabled = false; toast("Не удалось добавить: " + err.message); });
       });
-      addBox.appendChild(addBtn);
+      addBox.appendChild(saveBtn);
       root.appendChild(addBox);
+
+      addBtn.addEventListener("click", function () {
+        addBox.hidden = !addBox.hidden;
+        if (!addBox.hidden) idInput.focus();
+      });
 
       // --- уже добавлены ---
       root.appendChild(el("h3", "ops-section-title", "Уже добавлены"));
@@ -2368,7 +2381,11 @@
       var card = el("div", "card");
       couriers.forEach(function (c, idx) {
         var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
-        row.innerHTML = '<div class="ops-breakdown-name">' + escapeHtml(c.name || c.tg_id) + "</div>";
+        var nameDiv = el("div", "ops-breakdown-name");
+        nameDiv.appendChild(document.createTextNode(c.name || c.tg_id));
+        var roleBadge = el("span", "courier-role-badge" + (c.effective_admin ? " admin" : ""), c.effective_admin ? "Админ" : "Курьер");
+        nameDiv.appendChild(roleBadge);
+        row.appendChild(nameDiv);
         row.addEventListener("click", function () {
           haptic("select");
           wizardStep(function (body) {
@@ -2420,6 +2437,38 @@
     card.appendChild(actionsRow);
 
     root.appendChild(card);
+
+    // "Доступ к Mini App Маршрут" — полностью включает/выключает курьера
+    // (см. sheets.is_courier/set_courier_disabled), без удаления строки.
+    // Доступно ЛЮБОМУ администратору "Маршрута" (не только владельцу, в
+    // отличие от "Администратор Маршрута" ниже).
+    var accessCard = el("div", "card");
+    var accessRow = el("div", "visibility-row");
+    accessRow.appendChild(el("div", "visibility-row-label", "Доступ к Mini App Маршрут"));
+    var accessSwitchLabel = el("label", "switch");
+    var accessInput = document.createElement("input");
+    accessInput.type = "checkbox";
+    accessInput.checked = !courier.disabled;
+    var accessSlider = el("span", "switch-slider");
+    accessSwitchLabel.appendChild(accessInput);
+    accessSwitchLabel.appendChild(accessSlider);
+    accessInput.addEventListener("change", function () {
+      var disabled = !accessInput.checked;
+      accessInput.disabled = true;
+      api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/disabled", { method: "POST", body: { disabled: disabled } })
+        .then(function () {
+          courier.disabled = disabled;
+          toast(disabled ? "Доступ к Mini App отключён" : "Доступ к Mini App включён");
+        })
+        .catch(function (err) {
+          accessInput.checked = !accessInput.checked;
+          toast("Не удалось изменить: " + err.message);
+        })
+        .then(function () { accessInput.disabled = false; });
+    });
+    accessRow.appendChild(accessSwitchLabel);
+    accessCard.appendChild(accessRow);
+    root.appendChild(accessCard);
 
     // "Показать"/"Скрыть с главного экрана" — показатель эффективности
     // этого курьера на главном экране KPI в Профиле (см. renderKpiSection).

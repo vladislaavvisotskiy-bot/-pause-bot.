@@ -427,11 +427,39 @@ async def api_logistics_set(request: web.Request):
 # остальной "Центр управления").
 # ---------------------------------------------------------------------------
 
+def _courier_tg_id_int(tg_id):
+    try:
+        return int(tg_id)
+    except (TypeError, ValueError):
+        return None
+
+
 async def api_couriers_manage_list(request: web.Request):
+    """Список курьеров для экрана "Курьеры" — с двумя добавленными
+    полями, которых нет в sheets.get_couriers() (сырой флаг столбца
+    "Курьеры"): "is_owner" (config.OWNER_TG_ID) и "effective_admin" (его
+    же показывает бейдж "Админ"/"Курьер" в списке, см. app.js — владелец,
+    ИЛИ is_route_admin ИЗ ТАБЛИЦЫ (назначен владельцем), ИЛИ статическое
+    членство в config.ROUTE_ADMIN_IDS, которое таблица не отражает).
+    Список отсортирован: владелец → администраторы → обычные курьеры,
+    внутри группы — по имени, по прямой просьбе ("Главный админ (меня)
+    до Админов, а потом курьеры")."""
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
     couriers = await _retry_sheets(sheets.get_couriers)
-    return web.json_response({"couriers": couriers})
+    enriched = []
+    for c in couriers:
+        tg_id_int = _courier_tg_id_int(c["tg_id"])
+        is_owner = tg_id_int is not None and tg_id_int == config.OWNER_TG_ID
+        effective_admin = (
+            is_owner or c["is_route_admin"] or (tg_id_int is not None and tg_id_int in config.ROUTE_ADMIN_IDS)
+        )
+        enriched.append(dict(c, is_owner=is_owner, effective_admin=effective_admin))
+    enriched.sort(key=lambda c: (
+        0 if c["is_owner"] else 1 if c["effective_admin"] else 2,
+        (c["name"] or c["tg_id"]).lower(),
+    ))
+    return web.json_response({"couriers": enriched})
 
 
 async def api_couriers_manage_add(request: web.Request):
@@ -474,6 +502,21 @@ async def api_courier_route_admin_set(request: web.Request):
     tg_id = request.match_info.get("tg_id", "")
     body = await request.json()
     ok = await _retry_sheets(sheets.set_courier_route_admin, tg_id, bool(body.get("is_admin")))
+    if not ok:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True})
+
+
+async def api_courier_disabled_set(request: web.Request):
+    """Включает/выключает доступ курьера к Mini App "Маршрут" целиком
+    (карточка курьера в "Курьеры" → "Доступ к Mini App Маршрут") —
+    доступно ЛЮБОМУ администратору "Маршрута" (is_route_admin), не
+    только владельцу, по прямой просьбе."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    ok = await _retry_sheets(sheets.set_courier_disabled, tg_id, bool(body.get("disabled")))
     if not ok:
         return web.json_response({"error": "not_found"}, status=404)
     return web.json_response({"ok": True})
@@ -866,6 +909,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/couriers/manage", api_couriers_manage_add)
     app.router.add_post("/api/couriers/manage/{tg_id}/kpi-hidden", api_courier_kpi_hidden_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/route-admin", api_courier_route_admin_set)
+    app.router.add_post("/api/couriers/manage/{tg_id}/disabled", api_courier_disabled_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/earnings", api_courier_earnings_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/settle", api_courier_settle)
     app.router.add_get("/api/finance", api_courier_finance_get)
