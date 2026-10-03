@@ -2,87 +2,72 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Маршрут PAUSE</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/miniapp/static/styles.css?v=__STATIC_VERSION__">
 </head>
 <body>
 
 <div id="app">
 
-  <header id="header">
-    <div class="header-titles">
-      <div class="brand">PAUSE</div>
-      <h1 id="header-title">Маршрут</h1>
-    </div>
-    <button id="avatar-btn" class="avatar-btn" aria-label="Меню">👤</button>
-  </header>
+  <main id="content">
 
-  <div id="nav-drawer-backdrop" class="drawer-backdrop"></div>
-  <div id="nav-drawer" class="nav-drawer">
-    <button class="nav-drawer-item" data-screen="profile">👤 Профиль</button>
-    <button class="nav-drawer-item" data-screen="orders">📦 Заказы</button>
-  </div>
+    <!-- ==================== МАРШРУТ ==================== -->
+    <section id="screen-route" class="screen">
+      <div id="route-header"></div>
+      <div id="route-date-picker" class="date-pills"></div>
+      <div id="courier-tabs" class="date-pills" hidden></div>
 
-  <div id="route-screen" class="screen">
-    <div id="route-date-picker" class="date-pills"></div>
-    <div id="courier-tabs" class="date-pills" hidden></div>
+      <div id="map"></div>
 
-    <div id="map"></div>
-
-    <div id="empty-state" class="empty-state" hidden>
-      <p id="empty-state-text">На сегодня точек с заказами пока нет 🌿</p>
-      <button id="retry-btn" class="primary-btn" hidden>🔄 Повторить</button>
-    </div>
-
-    <div id="cards"></div>
-
-    <button id="add-point-btn" class="primary-btn" hidden>+ Добавить точку</button>
-  </div>
-
-  <div id="admin-profile-screen" class="screen" hidden>
-    <div id="mode-switch-block" hidden>
-      <div class="section-title">Режим</div>
-      <p class="section-hint">«Администратор» — обычное управление точками и курьерами в разделе «Заказы». «Курьер» — в «Заказы» открывается ваше личное меню точек, как у курьера.</p>
-      <div id="mode-switch" class="mode-switch">
-        <button type="button" class="mode-switch-btn" data-mode="admin">Администратор</button>
-        <button type="button" class="mode-switch-btn" data-mode="courier">Курьер</button>
+      <div id="empty-state" class="empty-state" hidden>
+        <p id="empty-state-text">На сегодня точек с заказами пока нет 🌿</p>
+        <button id="retry-btn" class="btn-ghost" hidden>Повторить</button>
       </div>
-    </div>
 
-    <div class="section-title">Видимость маршрута для курьера</div>
-    <p class="section-hint">Пока выключено для даты — курьер видит «маршрут готовится» вместо карты и точек. Включите, когда список готов — курьеру придёт уведомление.</p>
-    <div id="visibility-list"></div>
+      <div id="cards"></div>
 
-    <div class="section-title">Расходы</div>
-    <button id="logistics-btn" class="ghost-btn logistics-btn">💰 Расходы на логистику</button>
-  </div>
+      <button id="add-point-btn" class="btn-primary" hidden>+ Добавить точку</button>
+    </section>
 
-  <div id="earnings-screen" class="screen" hidden>
-    <div class="earnings-card">
-      <div class="earnings-label">Сегодня</div>
-      <div id="earnings-today" class="earnings-value">—</div>
-    </div>
+    <!-- ==================== ПРОФИЛЬ ==================== -->
+    <section id="screen-profile" class="screen" hidden>
+      <div id="profile-header"></div>
+      <div id="profile-root"><div class="skeleton-block"></div></div>
+    </section>
 
-    <div class="date-picker-row">
-      <button id="earnings-prev-day" class="icon-btn">‹</button>
-      <input id="earnings-date" type="date">
-      <button id="earnings-next-day" class="icon-btn">›</button>
-    </div>
-    <div class="earnings-card">
-      <div class="earnings-label" id="earnings-day-label">За выбранный день</div>
-      <div id="earnings-day" class="earnings-value">—</div>
-    </div>
+  </main>
 
-    <div class="earnings-card">
-      <div class="earnings-label" id="earnings-month-label">За месяц</div>
-      <div id="earnings-month" class="earnings-value">—</div>
+  <nav id="bottom-nav">
+    <button class="nav-item active" data-screen="route" aria-label="Маршрут">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="6" cy="6.5" r="2.3"/><circle cx="18" cy="17.5" r="2.3"/><path d="M6 8.8V13a4 4 0 0 0 4 4h4"/></svg>
+      <span>Маршрут</span>
+    </button>
+    <button class="nav-item" data-screen="profile" aria-label="Профиль">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.8 4-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>
+      <span>Профиль</span>
+    </button>
+  </nav>
+
+  <!-- Полноэкранный визард — подразделы Профиля (Мои доходы / Центр
+       управления / Видимость маршрутов / Расходы на логистику), тот же
+       каркас, что и в PAUSE App. -->
+  <div id="wizard" class="wizard" hidden>
+    <div class="wizard-head">
+      <button id="wizard-back" class="wizard-back" aria-label="Назад">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <div id="wizard-steps" class="wizard-steps"></div>
+      <button id="wizard-close" class="wizard-close" aria-label="Закрыть">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
+    <div id="wizard-body" class="wizard-body"></div>
   </div>
 
   <div id="toast" class="toast" hidden></div>
@@ -91,7 +76,7 @@
     <div class="modal-sheet">
       <div class="modal-title">Добавить точку</div>
       <div id="add-point-list" class="modal-list"></div>
-      <button id="add-point-cancel" class="ghost-btn">Отмена</button>
+      <button id="add-point-cancel" class="btn-ghost">Отмена</button>
     </div>
   </div>
 
@@ -99,31 +84,7 @@
     <div class="modal-sheet">
       <div class="modal-title">Назначить курьеров</div>
       <div id="courier-picker-list" class="modal-list"></div>
-      <button id="courier-picker-cancel" class="ghost-btn">Готово</button>
-    </div>
-  </div>
-
-  <div id="logistics-modal" class="modal" hidden>
-    <div class="modal-sheet logistics-sheet">
-      <div class="modal-title">Расходы на логистику</div>
-
-      <div class="date-picker-row">
-        <button id="logistics-prev-day" class="icon-btn">‹</button>
-        <input id="logistics-date" type="date">
-        <button id="logistics-next-day" class="icon-btn">›</button>
-      </div>
-
-      <div class="section-title">Оплата за смену</div>
-      <div id="logistics-couriers-list" class="modal-list"></div>
-
-      <div class="section-title">Доставка через сервисы (Яндекс, Uklon и др.)</div>
-      <div class="logistics-field-row">
-        <input id="logistics-delivery-expense" type="number" inputmode="numeric" placeholder="0" min="0">
-        <span class="logistics-field-suffix">сум</span>
-      </div>
-
-      <button id="logistics-save" class="primary-btn">Сохранить</button>
-      <button id="logistics-close" class="ghost-btn">Закрыть</button>
+      <button id="courier-picker-cancel" class="btn-ghost">Готово</button>
     </div>
   </div>
 
@@ -132,8 +93,8 @@
       <div class="modal-title" id="confirm-modal-title">Подтвердите действие</div>
       <p id="confirm-modal-text" class="modal-text"></p>
       <div class="modal-actions">
-        <button id="confirm-modal-yes" class="primary-btn"></button>
-        <button id="confirm-modal-no" class="ghost-btn">Отмена</button>
+        <button id="confirm-modal-yes" class="btn-primary"></button>
+        <button id="confirm-modal-no" class="btn-ghost">Отмена</button>
       </div>
     </div>
   </div>

@@ -10,7 +10,7 @@
   var state = {
     role: "",
     tgId: null,
-    screen: "orders",   // "orders" | "profile" — какой раздел сейчас показан (см. showScreen)
+    screen: "route",   // "route" | "profile" — какой раздел сейчас показан (см. showScreen)
     points: [],
     date: null,        // DD.MM.YYYY — сейчас выбранная в переключателе дата
     activeDate: null,   // DD.MM.YYYY — "сегодня" по активному меню, для подписи в переключателе
@@ -21,12 +21,11 @@
     map: null,
     markers: [],
     polyline: null,
-    earningsDateISO: null,
     couriers: [],       // [{tg_id, name, status}] — только для админа, см. loadCouriers
     splitView: false,   // флаг ROUTE_SPLIT_VIEW с сервера (см. /api/me) — пробное разделение
                          // курьеров на экране "Маршрут"; при false всё как было раньше
     courierTab: "all",  // "all" | tg_id курьера — какая вкладка сейчас активна (только админ)
-    isRouteAdmin: false, // видит ли "Профиль" как у админа (видимость, режим, логистика) —
+    isRouteAdmin: false, // видит ли "Профиль" как у админа (центр управления) —
                           // true и для основного админа бота, и для админов Mini App
                           // "Маршрут" (см. config.ROUTE_ADMIN_IDS), не меняется при
                           // переключении "Режима" (иначе некому было бы его переключить назад)
@@ -136,6 +135,58 @@
 
   function fmtSum(n) {
     return (n || 0).toLocaleString("ru-RU") + " сум";
+  }
+
+  // el()/escapeHtml()/haptic() — та же тройка маленьких хелперов, что и в
+  // PAUSE App (pauseapp_static/app.js), намеренно продублирована здесь:
+  // у двух Mini App нет общего JS-модуля, см. уже существующее дублирование
+  // SET_DISPLAY_NAMES ниже.
+  function el(tag, className, html) {
+    var e = document.createElement(tag);
+    if (className) e.className = className;
+    if (html !== undefined) e.innerHTML = html;
+    return e;
+  }
+
+  function escapeHtml(s) {
+    var d = document.createElement("div");
+    d.textContent = s == null ? "" : String(s);
+    return d.innerHTML;
+  }
+
+  function haptic(kind) {
+    if (!tg || !tg.HapticFeedback) return;
+    try {
+      if (kind === "select") tg.HapticFeedback.selectionChanged();
+      else if (kind === "success") tg.HapticFeedback.notificationOccurred("success");
+      else if (kind === "error") tg.HapticFeedback.notificationOccurred("error");
+      else tg.HapticFeedback.impactOccurred("light");
+    } catch (e) {}
+  }
+
+  function initials(name) {
+    var parts = (name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  // Фото и имя — прямо из Telegram WebApp initData (как в PAUSE App, см.
+  // pauseapp_static/app.js: tgPhotoUrl/tgUsername) — серверу для этого
+  // ничего отдельно спрашивать не нужно, имя/роль на права не влияют.
+  function tgPhotoUrl() {
+    try {
+      var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      return u && u.photo_url ? u.photo_url : null;
+    } catch (e) { return null; }
+  }
+
+  function tgDisplayName() {
+    try {
+      var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      if (!u) return "";
+      return [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || "";
+    } catch (e) { return ""; }
   }
 
   // Клиентские названия сетов — только для отображения в Mini App (то же
@@ -404,9 +455,6 @@
     if (placedLatLngs.length > 1) {
       // Тонкая приглушённая пунктирная линия — просто ощущение
       // направления пути, а не акцент карты (акцент — сами точки).
-      // Цвет — то же значение, что --ink-soft в styles.css (Leaflet не
-      // умеет читать CSS-переменные напрямую из JS) — карта снова
-      // светлая, тёмно-коричневый на ней хорошо читается.
       state.polyline = L.polyline(placedLatLngs, {
         color: "#6b5c48", weight: 2, opacity: 0.55, dashArray: "1 8", lineCap: "round",
       }).addTo(state.map);
@@ -448,9 +496,11 @@
     return null;
   }
 
+  var ICON_CHEVRON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M6 9l6 6 6-6"/></svg>';
+
   function statusTag(point, isActive) {
     if (point.status === "Сдано") {
-      return '<span class="card-status-tag done">✅ Сдано ' + point.delivered_at + '</span>';
+      return '<span class="card-status-tag done">Сдано ' + point.delivered_at + '</span>';
     }
     if (isActive && state.role === "courier") {
       return '<span class="card-status-tag active">Следующая</span>';
@@ -519,7 +569,7 @@
 
     var chevron = document.createElement("div");
     chevron.className = "card-chevron";
-    chevron.textContent = "⌄";
+    chevron.innerHTML = ICON_CHEVRON_DOWN;
     head.appendChild(chevron);
 
     if (state.role === "admin") {
@@ -553,8 +603,8 @@
     // или назначить точку только одному).
     if (state.role === "admin") {
       var courierBtn = document.createElement("button");
-      courierBtn.className = "ghost-btn route-courier-btn";
-      courierBtn.textContent = "🚴 " + (courierNamesFor(point.courier_tg_ids) || "Курьер не назначен");
+      courierBtn.className = "route-courier-btn";
+      courierBtn.textContent = courierNamesFor(point.courier_tg_ids) || "Курьер не назначен";
       courierBtn.addEventListener("click", function (e) {
         e.stopPropagation();
         openCourierPicker(point);
@@ -562,15 +612,15 @@
       body.appendChild(courierBtn);
     }
 
-    // "📌 Закрепить" — только админ. Закрепление касается ТОЛЬКО позиции
+    // "Закрепить" — только админ. Закрепление касается ТОЛЬКО позиции
     // карточки (запрет перетаскивания + автодобавление новых точек её не
     // сдвигает, см. sync_daily_route/add_route_point — они и так всегда
     // дописывают в конец, не трогая существующие строки) — все остальные
     // действия с точкой работают как обычно вне зависимости от этого флага.
     if (state.role === "admin") {
       var pinBtn = document.createElement("button");
-      pinBtn.className = "ghost-btn route-pin-btn";
-      pinBtn.textContent = point.pinned ? "📌 Открепить" : "📌 Закрепить";
+      pinBtn.className = "route-pin-btn";
+      pinBtn.textContent = point.pinned ? "Открепить" : "Закрепить";
       pinBtn.addEventListener("click", function (e) {
         e.stopPropagation();
         setRoutePinned(point.point, !point.pinned);
@@ -582,7 +632,7 @@
     // конкретным человеком (пример: "заберёт Тимур, звоните ему"). После
     // сохранения поле блокируется от случайной правки (показывает
     // сохранённый текст, не редактируется) — кнопка "Сохранить" меняется
-    // на "✏️ Изменить", по которой поле снова становится редактируемым;
+    // на "Изменить", по которой поле снова становится редактируемым;
     // цикл Сохранить→Изменить→Сохранить повторяется одинаково каждый раз.
     // Курьер видит текст отдельным заметным блоком, без редактирования.
     if (state.role === "admin") {
@@ -590,21 +640,21 @@
       commentWrap.className = "route-comment-edit";
       var commentLabel = document.createElement("div");
       commentLabel.className = "route-comment-label";
-      commentLabel.textContent = "💬 Комментарий для курьера";
+      commentLabel.textContent = "Комментарий для курьера";
       var commentInput = document.createElement("textarea");
       commentInput.className = "route-comment-input";
       commentInput.rows = 2;
       commentInput.value = point.courier_comment || "";
       commentInput.addEventListener("click", function (e) { e.stopPropagation(); });
       var commentBtn = document.createElement("button");
-      commentBtn.className = "ghost-btn route-comment-save";
+      commentBtn.className = "btn-text route-comment-save";
 
       var commentLocked = !!(point.courier_comment && point.courier_comment.trim());
       var setCommentLocked = function (locked) {
         commentLocked = locked;
         commentInput.disabled = locked;
         commentInput.classList.toggle("locked", locked);
-        commentBtn.textContent = locked ? "✏️ Изменить" : "Сохранить";
+        commentBtn.textContent = locked ? "Изменить" : "Сохранить";
       };
       setCommentLocked(commentLocked);
 
@@ -626,7 +676,7 @@
     } else if (point.courier_comment) {
       var commentBlock = document.createElement("div");
       commentBlock.className = "route-comment-block";
-      commentBlock.textContent = "💬 " + point.courier_comment;
+      commentBlock.textContent = point.courier_comment;
       body.appendChild(commentBlock);
     }
 
@@ -705,12 +755,12 @@
       var actions = document.createElement("div");
       actions.className = "card-actions";
       var goBtn = document.createElement("button");
-      goBtn.className = "primary-btn";
-      goBtn.textContent = "🚀 Поехали";
+      goBtn.className = "btn-primary";
+      goBtn.textContent = "Поехали";
       goBtn.addEventListener("click", function () { openLink(yandexMapsUrl(point)); });
       var doneBtn = document.createElement("button");
-      doneBtn.className = "primary-btn secondary";
-      doneBtn.textContent = "✅ Сдано";
+      doneBtn.className = "btn-primary success";
+      doneBtn.textContent = "Сдано";
       doneBtn.addEventListener("click", function () { completePoint(point.point); });
       actions.appendChild(goBtn);
       actions.appendChild(doneBtn);
@@ -733,8 +783,8 @@
     if (state.role === "admin" && window.Sortable && !container._sortable) {
       container._sortable = new Sortable(container, {
         handle: ".drag-handle",
-        // Закреплённую карточку саму нельзя взять и потащить (см. "📌
-        // Закрепить" на карточке) — filter не даёт Sortable начать
+        // Закреплённую карточку саму нельзя взять и потащить (см.
+        // "Закрепить" на карточке) — filter не даёт Sortable начать
         // перетаскивание при клике на элемент с этим классом.
         filter: ".pinned",
         preventOnFilter: true,
@@ -749,10 +799,11 @@
     // "Повторить" от прошлой неудачной попытки больше не актуальна.
     document.getElementById("retry-btn").hidden = true;
 
-    // Пока админ не включил видимость этой даты (см. "Профиль" -> список
-    // дат) — курьер вместо карты/карточек видит только это сообщение.
-    // Админ этим не ограничен — он должен видеть маршрут всегда, чтобы
-    // как раз его и подготовить перед тем, как включить видимость.
+    // Пока админ не включил видимость этой даты (см. "Профиль" → "Центр
+    // управления" → "Видимость маршрутов") — курьер вместо карты/карточек
+    // видит только это сообщение. Админ этим не ограничен — он должен
+    // видеть маршрут всегда, чтобы как раз его и подготовить перед тем,
+    // как включить видимость.
     var hiddenFromCourier = state.role === "courier" && !state.visible;
 
     document.getElementById("map").hidden = hiddenFromCourier;
@@ -1016,7 +1067,7 @@
     var date = state.date;
     api("/api/route/complete", { method: "POST", body: { date: date, point: point } })
       .then(function () {
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        haptic("success");
         return loadRoute(date);
       })
       .catch(function (err) { toast("Не удалось отметить: " + err.message); });
@@ -1165,69 +1216,44 @@
   }
 
   // -------------------------------------------------------------------
-  // Заработок (только курьер)
+  // "Мои доходы" (курьер, не являющийся админом Mini App) — заглушка на
+  // будущее, по прямой просьбе: полноценного расчёта заработка пока нет,
+  // раздел только обозначен.
   // -------------------------------------------------------------------
 
-  function loadEarningsToday() {
-    return api("/api/earnings").then(function (data) {
-      state.earningsDateISO = ruToIso(data.date);
-      document.getElementById("earnings-today").textContent = fmtSum(data.total);
-      document.getElementById("earnings-date").value = state.earningsDateISO;
-      loadEarningsForDate(state.earningsDateISO);
-    }).catch(function (err) { toast(err.message); });
-  }
+  var ICON_WALLET_BIG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="56" height="56"><rect x="2.5" y="6" width="19" height="13.5" rx="3"/><path d="M2.5 10.5h19"/><circle cx="16" cy="14.5" r="1.2" fill="currentColor" stroke="none"/></svg>';
 
-  function loadEarningsForDate(iso) {
-    var ru = isoToRu(iso);
-    document.getElementById("earnings-day-label").textContent = "За " + ru;
-    api("/api/earnings?date=" + encodeURIComponent(ru)).then(function (data) {
-      document.getElementById("earnings-day").textContent = fmtSum(data.total);
-    }).catch(function (err) { toast(err.message); });
-
-    var parts = iso.split("-");
-    var year = parseInt(parts[0], 10), month = parseInt(parts[1], 10);
-    var monthNames = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
-    document.getElementById("earnings-month-label").textContent = "За " + monthNames[month - 1] + " " + year;
-    api("/api/earnings/month?year=" + year + "&month=" + month).then(function (data) {
-      document.getElementById("earnings-month").textContent = fmtSum(data.total);
-    }).catch(function (err) { toast(err.message); });
-  }
-
-  function shiftEarningsDate(days) {
-    var d = new Date(state.earningsDateISO + "T00:00:00");
-    d.setDate(d.getDate() + days);
-    var iso = d.toISOString().slice(0, 10);
-    state.earningsDateISO = iso;
-    document.getElementById("earnings-date").value = iso;
-    loadEarningsForDate(iso);
+  function renderEarningsStub(root) {
+    root.innerHTML = "";
+    var wrap = el("div", "earnings-stub");
+    wrap.innerHTML =
+      ICON_WALLET_BIG +
+      '<div class="earnings-stub-title">Раздел в разработке</div>' +
+      '<div class="earnings-stub-text">Скоро здесь появится ваш заработок — за день, за месяц, по сменам.</div>';
+    root.appendChild(wrap);
   }
 
   // -------------------------------------------------------------------
-  // Видимость маршрута для курьера, по датам (только админ, экран "Профиль")
+  // Видимость маршрута для курьера, по датам (только isRouteAdmin,
+  // экран "Профиль" → "Центр управления" → "Видимость маршрутов")
   // -------------------------------------------------------------------
 
-  function renderVisibilityList(dates) {
-    var container = document.getElementById("visibility-list");
-    container.innerHTML = "";
+  function renderVisibilityList(root, dates) {
+    root.innerHTML = "";
     if (!dates.length) {
-      container.innerHTML = "<div class=\"modal-list-empty\">Пока нет доступных дат</div>";
+      root.appendChild(el("div", "modal-list-empty", "Пока нет доступных дат"));
       return;
     }
+    var card = el("div", "card");
     dates.forEach(function (d) {
-      var row = document.createElement("div");
-      row.className = "visibility-row";
+      var row = el("div", "visibility-row");
+      var label = el("div", "visibility-row-label", escapeHtml(dateLabel(d.date) + (d.date === state.activeDate ? " · сегодня" : "")));
 
-      var label = document.createElement("div");
-      label.className = "visibility-row-label";
-      label.textContent = dateLabel(d.date) + (d.date === state.activeDate ? " · сегодня" : "");
-
-      var switchLabel = document.createElement("label");
-      switchLabel.className = "switch";
+      var switchLabel = el("label", "switch");
       var input = document.createElement("input");
       input.type = "checkbox";
       input.checked = d.visible;
-      var slider = document.createElement("span");
-      slider.className = "switch-slider";
+      var slider = el("span", "switch-slider");
       switchLabel.appendChild(input);
       switchLabel.appendChild(slider);
 
@@ -1237,15 +1263,19 @@
 
       row.appendChild(label);
       row.appendChild(switchLabel);
-      container.appendChild(row);
+      card.appendChild(row);
     });
+    root.appendChild(card);
   }
 
-  function loadVisibilityList() {
-    return api("/api/route/visibility").then(function (data) {
-      renderVisibilityList(data.dates);
+  function loadVisibilityScreen(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/route/visibility").then(function (data) {
+      renderVisibilityList(root, data.dates);
     }).catch(function (err) {
-      toast("Не удалось загрузить список дат: " + err.message);
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить список дат: " + err.message));
     });
   }
 
@@ -1275,19 +1305,6 @@
   // (см. config.ROUTE_ADMIN_IDS, state.canToggleMode), экран "Профиль"
   // -------------------------------------------------------------------
 
-  function initModeSwitch() {
-    var block = document.getElementById("mode-switch-block");
-    block.hidden = !state.canToggleMode;
-    if (!state.canToggleMode) return;
-    Array.prototype.forEach.call(document.querySelectorAll(".mode-switch-btn"), function (btn) {
-      btn.classList.toggle("active", btn.dataset.mode === state.role);
-      btn.onclick = function () {
-        if (btn.dataset.mode === state.role || btn.disabled) return;
-        setRouteAdminMode(btn.dataset.mode);
-      };
-    });
-  }
-
   function setRouteAdminMode(mode) {
     Array.prototype.forEach.call(document.querySelectorAll(".mode-switch-btn"), function (btn) { btn.disabled = true; });
     api("/api/route_admin/mode", { method: "POST", body: { mode: mode } })
@@ -1305,138 +1322,330 @@
   }
 
   // -------------------------------------------------------------------
-  // Расходы на логистику (только is_route_admin, экран "Профиль")
+  // Расходы на логистику (только isRouteAdmin, экран "Профиль" → "Центр
+  // управления" → "Расходы на логистику")
   // -------------------------------------------------------------------
 
-  function openLogisticsModal() {
-    document.getElementById("logistics-modal").hidden = false;
+  function renderLogisticsScreen(root) {
+    root.innerHTML = "";
     if (!state.logisticsDateISO) {
       state.logisticsDateISO = new Date().toISOString().slice(0, 10);
     }
-    document.getElementById("logistics-date").value = state.logisticsDateISO;
-    loadLogisticsForDate(state.logisticsDateISO);
-  }
 
-  function closeLogisticsModal() {
-    document.getElementById("logistics-modal").hidden = true;
-  }
+    var dateRow = el("div", "date-picker-row");
+    var prevBtn = el("button", "icon-btn", "‹");
+    var dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.value = state.logisticsDateISO;
+    var nextBtn = el("button", "icon-btn", "›");
+    dateRow.appendChild(prevBtn);
+    dateRow.appendChild(dateInput);
+    dateRow.appendChild(nextBtn);
+    root.appendChild(dateRow);
 
-  function renderLogisticsCouriers(couriers) {
-    var container = document.getElementById("logistics-couriers-list");
-    container.innerHTML = "";
-    if (!couriers.length) {
-      container.innerHTML = "<div class=\"modal-list-empty\">Нет действующих курьеров</div>";
-      return;
+    root.appendChild(el("div", "profile-section-title", "Оплата за смену"));
+    var couriersCard = el("div", "card");
+    var couriersList = el("div");
+    couriersCard.appendChild(couriersList);
+    root.appendChild(couriersCard);
+
+    root.appendChild(el("div", "profile-section-title", "Доставка через сервисы (Яндекс, Uklon и др.)"));
+    var expenseCard = el("div", "card");
+    var expenseRow = el("div", "logistics-field-row");
+    var expenseInput = document.createElement("input");
+    expenseInput.type = "number";
+    expenseInput.inputMode = "numeric";
+    expenseInput.min = "0";
+    expenseInput.placeholder = "0";
+    expenseRow.appendChild(expenseInput);
+    expenseRow.appendChild(el("span", "logistics-field-suffix", "сум"));
+    expenseCard.appendChild(expenseRow);
+    root.appendChild(expenseCard);
+
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    root.appendChild(saveBtn);
+
+    function renderCouriersList(couriers) {
+      couriersList.innerHTML = "";
+      if (!couriers.length) {
+        couriersList.appendChild(el("div", "modal-list-empty", "Нет действующих курьеров"));
+        return;
+      }
+      couriers.forEach(function (c) {
+        var row = el("div", "logistics-field-row logistics-courier-row");
+        row.appendChild(el("div", "logistics-courier-name", escapeHtml(c.name || c.tg_id)));
+        var input = document.createElement("input");
+        input.type = "number";
+        input.inputMode = "numeric";
+        input.min = "0";
+        input.placeholder = "0";
+        input.value = c.shift_pay ? c.shift_pay : "";
+        input.dataset.tgId = c.tg_id;
+        input.dataset.name = c.name || "";
+        row.appendChild(input);
+        row.appendChild(el("span", "logistics-field-suffix", "сум"));
+        couriersList.appendChild(row);
+      });
     }
-    couriers.forEach(function (c) {
-      var row = document.createElement("div");
-      row.className = "logistics-field-row logistics-courier-row";
-      var label = document.createElement("div");
-      label.className = "logistics-courier-name";
-      label.textContent = c.name || c.tg_id;
-      var input = document.createElement("input");
-      input.type = "number";
-      input.inputMode = "numeric";
-      input.min = "0";
-      input.placeholder = "0";
-      input.value = c.shift_pay ? c.shift_pay : "";
-      input.dataset.tgId = c.tg_id;
-      input.dataset.name = c.name || "";
-      row.appendChild(label);
-      row.appendChild(input);
-      var suffix = document.createElement("span");
-      suffix.className = "logistics-field-suffix";
-      suffix.textContent = "сум";
-      row.appendChild(suffix);
-      container.appendChild(row);
+
+    function loadForDate(iso) {
+      couriersList.innerHTML = "";
+      couriersList.appendChild(el("div", "modal-list-empty", "Загрузка…"));
+      api("/api/logistics?date=" + encodeURIComponent(isoToRu(iso))).then(function (data) {
+        renderCouriersList(data.couriers);
+        expenseInput.value = data.delivery_expense ? data.delivery_expense : "";
+      }).catch(function (err) {
+        couriersList.innerHTML = "";
+        toast("Не удалось загрузить расходы: " + err.message);
+      });
+    }
+
+    function shiftDate(days) {
+      var d = new Date(state.logisticsDateISO + "T00:00:00");
+      d.setDate(d.getDate() + days);
+      var iso = d.toISOString().slice(0, 10);
+      state.logisticsDateISO = iso;
+      dateInput.value = iso;
+      loadForDate(iso);
+    }
+
+    dateInput.addEventListener("change", function (e) {
+      state.logisticsDateISO = e.target.value;
+      loadForDate(e.target.value);
     });
+    prevBtn.addEventListener("click", function () { shiftDate(-1); });
+    nextBtn.addEventListener("click", function () { shiftDate(1); });
+
+    saveBtn.addEventListener("click", function () {
+      saveBtn.disabled = true;
+      var shifts = [];
+      Array.prototype.forEach.call(couriersList.querySelectorAll("input[type=number]"), function (input) {
+        shifts.push({ tg_id: input.dataset.tgId, name: input.dataset.name, amount: parseInt(input.value, 10) || 0 });
+      });
+      var deliveryExpense = parseInt(expenseInput.value, 10) || 0;
+      api("/api/logistics", {
+        method: "POST",
+        body: { date: isoToRu(state.logisticsDateISO), shifts: shifts, delivery_expense: deliveryExpense },
+      }).then(function () {
+        toast("Расходы сохранены");
+      }).catch(function (err) {
+        toast("Не удалось сохранить: " + err.message);
+      }).then(function () {
+        saveBtn.disabled = false;
+      });
+    });
+
+    loadForDate(state.logisticsDateISO);
   }
 
-  function loadLogisticsForDate(iso) {
-    var container = document.getElementById("logistics-couriers-list");
-    container.innerHTML = "<div class=\"modal-list-empty\">Загрузка…</div>";
-    api("/api/logistics?date=" + encodeURIComponent(isoToRu(iso))).then(function (data) {
-      renderLogisticsCouriers(data.couriers);
-      document.getElementById("logistics-delivery-expense").value = data.delivery_expense ? data.delivery_expense : "";
-    }).catch(function (err) {
-      container.innerHTML = "";
-      toast("Не удалось загрузить расходы: " + err.message);
-    });
+  // -------------------------------------------------------------------
+  // Полноэкранный визард — подразделы Профиля (тот же каркас, что и в
+  // PAUSE App, см. pauseapp_static/app.js: openWizard/wizardStep)
+  // -------------------------------------------------------------------
+
+  var wizardStack = [];
+
+  function openWizard(renderFirstStep) {
+    wizardStack = [];
+    document.getElementById("wizard").hidden = false;
+    if (tg && tg.BackButton) {
+      tg.BackButton.show();
+      tg.BackButton.onClick(wizardBackOrClose);
+    }
+    wizardStep(renderFirstStep);
   }
 
-  function shiftLogisticsDate(days) {
-    var d = new Date(state.logisticsDateISO + "T00:00:00");
-    d.setDate(d.getDate() + days);
-    var iso = d.toISOString().slice(0, 10);
-    state.logisticsDateISO = iso;
-    document.getElementById("logistics-date").value = iso;
-    loadLogisticsForDate(iso);
+  function closeWizard() {
+    document.getElementById("wizard").hidden = true;
+    wizardStack = [];
+    document.getElementById("wizard-body").innerHTML = "";
+    if (tg && tg.BackButton) {
+      tg.BackButton.offClick(wizardBackOrClose);
+      tg.BackButton.hide();
+    }
   }
 
-  function saveLogistics() {
-    var saveBtn = document.getElementById("logistics-save");
-    saveBtn.disabled = true;
-    var shifts = [];
-    Array.prototype.forEach.call(document.querySelectorAll("#logistics-couriers-list input[type=number]"), function (input) {
-      shifts.push({ tg_id: input.dataset.tgId, name: input.dataset.name, amount: parseInt(input.value, 10) || 0 });
-    });
-    var deliveryExpense = parseInt(document.getElementById("logistics-delivery-expense").value, 10) || 0;
-    api("/api/logistics", {
-      method: "POST",
-      body: { date: isoToRu(state.logisticsDateISO), shifts: shifts, delivery_expense: deliveryExpense },
-    }).then(function () {
-      toast("Расходы сохранены");
-    }).catch(function (err) {
-      toast("Не удалось сохранить: " + err.message);
-    }).then(function () {
-      saveBtn.disabled = false;
+  function wizardBackOrClose() {
+    if (wizardStack.length > 1) wizardBack();
+    else closeWizard();
+  }
+
+  function wizardStep(renderFn) {
+    wizardStack.push(renderFn);
+    renderWizardCurrent();
+  }
+
+  function wizardBack() {
+    if (wizardStack.length > 1) {
+      wizardStack.pop();
+      renderWizardCurrent();
+    }
+  }
+
+  function renderWizardCurrent() {
+    var body = document.getElementById("wizard-body");
+    body.innerHTML = "";
+    body.scrollTop = 0;
+    document.getElementById("wizard-back").style.visibility = wizardStack.length > 1 ? "visible" : "hidden";
+    var fn = wizardStack[wizardStack.length - 1];
+    fn(body);
+  }
+
+  // Открывает содержимое одного раздела профиля в визарде — loaderFn
+  // получает контейнер, куда дорисовывает сам раздел.
+  function openProfileSubscreen(title, loaderFn) {
+    openWizard(function (body) {
+      body.appendChild(el("h2", "wizard-title", title));
+      var sub = el("div");
+      body.appendChild(sub);
+      loaderFn(sub);
     });
   }
 
   // -------------------------------------------------------------------
-  // Инициализация / навигация
+  // "Центр управления" (isRouteAdmin) — хаб с "Видимость маршрутов" и
+  // "Расходы на логистику", тот же паттерн хаба, что "Операционный
+  // центр" в PAUSE App (отдельные шаги того же wizard-стека).
   // -------------------------------------------------------------------
 
-  // Разделы: "orders" ("Заказы") — маршрут, общий для обеих ролей.
-  // "profile" ("Профиль") — для курьера это "Мой заработок", для админа —
-  // список дат с переключателями видимости маршрута (см. renderVisibilityList).
+  var ICON_HUB = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>';
+  var ICON_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var ICON_WALLET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>';
+  var ICON_CHEVRON_RIGHT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>';
+
+  function buildProfileRow(icon, label, onClick) {
+    var row = el("div", "profile-nav-row");
+    row.innerHTML =
+      '<span class="profile-nav-row-icon">' + icon + '</span>' +
+      '<span class="profile-nav-row-label">' + escapeHtml(label) + '</span>' +
+      '<span class="profile-nav-row-chevron">' + ICON_CHEVRON_RIGHT + '</span>';
+    row.addEventListener("click", function () { haptic("select"); onClick(); });
+    return row;
+  }
+
+  function renderRouteOpsHub(root) {
+    root.innerHTML = "";
+    var rows = el("div", "card profile-nav-list");
+    rows.appendChild(buildProfileRow(ICON_EYE, "Видимость маршрутов", function () {
+      wizardStep(function (body) {
+        body.appendChild(el("h2", "wizard-title", "Видимость маршрутов"));
+        var sub = el("div");
+        body.appendChild(sub);
+        loadVisibilityScreen(sub);
+      });
+    }));
+    rows.appendChild(buildProfileRow(ICON_WALLET, "Расходы на логистику", function () {
+      wizardStep(function (body) {
+        body.appendChild(el("h2", "wizard-title", "Расходы на логистику"));
+        var sub = el("div");
+        body.appendChild(sub);
+        renderLogisticsScreen(sub);
+      });
+    }));
+    root.appendChild(rows);
+  }
+
+  // -------------------------------------------------------------------
+  // Шапка экрана — своя на каждой вкладке, тот же компонент, что и в
+  // PAUSE App (см. pauseapp_static/app.js: screenHeader).
+  // -------------------------------------------------------------------
+
+  function screenHeader(containerId, title) {
+    var root = document.getElementById(containerId);
+    root.innerHTML = "";
+    var bar = el("div", "screen-header screen-header-center");
+    bar.appendChild(el("div", "screen-header-side screen-header-left"));
+    bar.appendChild(el("div", "screen-header-title", escapeHtml(title)));
+    bar.appendChild(el("div", "screen-header-side screen-header-right"));
+    root.appendChild(bar);
+  }
+
+  // -------------------------------------------------------------------
+  // Профиль — аватар (фото из Telegram или инициалы, и у курьера, и у
+  // админа, по прямой просьбе), имя, роль; дальше — "Режим" (если можно
+  // переключать) и либо "Мои доходы" (курьер), либо "Центр управления"
+  // (isRouteAdmin).
+  // -------------------------------------------------------------------
+
+  function renderProfileScreen() {
+    screenHeader("profile-header", "Профиль");
+    var root = document.getElementById("profile-root");
+    root.innerHTML = "";
+
+    var head = el("div", "profile-head");
+    var photo = tgPhotoUrl();
+    var name = tgDisplayName();
+    if (photo) {
+      var img = el("img", "avatar");
+      img.src = photo;
+      head.appendChild(img);
+    } else {
+      head.appendChild(el("div", "avatar", initials(name)));
+    }
+    head.appendChild(el("div", "profile-name", escapeHtml(name || "Без имени")));
+    head.appendChild(el("div", "profile-role-badge", state.isRouteAdmin ? "Администратор" : "Курьер"));
+    root.appendChild(head);
+
+    if (state.canToggleMode) {
+      var modeRow = el("div", "feed-filters mode-switch-row");
+      var adminBtn = el("button", "filter-chip mode-switch-btn" + (state.role === "admin" ? " active" : ""), "Администратор");
+      var courierBtn = el("button", "filter-chip mode-switch-btn" + (state.role === "courier" ? " active" : ""), "Курьер");
+      adminBtn.dataset.mode = "admin";
+      courierBtn.dataset.mode = "courier";
+      [adminBtn, courierBtn].forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          haptic("select");
+          if (btn.dataset.mode === state.role) return;
+          setRouteAdminMode(btn.dataset.mode);
+        });
+      });
+      modeRow.appendChild(adminBtn);
+      modeRow.appendChild(courierBtn);
+      root.appendChild(modeRow);
+    }
+
+    var rows = el("div", "card profile-nav-list");
+    if (state.isRouteAdmin) {
+      rows.appendChild(buildProfileRow(ICON_HUB, "Центр управления", function () {
+        openProfileSubscreen("Центр управления", renderRouteOpsHub);
+      }));
+    } else {
+      rows.appendChild(buildProfileRow(ICON_WALLET, "Мои доходы", function () {
+        openProfileSubscreen("Мои доходы", renderEarningsStub);
+      }));
+    }
+    root.appendChild(rows);
+  }
+
+  // -------------------------------------------------------------------
+  // Навигация — нижняя панель, 2 вкладки: "Маршрут" / "Профиль"
+  // -------------------------------------------------------------------
+
+  var SCREEN_NAMES = ["route", "profile"];
+
   function showScreen(name) {
     state.screen = name;
-    var isProfile = name === "profile";
-    // "Профиль" показывает админский экран по is_route_admin, НЕ по
-    // текущему state.role — у админа этого Mini App (см.
-    // config.ROUTE_ADMIN_IDS) role может сейчас быть "courier" (переключил
-    // "Режим"), но "Профиль" всё равно должен остаться админским, иначе
-    // человек не смог бы вернуться в режим "Администратор" обратно.
-    var isAdmin = state.isRouteAdmin;
-
-    document.getElementById("route-screen").hidden = isProfile;
-    document.getElementById("earnings-screen").hidden = !isProfile || isAdmin;
-    document.getElementById("admin-profile-screen").hidden = !isProfile || !isAdmin;
-
-    var title = "Маршрут";
-    if (isProfile) title = isAdmin ? "Профиль" : "Мой заработок";
-    document.getElementById("header-title").textContent = title;
-
-    Array.prototype.forEach.call(document.querySelectorAll(".nav-drawer-item"), function (el) {
-      el.classList.toggle("active", el.dataset.screen === name);
+    SCREEN_NAMES.forEach(function (s) {
+      document.getElementById("screen-" + s).hidden = s !== name;
     });
-
-    if (isProfile && isAdmin) {
-      loadVisibilityList();
-    } else if (isProfile && !isAdmin && !state.earningsDateISO) {
-      loadEarningsToday();
+    document.getElementById("content").scrollTop = 0;
+    Array.prototype.forEach.call(document.querySelectorAll(".nav-item"), function (b) {
+      b.classList.toggle("active", b.dataset.screen === name);
+    });
+    if (name === "route") {
+      screenHeader("route-header", "Маршрут");
+    } else if (name === "profile") {
+      renderProfileScreen();
     }
   }
 
-  function openDrawer() {
-    document.getElementById("nav-drawer").classList.add("open");
-    document.getElementById("nav-drawer-backdrop").classList.add("open");
-  }
-
-  function closeDrawer() {
-    document.getElementById("nav-drawer").classList.remove("open");
-    document.getElementById("nav-drawer-backdrop").classList.remove("open");
+  function initNav() {
+    Array.prototype.forEach.call(document.querySelectorAll(".nav-item"), function (b) {
+      b.addEventListener("click", function () {
+        haptic("select");
+        showScreen(b.dataset.screen);
+      });
+    });
   }
 
   // -------------------------------------------------------------------
@@ -1457,7 +1666,13 @@
     confirmCallback = null;
   }
 
+  // -------------------------------------------------------------------
+  // Инициализация
+  // -------------------------------------------------------------------
+
   function init() {
+    initNav();
+
     document.getElementById("add-point-btn").addEventListener("click", openAddPointModal);
     document.getElementById("add-point-cancel").addEventListener("click", function () {
       document.getElementById("add-point-modal").hidden = true;
@@ -1483,39 +1698,13 @@
       if (e.target.id === "confirm-modal") hideConfirm();
     });
 
-    document.getElementById("avatar-btn").addEventListener("click", openDrawer);
-    document.getElementById("nav-drawer-backdrop").addEventListener("click", closeDrawer);
-    Array.prototype.forEach.call(document.querySelectorAll(".nav-drawer-item"), function (el) {
-      el.addEventListener("click", function () {
-        showScreen(el.dataset.screen);
-        closeDrawer();
-      });
-    });
-
-    document.getElementById("earnings-date").addEventListener("change", function (e) {
-      state.earningsDateISO = e.target.value;
-      loadEarningsForDate(e.target.value);
-    });
-    document.getElementById("earnings-prev-day").addEventListener("click", function () { shiftEarningsDate(-1); });
-    document.getElementById("earnings-next-day").addEventListener("click", function () { shiftEarningsDate(1); });
+    document.getElementById("wizard-back").addEventListener("click", wizardBack);
+    document.getElementById("wizard-close").addEventListener("click", closeWizard);
 
     document.getElementById("retry-btn").addEventListener("click", function () {
       document.getElementById("retry-btn").hidden = true;
       startApp();
     });
-
-    document.getElementById("logistics-btn").addEventListener("click", openLogisticsModal);
-    document.getElementById("logistics-close").addEventListener("click", closeLogisticsModal);
-    document.getElementById("logistics-modal").addEventListener("click", function (e) {
-      if (e.target.id === "logistics-modal") closeLogisticsModal();
-    });
-    document.getElementById("logistics-save").addEventListener("click", saveLogistics);
-    document.getElementById("logistics-date").addEventListener("change", function (e) {
-      state.logisticsDateISO = e.target.value;
-      loadLogisticsForDate(e.target.value);
-    });
-    document.getElementById("logistics-prev-day").addEventListener("click", function () { shiftLogisticsDate(-1); });
-    document.getElementById("logistics-next-day").addEventListener("click", function () { shiftLogisticsDate(1); });
 
     startApp();
   }
@@ -1524,7 +1713,7 @@
     document.getElementById("empty-state").hidden = true;
     // Пуш о готовности маршрута (см. webapp._notify_couriers_route_ready)
     // ведёт по ссылке вида /miniapp?date=ДД.ММ.ГГГГ — открываем сразу этот
-    // раздел "Заказы" на нужной дате, а не на дате по умолчанию.
+    // раздел "Маршрут" на нужной дате, а не на дате по умолчанию.
     var deepLinkDate = new URLSearchParams(window.location.search).get("date");
     api("/api/me").then(function (me) {
       state.role = me.role;
@@ -1532,8 +1721,7 @@
       state.splitView = !!me.route_split_view;
       state.isRouteAdmin = !!me.is_route_admin;
       state.canToggleMode = !!me.can_toggle_mode;
-      initModeSwitch();
-      showScreen("orders");
+      showScreen("route");
       loadRouteDates();
       if (state.role === "admin") loadCouriers();
       return loadRoute(deepLinkDate || undefined);

@@ -1,35 +1,48 @@
+/* Единая палитра с PAUSE App (см. pauseapp_static/styles.css) — те же
+   значения переменных один в один, по прямой просьбе сделать оба Mini App
+   ("Маршрут" и "PAUSE App") одним визуальным стилем: цвета, кнопки,
+   карточки, нижняя навигация, шапки экранов, модалки. Там, где этому
+   приложению нужен свой компонент (карта, маркеры, карточки точек
+   маршрута, переключатели) — он использует те же переменные, а не свои
+   цвета. */
 :root {
-  --bg-0: #e4d9c4;
-  --bg-1: #d8c9ab;
-  --ink: #3a2e22;
-  --ink-soft: #6b5c48;
-  --sage: #7c8a68;
-  --sage-dark: #586347;
-  --rose: #cf9d8c;
-  --rose-deep: #b87e6c;
-  --card: #f2ead9;
-  --card-pinned: #e8dabb;
-  --line: rgba(58, 46, 34, 0.16);
-  --on-accent: #fbf5ea;
-  --radius: 18px;
-  --radius-sm: 12px;
-  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --ivory: #f2ebdc;
+  --ivory-deep: #e7dcc7;
+  --ink: #2b2823;
+  --ink-soft: #8a8377;
+  --ink-soft-bg: rgba(43, 40, 35, 0.08);
+  --card: #fffdf8;
+  --line: rgba(43, 40, 35, 0.12);
+  --accent-warm: #b1442e;
+  --accent-warm-soft: rgba(177, 68, 46, 0.12);
+  --success: #3f7d4f;
+  --success-soft: rgba(63, 125, 79, 0.14);
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background: var(--bg-0);
-  background: linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+  background: var(--ivory);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.5;
+  overscroll-behavior-y: none;
 }
+
+button { font-family: inherit; cursor: pointer; }
+input, textarea, select { font-family: inherit; font-size: 15px; }
 
 #app {
   display: flex;
@@ -37,85 +50,342 @@ html, body {
   min-height: 100vh;
 }
 
-header {
+/* ------------------------------------------------------------------ */
+/* Шапки экранов — одна на вкладку, см. app.js: screenHeader()          */
+/* ------------------------------------------------------------------ */
+
+.screen-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 22px 20px 14px;
-  position: sticky;
-  top: 0;
-  background: linear-gradient(180deg, var(--bg-0) 60%, rgba(228, 217, 196, 0.85) 100%);
-  backdrop-filter: blur(6px);
-  z-index: 20;
+  padding: calc(var(--safe-top) + 14px) 4px 10px;
+  gap: 8px;
 }
-
-.header-titles { display: flex; flex-direction: column; gap: 2px; }
-
-.brand {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 600;
-  font-size: 32px;
-  letter-spacing: 0.02em;
-  color: var(--rose-deep);
-  line-height: 1;
-}
-
-header h1 {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin: 2px 0 0;
-  color: var(--ink-soft);
-}
-
-.avatar-btn {
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--ink);
+.screen-header-side { flex: 0 0 40px; display: flex; align-items: center; }
+.screen-header-right { justify-content: flex-end; }
+.screen-header-title {
+  flex: 1;
+  font-weight: 700;
   font-size: 19px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.screen-header:not(.screen-header-center) .screen-header-title { text-align: left; }
+.screen-header.screen-header-center .screen-header-title { text-align: center; }
+.header-icon-btn {
+  background: none;
+  border: none;
+  color: var(--ink);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.avatar-btn:active { opacity: .8; }
+.header-icon-btn:active { background: var(--ink-soft-bg); }
 
-.screen { padding: 4px 18px 32px; }
+/* ------------------------------------------------------------------ */
+/* Контент / экраны                                                    */
+/* ------------------------------------------------------------------ */
 
-.date-pills {
+#content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 18px calc(90px + var(--safe-bottom));
+}
+.screen { animation: fade-in .18s ease; }
+@keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+h1, h2, h3 {
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+h2 { font-size: 21px; }
+p { margin: 0; color: var(--ink-soft); }
+
+/* ------------------------------------------------------------------ */
+/* Нижняя навигация — "Маршрут" / "Профиль"                            */
+/* ------------------------------------------------------------------ */
+
+#bottom-nav {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 40;
+  display: flex;
+  background: var(--ivory);
+  border-top: 1px solid var(--line);
+  padding: 8px 6px calc(8px + var(--safe-bottom));
+}
+.nav-item {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 2px;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+}
+.nav-item svg { width: 22px; height: 22px; }
+.nav-item span { font-size: 10.5px; font-weight: 500; letter-spacing: 0.01em; }
+.nav-item.active { color: var(--ink); }
+.nav-item.active svg { stroke-width: 2.1; }
+
+/* ------------------------------------------------------------------ */
+/* Скелетоны загрузки                                                  */
+/* ------------------------------------------------------------------ */
+
+.skeleton-block {
+  height: 84px;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  background: linear-gradient(100deg, var(--ivory-deep) 30%, #f7f0e0 50%, var(--ivory-deep) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer { 0% { background-position: 120% 0; } 100% { background-position: -20% 0; } }
+
+/* ------------------------------------------------------------------ */
+/* Общие элементы: карточки, кнопки, пилюли                            */
+/* ------------------------------------------------------------------ */
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+  box-shadow: 0 3px 14px rgba(43, 40, 35, 0.05);
+  transition: opacity .15s;
+}
+.card + .card { margin-top: 12px; }
+.card.done { opacity: .6; }
+.card.sortable-ghost { opacity: .35; }
+/* Закреплённая карточка (см. "Закрепить" на карточке) — тот же мягкий
+   акцент, что и "уже выбрано" у .payment-tile/.option-row в PAUSE App:
+   лёгкая подложка ink-soft-bg, а не отдельный цвет. */
+.card.pinned { background: var(--ink-soft-bg); }
+
+.btn-primary {
+  display: block;
+  width: 100%;
+  background: var(--ink);
+  color: var(--ivory);
+  border: none;
+  border-radius: 999px;
+  padding: 15px 20px;
+  font-weight: 600;
+  font-size: 15.5px;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+.btn-primary:active { opacity: .85; }
+.btn-primary:disabled { opacity: .45; }
+/* "Сдано" — единственное место, где кнопка красится не в основной ink, а
+   в var(--success): тот же зелёный, которым в PAUSE App уже помечено
+   "Оплачено"/выполненное действие — не новый цвет, переиспользование. */
+.btn-primary.success { background: var(--success); }
+
+.btn-ghost {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 13px 20px;
+  font-weight: 600;
+  font-size: 14.5px;
+  text-align: center;
+}
+.btn-ghost:active { opacity: .7; }
+
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 6px 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Toast / модалки                                                     */
+/* ------------------------------------------------------------------ */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + var(--safe-bottom));
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--ivory);
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  z-index: 90;
+  max-width: 86%;
+  text-align: center;
+  box-shadow: 0 8px 20px rgba(43, 40, 35, 0.25);
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(43, 40, 35, 0.45);
+  display: flex;
+  align-items: flex-end;
+}
+.modal-sheet {
+  width: 100%;
+  background: var(--ivory);
+  border-radius: 22px 22px 0 0;
+  padding: 22px 20px calc(22px + var(--safe-bottom));
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-title { font-weight: 700; font-size: 18px; color: var(--ink); margin-bottom: 14px; }
+.modal-text { color: var(--ink); font-size: 15px; margin-bottom: 18px; }
+.modal-actions { display: flex; flex-direction: column; gap: 10px; }
+.modal-list { overflow-y: auto; flex: 1 1 auto; margin-bottom: 14px; }
+.modal-list-item {
+  padding: 13px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 14.5px;
+  margin-bottom: 8px;
+}
+.modal-list-item:active { background: var(--ink-soft-bg); }
+.modal-list-empty { color: var(--ink-soft); text-align: center; padding: 24px 10px; font-size: 14px; }
+
+.empty-note, .empty-state {
+  text-align: center;
+  color: var(--ink-soft);
+  padding: 40px 12px 10px;
+  font-size: 14px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Поля форм (комментарий курьеру, расходы на логистику)               */
+/* ------------------------------------------------------------------ */
+
+.field { margin-bottom: 14px; }
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.field input, .field textarea, .field select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--card);
+  color: var(--ink);
+}
+.field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--ink); }
+
+/* ------------------------------------------------------------------ */
+/* Профиль — аватар (фото из Telegram или инициалы), имя, роль          */
+/* ------------------------------------------------------------------ */
+
+.avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--ink-soft-bg);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  margin: 6px auto 14px;
+  object-fit: cover;
+}
+.profile-head { text-align: center; margin-bottom: 18px; }
+.profile-name { font-size: 20px; font-weight: 700; color: var(--ink); }
+.profile-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  background: var(--ink);
+  color: var(--ivory);
+  border: none;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.profile-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 22px 4px 8px;
+}
+
+.profile-nav-list { padding: 4px 16px; margin-top: 6px; }
+.profile-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.profile-nav-row:last-child { border-bottom: none; }
+.profile-nav-row-icon { color: var(--ink); flex: 0 0 auto; display: flex; }
+.profile-nav-row-label { flex: 1; font-size: 14.5px; color: var(--ink); }
+.profile-nav-row-chevron { color: var(--ink-soft); flex: 0 0 auto; display: flex; }
+
+/* ------------------------------------------------------------------ */
+/* "Режим" (Администратор/Курьер) и переключатель дат/курьеров —        */
+/* одна и та же "пилюля-фильтр", что и в PAUSE App (feed-filters).      */
+/* ------------------------------------------------------------------ */
+
+.feed-filters, .date-pills {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 4px;
   margin-bottom: 16px;
 }
-.date-pill {
+.filter-chip, .date-pill {
   flex: 0 0 auto;
   background: var(--card);
   border: 1px solid var(--line);
   color: var(--ink-soft);
-  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
-  padding: 9px 16px;
+  padding: 8px 15px;
   border-radius: 999px;
   white-space: nowrap;
 }
-.date-pill.active {
-  background: var(--rose-deep);
-  border-color: var(--rose-deep);
-  color: var(--on-accent);
-}
+.filter-chip.active, .date-pill.active { background: var(--ink); border-color: var(--ink); color: var(--ivory); }
+
+/* "Режим" — та же пилюля, но растянутая на всю ширину в два сегмента
+   (это переключатель состояния, а не прокручиваемый список фильтров). */
+.mode-switch-row { overflow-x: visible; margin: 0 0 18px; }
+.mode-switch-row .filter-chip { flex: 1; text-align: center; }
 
 /* Вкладки курьеров на экране "Маршрут" (см. app.js: renderCourierTabs,
-   ROUTE_SPLIT_VIEW) — та же пилюля, что и переключатель дат, плюс цветная
-   точка курьера перед именем. */
+   ROUTE_SPLIT_VIEW) — та же пилюля, плюс цветная точка курьера перед
+   именем. */
 .courier-tab { display: inline-flex; align-items: center; }
 .courier-tab-dot {
   width: 8px;
@@ -125,63 +395,207 @@ header h1 {
   flex: 0 0 auto;
 }
 
+/* ------------------------------------------------------------------ */
+/* Переключатель (видимость маршрута, назначение курьера)              */
+/* ------------------------------------------------------------------ */
+
+.visibility-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.visibility-row:last-child { border-bottom: none; }
+.visibility-row-label { font-weight: 600; color: var(--ink); font-size: 14.5px; }
+
+.switch {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 27px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--line);
+  border-radius: 999px;
+  transition: background .15s ease;
+}
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  height: 21px;
+  width: 21px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .15s ease;
+  box-shadow: 0 1px 3px rgba(43, 40, 35, 0.3);
+}
+/* Включено = var(--success) — тот же зелёный, что и статус "Оплачено" в
+   PAUSE App, переиспользуем как "включено/готово", не новый цвет. */
+.switch input:checked + .switch-slider { background: var(--success); }
+.switch input:checked + .switch-slider::before { transform: translateX(19px); }
+
+/* ------------------------------------------------------------------ */
+/* Расходы на логистику                                                */
+/* ------------------------------------------------------------------ */
+
+.date-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.date-picker-row input {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+}
+.icon-btn {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 18px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn:active { background: var(--ink-soft-bg); }
+
+.logistics-field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.logistics-courier-row:last-child { border-bottom: none; }
+.logistics-courier-name { flex: 1; font-weight: 600; color: var(--ink); min-width: 0; font-size: 14.5px; }
+.logistics-field-row input[type="number"] {
+  width: 110px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 15px;
+  text-align: right;
+}
+.logistics-field-suffix { color: var(--ink-soft); font-size: 13px; flex: 0 0 auto; }
+
+/* ------------------------------------------------------------------ */
+/* "Мои доходы" (курьер) — заглушка на будущее                         */
+/* ------------------------------------------------------------------ */
+
+.earnings-stub {
+  text-align: center;
+  padding: 50px 16px 10px;
+  color: var(--ink-soft);
+}
+.earnings-stub svg { color: var(--ink-soft); margin-bottom: 16px; }
+.earnings-stub-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+.earnings-stub-text { font-size: 13.5px; line-height: 1.6; }
+
+/* ------------------------------------------------------------------ */
+/* Полноэкранный визард — Профиль → подразделы                         */
+/* ------------------------------------------------------------------ */
+
+.wizard {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--ivory);
+  display: flex;
+  flex-direction: column;
+}
+.wizard-head {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  padding: calc(var(--safe-top) + 10px) 12px 0;
+  pointer-events: none;
+}
+.wizard-back, .wizard-close {
+  pointer-events: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  width: 36px; height: 36px; flex: 0 0 auto;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(43, 40, 35, 0.1);
+}
+.wizard-back svg, .wizard-close svg { width: 20px; height: 20px; }
+.wizard-steps { display: none; }
+.wizard-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: calc(var(--safe-top) + 56px) 18px calc(30px + var(--safe-bottom));
+}
+.wizard-title { margin-bottom: 16px; }
+
+/* ------------------------------------------------------------------ */
+/* Карта маршрута                                                      */
+/* ------------------------------------------------------------------ */
+
 #map {
   width: 100%;
   height: 230px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   border: 1px solid var(--line);
-  box-shadow: 0 6px 18px rgba(58, 46, 34, 0.1);
-  /* Leaflet создаёт свои внутренние слои (тайлы, маркеры, контролы) с
-     z-index до 1000 (см. leaflet.css) — без собственного стекингового
-     контекста на #map эти значения "пробивались" наружу и оказывались
-     выше выдвижной шторки меню (z-index 70/71), хотя шторка в разметке
-     идёт позже. position+z-index здесь замыкают всю внутреннюю Leaflet-
-     иерархию внутри #map, наружу карта всегда остаётся одним слоем на
-     z-index: 0 — ниже шторки, тоста и модалок. */
+  box-shadow: 0 3px 14px rgba(43, 40, 35, 0.05);
+  /* Собственный стекинговый контекст — иначе внутренние z-index Leaflet
+     (до 1000) пробивались бы наружу, выше модалок/тоста. */
   position: relative;
   z-index: 0;
 }
-
-/* Лёгкий тёплый фильтр поверх тайлов Esri (World Light Gray Canvas),
-   чтобы нейтральный светло-серый не выбивался из общей айвори-палитры
-   PAUSE — фильтр слабый, иначе подписи улиц (слой Reference) и мелкие
-   ориентиры замыливаются. */
+/* Лёгкий тёплый фильтр поверх тайлов Esri (World Light Gray Canvas), под
+   айвори-палитру PAUSE — тот же приём, что и в PAUSE App (см.
+   pauseapp_static/styles.css: .map-picker-map). */
 #map .leaflet-tile-pane {
   filter: sepia(0.06) saturate(0.92) brightness(1.01);
 }
-/* Атрибуция провайдера тайлов обязательна по условиям использования
-   (Esri требует "Tiles © Esri" — см. app.js), но не должна читаться как
-   отдельная заметная строка под картой: Leaflet и так держит её в углу
-   самой карты (поверх тайлов), здесь только уменьшаем и делаем
-   малозаметной — без фоновой плашки, мелким полупрозрачным текстом. */
 #map .leaflet-control-attribution {
   background: none;
-  color: rgba(58, 46, 34, 0.45);
-  font-family: var(--font-sans);
+  color: rgba(43, 40, 35, 0.45);
   font-size: 8px;
   padding: 0 4px;
-  text-shadow: 0 1px 2px rgba(242, 234, 217, 0.9), 0 0 3px rgba(242, 234, 217, 0.9);
+  text-shadow: 0 1px 2px rgba(242, 235, 220, 0.9), 0 0 3px rgba(242, 235, 220, 0.9);
 }
-#map .leaflet-control-attribution a { color: rgba(58, 46, 34, 0.55); }
+#map .leaflet-control-attribution a { color: rgba(43, 40, 35, 0.55); }
 
 .marker-badge {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--rose-deep);
-  color: #fff;
+  background: var(--ink);
+  color: var(--ivory);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-sans);
   font-weight: 700;
   font-size: 12px;
   border: 2.5px solid #fff;
-  box-shadow: 0 2px 6px rgba(58, 46, 34, 0.4);
+  box-shadow: 0 2px 6px rgba(43, 40, 35, 0.35);
 }
-.marker-badge.done { background: var(--sage-dark); }
+.marker-badge.done { background: var(--success); }
 .marker-badge.depot {
   width: 30px;
   height: 30px;
@@ -198,26 +612,11 @@ header h1 {
   opacity: 0.5;
 }
 
-.empty-state {
-  text-align: center;
-  color: var(--ink-soft);
-  padding: 52px 20px;
-  font-size: 15px;
-}
+/* ------------------------------------------------------------------ */
+/* Карточки точек маршрута                                             */
+/* ------------------------------------------------------------------ */
 
-#cards { display: flex; flex-direction: column; gap: 14px; }
-
-.card {
-  background: var(--card);
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  box-shadow: 0 4px 16px rgba(58, 46, 34, 0.07);
-  padding: 16px 18px;
-  transition: opacity .15s;
-}
-.card.done { opacity: .6; }
-.card.sortable-ghost { opacity: .35; }
-.card.pinned { background: var(--card-pinned); }
+#cards { display: flex; flex-direction: column; }
 
 .card-head {
   display: flex;
@@ -231,39 +630,39 @@ header h1 {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--rose-deep);
-  color: var(--on-accent);
+  background: var(--ink);
+  color: var(--ivory);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 13px;
 }
-.card.done .card-num { background: var(--sage-dark); }
+.card.done .card-num { background: var(--success); }
 
 .card-main { flex: 1 1 auto; min-width: 0; }
 .card-address { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card-no-coords-warn { cursor: help; }
+.card-no-coords-warn { cursor: help; color: var(--accent-warm); }
 .card-sub { color: var(--ink-soft); font-size: 13px; margin-top: 3px; }
 
 .card-status-tag {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11.5px;
+  font-weight: 600;
   padding: 4px 10px;
   border-radius: 20px;
-  background: rgba(58, 46, 34, 0.06);
+  background: var(--ink-soft-bg);
   color: var(--ink-soft);
   flex: 0 0 auto;
 }
-.card-status-tag.done { background: rgba(88, 99, 71, 0.16); color: var(--sage-dark); }
-.card-status-tag.active { background: rgba(184, 126, 108, 0.16); color: var(--rose-deep); }
+.card-status-tag.done { background: var(--success-soft); color: var(--success); }
+.card-status-tag.active { background: var(--accent-warm-soft); color: var(--accent-warm); }
 
 .card-chevron { flex: 0 0 auto; color: var(--ink-soft); transition: transform .15s; }
 .card.expanded .card-chevron { transform: rotate(180deg); }
 
 .card-remove {
   flex: 0 0 auto;
-  color: var(--rose-deep);
+  color: var(--accent-warm);
   font-size: 20px;
   line-height: 1;
   padding: 4px 8px;
@@ -289,162 +688,11 @@ header h1 {
 }
 .card.expanded .card-body { display: block; }
 
-.person {
-  padding: 8px 0;
-}
+.person { padding: 8px 0; }
 .person + .person { border-top: 1px dashed var(--line); }
 .person-name { font-weight: 600; color: var(--ink); }
 .person-line { color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
-
-.card-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.primary-btn {
-  background: var(--rose-deep);
-  color: var(--on-accent);
-  border: none;
-  border-radius: 999px;
-  padding: 15px 22px;
-  font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  width: 100%;
-  margin-top: 18px;
-  box-shadow: 0 4px 12px rgba(184, 126, 108, 0.35);
-}
-.card-actions .primary-btn { margin-top: 0; }
-.primary-btn:active { opacity: .85; }
-.primary-btn.secondary {
-  background: var(--sage-dark);
-  color: var(--on-accent);
-  box-shadow: 0 4px 12px rgba(88, 99, 71, 0.3);
-}
-
-.ghost-btn {
-  background: none;
-  border: none;
-  color: var(--rose-deep);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  padding: 8px 6px;
-}
-
-.icon-btn {
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  font-size: 20px;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-}
-
-.toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--ink);
-  color: var(--on-accent);
-  padding: 12px 20px;
-  border-radius: 999px;
-  font-size: 14px;
-  z-index: 50;
-  max-width: 90vw;
-  text-align: center;
-  box-shadow: 0 8px 20px rgba(58, 46, 34, 0.25);
-}
-
-.earnings-card {
-  background: var(--card);
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  box-shadow: 0 4px 16px rgba(58, 46, 34, 0.07);
-  padding: 22px;
-  text-align: center;
-  margin-bottom: 14px;
-}
-.earnings-label {
-  color: var(--ink-soft);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-}
-.earnings-value {
-  font-family: var(--font-serif);
-  font-size: 32px;
-  font-weight: 600;
-  color: var(--rose-deep);
-}
-
-.date-picker-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.date-picker-row input {
-  flex: 1;
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 15px;
-}
-
-.modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(58, 46, 34, 0.45);
-  display: flex;
-  align-items: flex-end;
-  z-index: 40;
-}
-.modal-sheet {
-  background: var(--bg-0);
-  width: 100%;
-  border-radius: 22px 22px 0 0;
-  padding: 20px;
-  max-height: 70vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 -8px 24px rgba(58, 46, 34, 0.2);
-}
-.modal-title {
-  font-family: var(--font-serif);
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--ink);
-  margin-bottom: 12px;
-}
-.modal-list { overflow-y: auto; flex: 1 1 auto; margin-bottom: 12px; }
-.modal-list-item {
-  padding: 14px 4px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-}
-.modal-list-empty { color: var(--ink-soft); text-align: center; padding: 24px; }
-
-.modal-text {
-  color: var(--ink-soft);
-  font-size: 15px;
-  line-height: 1.5;
-  margin: 0 0 18px;
-}
-.modal-actions { display: flex; flex-direction: column; gap: 8px; }
-.modal-actions .primary-btn { margin-top: 0; }
-
-.person-line a { color: var(--rose-deep); text-decoration: none; }
+.person-line a { color: var(--ink); text-decoration: none; font-weight: 600; }
 .person-line a:active { opacity: .7; }
 
 .copy-tel-btn {
@@ -454,33 +702,34 @@ header h1 {
   font-size: 13px;
   line-height: 1;
   vertical-align: -1px;
+  color: var(--ink-soft);
   cursor: pointer;
 }
 .copy-tel-btn:active { opacity: .6; }
 
+.card-actions { display: flex; gap: 10px; margin-top: 16px; }
+.card-actions .btn-primary { margin-top: 0; }
+
 .route-comment-block {
-  background: rgba(184, 126, 108, 0.1);
-  border: 1px solid rgba(184, 126, 108, 0.25);
+  background: var(--ink-soft-bg);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   color: var(--ink);
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.45;
   margin-bottom: 12px;
 }
 
-.route-courier-btn {
+.route-courier-btn, .route-pin-btn {
   display: block;
+  width: auto;
   margin: 0 0 12px;
-  padding: 6px 4px;
+  padding: 6px 2px;
   font-weight: 600;
-}
-
-.route-pin-btn {
-  display: block;
-  margin: 0 0 12px;
-  padding: 6px 4px;
-  font-weight: 600;
+  font-size: 13.5px;
+  border: none;
+  background: none;
+  color: var(--ink);
 }
 
 .route-comment-edit { margin-bottom: 14px; }
@@ -488,6 +737,7 @@ header h1 {
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 600;
+  text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 6px;
 }
@@ -495,192 +745,17 @@ header h1 {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--bg-0);
+  background: var(--card);
   color: var(--ink);
-  font-family: var(--font-sans);
   font-size: 14px;
   padding: 10px;
   resize: vertical;
   box-sizing: border-box;
 }
-/* Поле заблокировано сразу после "Сохранить" — просто показывает текст,
-   не приглашает редактировать (курсор недоступен, ручка изменения
-   размера скрыта); нажатие "✏️ Изменить" возвращает обычный вид. */
 .route-comment-input.locked {
-  background: var(--card);
+  background: var(--ink-soft-bg);
   color: var(--ink-soft);
   resize: none;
   opacity: 0.9;
 }
-.route-comment-save {
-  padding: 6px 4px;
-}
-
-/* Выдвижная панель навигации (аватарка -> "Профиль"/"Заказы") */
-.drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(58, 46, 34, 0.4);
-  z-index: 70;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .2s ease;
-}
-.drawer-backdrop.open { opacity: 1; pointer-events: auto; }
-
-.nav-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  height: 100%;
-  width: 50%;
-  min-width: 220px;
-  max-width: 320px;
-  background: var(--bg-0);
-  z-index: 71;
-  box-shadow: -8px 0 28px rgba(58, 46, 34, 0.22);
-  transform: translateX(100%);
-  transition: transform .25s ease;
-  padding: calc(24px + env(safe-area-inset-top, 0px)) 14px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.nav-drawer.open { transform: translateX(0); }
-
-.nav-drawer-item {
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 16px 14px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.nav-drawer-item:active { background: var(--card); }
-.nav-drawer-item.active { color: var(--rose-deep); background: var(--card); }
-
-/* Экран "Профиль" админа — видимость маршрута по датам */
-.section-title {
-  font-family: var(--font-serif);
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--ink);
-  margin: 8px 0 6px;
-}
-.section-hint {
-  color: var(--ink-soft);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0 0 18px;
-}
-
-.visibility-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 4px;
-  border-bottom: 1px solid var(--line);
-}
-.visibility-row-label { font-weight: 600; color: var(--ink); }
-
-.switch {
-  position: relative;
-  display: inline-block;
-  flex: 0 0 auto;
-  width: 46px;
-  height: 27px;
-}
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-.switch-slider {
-  position: absolute;
-  inset: 0;
-  background: var(--line);
-  border-radius: 999px;
-  transition: background .15s ease;
-}
-.switch-slider::before {
-  content: "";
-  position: absolute;
-  height: 21px;
-  width: 21px;
-  left: 3px;
-  top: 3px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform .15s ease;
-  box-shadow: 0 1px 3px rgba(58, 46, 34, 0.35);
-}
-.switch input:checked + .switch-slider { background: var(--sage-dark); }
-.switch input:checked + .switch-slider::before { transform: translateX(19px); }
-
-/* "Режим" (Администратор/Курьер) — только у админов Mini App "Маршрут",
-   см. config.ROUTE_ADMIN_IDS, экран "Профиль" */
-.mode-switch {
-  display: flex;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 4px;
-  margin-bottom: 18px;
-}
-.mode-switch-btn {
-  flex: 1;
-  background: none;
-  border: none;
-  border-radius: 999px;
-  padding: 10px 8px;
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-soft);
-}
-.mode-switch-btn.active {
-  background: var(--rose-deep);
-  color: var(--on-accent);
-}
-.mode-switch-btn:disabled { opacity: .6; }
-
-/* Кнопка "Расходы на логистику" в "Профиле" — та же "призрачная" кнопка,
-   что и остальные второстепенные действия, но с рамкой, чтобы не терялась
-   под списком видимости маршрута. */
-.logistics-btn {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 13px 14px;
-  width: 100%;
-  text-align: center;
-}
-
-/* Модалка "Расходы на логистику" */
-.logistics-sheet { max-height: 85vh; }
-.logistics-field-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--line);
-}
-.logistics-courier-row:last-child { border-bottom: none; }
-.logistics-courier-name { flex: 1; font-weight: 600; color: var(--ink); min-width: 0; }
-.logistics-field-row input[type="number"] {
-  width: 110px;
-  padding: 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  text-align: right;
-}
-.logistics-field-suffix { color: var(--ink-soft); font-size: 13px; flex: 0 0 auto; }
-
-[hidden] { display: none !important; }
+.route-comment-save { margin-top: 6px; width: auto; display: inline-block; padding: 6px 2px; }
