@@ -511,6 +511,52 @@ DEL_DATE = 1     # A  ДД.ММ.ГГГГ
 DEL_SUM = 2      # B
 DEL_UPDATED = 3  # C
 
+# --- Наличные: сборы курьера с клиентов при доставке (Mini App "Маршрут",
+# кнопка "Наличные" на карточке точки) — см. sheets.record_cash_collection/
+# get_cash_total/get_cash_entries. Контакты клиента (контакт/telegram)
+# хранятся тут же снимком на момент сбора — по прямой просьбе видно только
+# админу (карточка курьера в "Курьеры"), курьер видит только свою сумму. ---
+SHEET_CASH_COLLECTIONS = "Наличные"
+CASH_HEADER_ROW = 1
+CASH_DATA_START_ROW = 2
+CASH_DATE = 1            # A  ДД.ММ.ГГГГ
+CASH_COURIER_TG_ID = 2   # B
+CASH_COURIER_NAME = 3    # C
+CASH_POINT = 4           # D
+CASH_CLIENT_ID = 5       # E
+CASH_NAME = 6            # F
+CASH_CONTACT = 7         # G
+CASH_TELEGRAM = 8        # H
+CASH_AMOUNT = 9          # I
+CASH_TIME = 10           # J  ЧЧ:ММ
+
+# Пометка, которой record_cash_collection дописывает столбец "Комментарии"
+# (M) в "Заказы", когда курьер подтвердил оплату наличными через Mini App
+# "Маршрут" (а не админ вручную, как раньше, см. confirm_cash_payment) —
+# ЗАГЛАВНЫМИ буквами, по прямой просьбе, чтобы сразу бросалось в глаза
+# прямо в таблице, без захода в приложение.
+CASH_CONFIRMED_MARKER_PREFIX = "ПОДТВЕРЖДЕНО КУРЬЕРОМ"
+
+# --- Расчёты с курьером: явные отметки админа о физической передаче денег
+# (кнопки "Забрал наличные"/"Доплатил курьеру" на карточке курьера в
+# "Курьеры") — см. sheets.record_courier_settlement/get_courier_balance.
+# Отдельно и от кассы выше, и от "Заработок" (= "Оплата за смену",
+# SHEET_LOGISTICS_EXPENSES выше — одна и та же запись, просто ещё одно
+# место её посмотреть/поправить): баланс = (наличные − забрано) −
+# (заработок − выплачено), копится бессрочно, пока админ явно не отметит
+# расчёт — см. комментарий у get_courier_balance. ---
+SHEET_COURIER_SETTLEMENTS = "Расчёты с курьерами"
+SETL_HEADER_ROW = 1
+SETL_DATA_START_ROW = 2
+SETL_DATE = 1           # A  ДД.ММ.ГГГГ
+SETL_COURIER_TG_ID = 2  # B
+SETL_COURIER_NAME = 3   # C
+SETL_TYPE = 4           # D
+SETL_AMOUNT = 5         # E
+SETL_TIME = 6           # F  ЧЧ:ММ
+SETTLEMENT_TYPE_CASH_RECEIVED = "Забрал наличные"
+SETTLEMENT_TYPE_PAID_COURIER = "Доплатил курьеру"
+
 # --- PAUSE Club: лента (PAUSE App) ---
 # Фото ленты хранятся не на сервере и не в самой таблице — только в
 # закрытом Telegram-канале, куда их отправляет бот (см. pauseapp.py:

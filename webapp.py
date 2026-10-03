@@ -272,10 +272,18 @@ async def api_route_get(request: web.Request):
     # точки; видно и курьеру (свой старт), и админу (старты всех, по
     # вкладкам курьеров), см. app.js: renderStartBadge.
     starts = await _retry_sheets(sheets.get_route_starts, date_str)
+    # "Наличные" (сумма, собранная на точке за дату, см. api_cash_record) —
+    # тем же способом, что и "starts" выше: отдельным словарём {точка:
+    # сумма}, не полем точки, свежим на каждый запрос (не кешируется вместе
+    # с route — см. sheets.get_route_cash_totals).
+    cash = await _retry_sheets(sheets.get_route_cash_totals, date_str)
     if role == "courier":
         tg_id = str(request["tg_id"])
         route = [p for p in route if tg_id in p["courier_tg_ids"]]
-    return web.json_response({"date": date_str, "role": role, "points": route, "depot": depot, "visible": visible, "starts": starts})
+    return web.json_response({
+        "date": date_str, "role": role, "points": route, "depot": depot,
+        "visible": visible, "starts": starts, "cash": cash,
+    })
 
 
 async def api_route_visibility_get(request: web.Request):
@@ -435,6 +443,86 @@ async def api_courier_kpi_hidden_set(request: web.Request):
     if not ok:
         return web.json_response({"error": "not_found"}, status=404)
     return web.json_response({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Касса курьера — "Заработок" (= "Оплата за смену"), наличные, баланс и
+# расчёты (кнопки "Забрал наличные"/"Доплатил курьеру"). Экран "Мои доходы"
+# (курьер, свои данные без контактов клиентов) и карточка курьера в
+# "Курьеры" (админ, видит и контакты из get_cash_entries, и может
+# отмечать расчёты) — см. app.js: renderFinanceBody.
+# ---------------------------------------------------------------------------
+
+async def api_courier_earnings_set(request: web.Request):
+    """Админ вписывает "Заработок" курьера за день — пишет в то же поле,
+    что и "Расходы на логистику" → "Оплата за смену" (см.
+    sheets.set_logistics_expense), просто из карточки конкретного
+    курьера в "Курьеры"."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    date_str = body.get("date") or _today()
+    try:
+        amount = int(body.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    couriers = await _retry_sheets(sheets.get_couriers)
+    courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
+    if not courier:
+        return web.json_response({"error": "not_found"}, status=404)
+    await _retry_sheets(sheets.set_logistics_expense, date_str, tg_id, courier["name"], amount)
+    return web.json_response({"ok": True})
+
+
+async def api_courier_finance_get(request: web.Request):
+    """Заработано/собрано наличными за период + текущий баланс (за всё
+    время, не за период — см. sheets.get_courier_balance). Курьер видит
+    только свои данные и без контактов клиентов (entries); admin —
+    любого курьера, с контактами (см. прямую просьбу — контакты видно
+    только админу)."""
+    is_admin = request["is_route_admin"]
+    tg_id = request.query.get("courier_tg_id") or str(request["tg_id"])
+    if not is_admin and tg_id != str(request["tg_id"]):
+        return web.json_response({"error": "forbidden"}, status=403)
+    date_from = request.query.get("from") or _today()
+    date_to = request.query.get("to") or date_from
+    earned = await _retry_sheets(sheets.get_logistics_total_for_courier, tg_id, date_from, date_to)
+    collected = await _retry_sheets(sheets.get_cash_total, tg_id, date_from, date_to)
+    balance = await _retry_sheets(sheets.get_courier_balance, tg_id)
+    result = {
+        "earned": earned, "collected": collected, "balance": balance["balance"],
+        "total_cash": balance["total_cash"], "total_earned": balance["total_earned"],
+    }
+    if is_admin:
+        result["entries"] = await _retry_sheets(sheets.get_cash_entries, tg_id, date_from, date_to)
+    return web.json_response(result)
+
+
+async def api_courier_settle(request: web.Request):
+    """Админ отмечает физическую передачу денег — "Забрал наличные у
+    курьера" или "Доплатил курьеру" (см. config.SETTLEMENT_TYPE_*),
+    целиком или частями, уменьшает баланс (см. sheets.get_courier_balance)."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    settlement_type = body.get("type")
+    if settlement_type not in (config.SETTLEMENT_TYPE_CASH_RECEIVED, config.SETTLEMENT_TYPE_PAID_COURIER):
+        return web.json_response({"error": "bad_type"}, status=400)
+    try:
+        amount = int(body.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if amount <= 0:
+        return web.json_response({"error": "bad_amount"}, status=400)
+    couriers = await _retry_sheets(sheets.get_couriers)
+    courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
+    if not courier:
+        return web.json_response({"error": "not_found"}, status=404)
+    await _retry_sheets(sheets.record_courier_settlement, tg_id, courier["name"], settlement_type, amount)
+    balance = await _retry_sheets(sheets.get_courier_balance, tg_id)
+    return web.json_response({"ok": True, "balance": balance["balance"]})
 
 
 # ---------------------------------------------------------------------------
@@ -636,6 +724,40 @@ async def api_route_start(request: web.Request):
     return web.json_response({"ok": True})
 
 
+async def api_cash_record(request: web.Request):
+    """Курьер отмечает "Наличные" у конкретного человека на точке (кнопка
+    рядом с "Поехали"/"Сдано" — выбор человека из people точки, см.
+    app.js: openCashModal). Только курьер и только по своей точке на эту
+    дату — та же проверка "mine", что и у api_route_complete."""
+    if request["role"] != "courier":
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or _today()
+    point = (body.get("point") or "").strip()
+    client_id = str(body.get("client_id") or "").strip()
+    try:
+        amount = int(body.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if not point or not client_id or amount <= 0:
+        return web.json_response({"error": "bad_request"}, status=400)
+    async with _route_lock:
+        route = await _retry_sheets(sheets.get_route_for_date, date_str)
+        tg_id = str(request["tg_id"])
+        point_data = next((p for p in route if p["point"] == point), None)
+        if not point_data or tg_id not in point_data["courier_tg_ids"]:
+            return web.json_response({"error": "forbidden"}, status=403)
+        person = next((p for p in point_data["people"] if p["client_id"] == client_id), None)
+        if not person:
+            return web.json_response({"error": "person_not_found"}, status=404)
+        await _retry_sheets(
+            sheets.record_cash_collection, date_str, tg_id, request["tg_name"], point,
+            client_id, person["name"], person["contact"], person.get("telegram", ""), amount,
+            retries=2,
+        )
+    return web.json_response({"ok": True})
+
+
 async def api_earnings(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
@@ -709,6 +831,10 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/couriers/manage", api_couriers_manage_list)
     app.router.add_post("/api/couriers/manage", api_couriers_manage_add)
     app.router.add_post("/api/couriers/manage/{tg_id}/kpi-hidden", api_courier_kpi_hidden_set)
+    app.router.add_post("/api/couriers/manage/{tg_id}/earnings", api_courier_earnings_set)
+    app.router.add_post("/api/couriers/manage/{tg_id}/settle", api_courier_settle)
+    app.router.add_get("/api/finance", api_courier_finance_get)
+    app.router.add_post("/api/cash", api_cash_record)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_post("/api/route/reorder", api_route_reorder)
     app.router.add_post("/api/route/pin", api_route_pin)

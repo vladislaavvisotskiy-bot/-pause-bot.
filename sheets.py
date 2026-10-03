@@ -2659,7 +2659,11 @@ def is_courier(tg_id) -> bool:
 def get_route_people(date_str: str) -> dict:
     """Люди с реальными (неотменёнными) заказами на дату, сгруппированные по
     точке доставки, затем по клиенту — {точка: [{"client_id","name",
-    "contact","comment","items":[{"set","qty"}]}]}."""
+    "contact","telegram","comment","items":[{"set","qty"}],"sum"}]}.
+    "sum" — сумма столбца "Сумма" (J, формула цена×количество) по ВСЕМ
+    строкам этого клиента за дату, для карточки точки в Mini App "Маршрут"
+    (см. app.js: buildCard) и как сумма по умолчанию при отметке
+    "Наличные" (см. record_cash_collection)."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
     clients = _clients_index()
@@ -2684,16 +2688,21 @@ def get_route_people(date_str: str) -> dict:
         client = clients.get(client_id) or {}
         name = client.get("name") or row[config.O_NAME - 1].strip() or client_id
         contact = client.get("contact") or row[config.O_CONTACT - 1].strip() or "Неизвестно"
+        telegram = client.get("telegram") or row[config.O_TELEGRAM - 1].strip()
 
         people = by_point.setdefault(point, {})
         person = people.setdefault(client_id, {
             "client_id": client_id, "name": name, "contact": contact,
-            "comment": comment, "items": [],
+            "telegram": telegram, "comment": comment, "items": [], "sum": 0,
         })
         person["items"].append({
             "set": row[config.O_SET - 1].strip(),
             "qty": row[config.O_QTY - 1].strip() or "0",
         })
+        try:
+            person["sum"] += int(float(row[config.O_SUM - 1].strip() or 0))
+        except ValueError:
+            pass
 
     return {point: list(people.values()) for point, people in by_point.items()}
 
@@ -3417,6 +3426,278 @@ def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
         point = row[config.ROUTE_POINT - 1].strip()
         total += dp_index.get(point, {}).get("rate", 0)
     return total
+
+
+# ---------------------------------------------------------------------------
+# Наличные и расчёты с курьером (Mini App "Маршрут", кнопка "Наличные" на
+# карточке точки + карточка курьера в "Центр управления" → "Курьеры").
+#
+# Три независимых листа:
+#   - SHEET_CASH_COLLECTIONS — кто из курьеров, у какого клиента и сколько
+#     собрал наличными (видно только админу, см. get_cash_entries).
+#   - SHEET_LOGISTICS_EXPENSES (уже существует выше, "Оплата за смену") —
+#     "Заработок": сколько админ начислил курьеру за день. Используется ТА
+#     ЖЕ запись/поле, что и в "Расходы на логистику" — по прямой просьбе
+#     это полностью независимо от расчёта по ставкам (get_courier_earnings
+#     выше), который эту карточку не трогает.
+#   - SHEET_COURIER_SETTLEMENTS — отметки админа "Забрал наличные у
+#     курьера" / "Доплатил курьеру", когда деньги физически передали.
+#
+# Баланс (get_courier_balance) — НАКОПИТЕЛЬНЫЙ, за всё время, не привязан к
+# периоду, который сейчас смотрит админ/курьер на экране: собранные
+# наличные и начисленный заработок копятся сами по себе, а расчёты —
+# единственное, что их уменьшает. Положительный баланс значит "курьер
+# должен передать деньги", отрицательный — "админ должен доплатить
+# курьеру". Это намеренно НЕ автоматика: сумма в балансе — просто
+# памятка, кто кому сколько должен прямо сейчас, а отметить физическую
+# передачу денег (целиком или частями) может только админ.
+# ---------------------------------------------------------------------------
+
+_CASH_HEADER = ["date", "courier_tg_id", "courier_name", "point", "client_id", "name", "contact", "telegram", "amount", "time"]
+_SETL_HEADER = ["date", "courier_tg_id", "courier_name", "type", "amount", "time"]
+
+
+def _iter_cash_rows(courier_tg_id=None, date_from: str = None, date_to: str = None):
+    """Сырые строки "Наличные", отфильтрованные по курьеру и/или периоду
+    (оба необязательны — без них отдаёт вообще все строки, для баланса за
+    всё время, см. get_courier_balance)."""
+    ws = _ws_or_create(config.SHEET_CASH_COLLECTIONS, _CASH_HEADER)
+    rows = ws.get_all_values()
+    target = str(courier_tg_id) if courier_tg_id is not None else None
+    d_from = d_to = None
+    if date_from and date_to:
+        try:
+            d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
+            d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
+        except ValueError:
+            return
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.CASH_DATA_START_ROW:
+            continue
+        if len(row) < config.CASH_TIME:
+            continue
+        if target is not None and row[config.CASH_COURIER_TG_ID - 1].strip() != target:
+            continue
+        if d_from is not None:
+            try:
+                d = dt.datetime.strptime(row[config.CASH_DATE - 1].strip(), "%d.%m.%Y")
+            except ValueError:
+                continue
+            if not (d_from <= d <= d_to):
+                continue
+        yield row
+
+
+def record_cash_collection(date_str: str, courier_tg_id, courier_name: str, point: str,
+                            client_id, name: str, contact: str, telegram: str, amount: int):
+    """Курьер отметил "Наличные" у конкретного человека на точке — пишет
+    строку в кассу (SHEET_CASH_COLLECTIONS) и синхронизирует статус оплаты
+    в "Заказы": все ещё не оплаченные строки этого клиента на этой точке
+    за дату становятся "Наличными" (та же механика, что и ручное
+    подтверждение админом, см. confirm_cash_payment), а в комментарий (M)
+    дописывается заглавными буквами "ПОДТВЕРЖДЕНО КУРЬЕРОМ <имя>" — по
+    прямой просьбе, чтобы это было видно прямо в таблице. Строка, бывшая
+    долгом ("В долг"), дополнительно получает config.DEBT_PAID_MARKER —
+    иначе она пропала бы из текущего долга (оплата сменилась), но не была
+    бы видна как ПОГАШЕННЫЙ долг в истории клиента (см. is_debt_paid_marked)."""
+    ws = _ws_or_create(config.SHEET_CASH_COLLECTIONS, _CASH_HEADER)
+    now = _now()
+    ws.append_row([
+        date_str, str(courier_tg_id), courier_name or "", point, str(client_id),
+        name or "", contact or "", telegram or "", str(int(amount)), now.strftime("%H:%M"),
+    ], value_input_option="RAW")
+
+    marker = (config.CASH_CONFIRMED_MARKER_PREFIX + " " + (courier_name or "")).strip().upper()
+    ows = _ws(config.SHEET_ORDERS)
+    rows = ows.get_all_values()
+    cells = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_CLIENT_ID:
+            continue
+        if row[config.O_DATE - 1].strip() != date_str:
+            continue
+        if row[config.O_POINT - 1].strip() != point:
+            continue
+        if row[config.O_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
+        if payment in ("Картой", "Наличными"):
+            continue  # уже оплачено — не трогаем
+        was_debt = payment == "В долг"
+        cur_comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        cells.append(gspread.Cell(r, config.O_PAYMENT, "Наличными"))
+        new_comment = cur_comment
+        if marker not in new_comment:
+            new_comment = f"{new_comment} | {marker}" if new_comment else marker
+        if was_debt and not is_debt_paid_marked(new_comment):
+            new_comment = f"{new_comment} | {config.DEBT_PAID_MARKER}" if new_comment else config.DEBT_PAID_MARKER
+        if new_comment != cur_comment:
+            cells.append(gspread.Cell(r, config.O_COMMENT, new_comment))
+    if cells:
+        ows.update_cells(cells, value_input_option="RAW")
+    _invalidate_orders_raw_cache()
+
+
+def get_cash_total(courier_tg_id, date_from: str = None, date_to: str = None) -> int:
+    """Сумма наличных, собранных курьером (за период, либо за всё время,
+    если date_from/date_to не переданы) — для "Мои доходы" (курьер) и
+    карточки курьера в "Курьеры" (админ)."""
+    total = 0
+    for row in _iter_cash_rows(courier_tg_id, date_from, date_to):
+        try:
+            total += int(row[config.CASH_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            pass
+    return total
+
+
+def get_cash_entries(courier_tg_id, date_from: str, date_to: str) -> list:
+    """Подробный список сборов наличных курьера за период — ТОЛЬКО для
+    админа (карточка курьера в "Курьеры"): кто из клиентов, когда, сколько
+    и на какой точке дал наличные, с контактами — по прямой просьбе курьер
+    этого списка не видит, только свою сумму (см. get_cash_total)."""
+    out = []
+    for row in _iter_cash_rows(courier_tg_id, date_from, date_to):
+        try:
+            amount = int(row[config.CASH_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        out.append({
+            "date": row[config.CASH_DATE - 1].strip(),
+            "time": row[config.CASH_TIME - 1].strip(),
+            "point": row[config.CASH_POINT - 1].strip(),
+            "client_id": row[config.CASH_CLIENT_ID - 1].strip(),
+            "name": row[config.CASH_NAME - 1].strip(),
+            "contact": row[config.CASH_CONTACT - 1].strip(),
+            "telegram": row[config.CASH_TELEGRAM - 1].strip(),
+            "amount": amount,
+        })
+    out.sort(key=lambda e: (e["date"], e["time"]), reverse=True)
+    return out
+
+
+def get_route_cash_totals(date_str: str) -> dict:
+    """{точка: сумма наличных, собранных на ней за дату} — для синего
+    бейджа "Наличные" на карточке точки (см. app.js: buildCard,
+    api_route_get: "cash")."""
+    totals = {}
+    for row in _iter_cash_rows(None, date_str, date_str):
+        point = row[config.CASH_POINT - 1].strip()
+        try:
+            amount = int(row[config.CASH_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        totals[point] = totals.get(point, 0) + amount
+    return totals
+
+
+def _iter_logistics_rows(courier_tg_id=None, date_from: str = None, date_to: str = None):
+    """Как _iter_cash_rows, но по SHEET_LOGISTICS_EXPENSES ("Заработок" /
+    "Оплата за смену") — см. get_logistics_total_for_courier."""
+    ws = _ws_or_create(
+        config.SHEET_LOGISTICS_EXPENSES,
+        ["date", "courier_tg_id", "courier_name", "shift_pay", "updated"],
+    )
+    rows = ws.get_all_values()
+    target = str(courier_tg_id) if courier_tg_id is not None else None
+    d_from = d_to = None
+    if date_from and date_to:
+        try:
+            d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
+            d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
+        except ValueError:
+            return
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.LOG_DATA_START_ROW:
+            continue
+        if len(row) < config.LOG_SHIFT_PAY:
+            continue
+        if target is not None and row[config.LOG_COURIER_TG_ID - 1].strip() != target:
+            continue
+        if d_from is not None:
+            try:
+                d = dt.datetime.strptime(row[config.LOG_DATE - 1].strip(), "%d.%m.%Y")
+            except ValueError:
+                continue
+            if not (d_from <= d <= d_to):
+                continue
+        yield row
+
+
+def get_logistics_total_for_courier(courier_tg_id, date_from: str = None, date_to: str = None) -> int:
+    """Сумма "Заработок" (= "Оплата за смену", см. set_logistics_expense —
+    то же поле, что и в "Расходы на логистику") курьера за период, либо за
+    всё время без date_from/date_to (для баланса, см. get_courier_balance)."""
+    total = 0
+    for row in _iter_logistics_rows(courier_tg_id, date_from, date_to):
+        try:
+            total += int(row[config.LOG_SHIFT_PAY - 1].strip() or 0)
+        except ValueError:
+            pass
+    return total
+
+
+def record_courier_settlement(courier_tg_id, courier_name: str, settlement_type: str, amount: int):
+    """Админ отметил физическую передачу денег — "Забрал наличные у
+    курьера" или "Доплатил курьеру" (см. config.SETTLEMENT_TYPE_*),
+    целиком или частями. Уменьшает баланс (см. get_courier_balance)."""
+    ws = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER)
+    now = _now()
+    ws.append_row([
+        today_date_str(), str(courier_tg_id), courier_name or "", settlement_type,
+        str(int(amount)), now.strftime("%H:%M"),
+    ], value_input_option="RAW")
+
+
+def get_courier_settlement_totals(courier_tg_id) -> dict:
+    """{"cash_received": сколько админ забрал наличными у курьера,
+    "paid": сколько доплатил курьеру} — за всё время (расчёты не
+    привязаны к периоду просмотра, см. get_courier_balance)."""
+    ws = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER)
+    rows = ws.get_all_values()
+    target = str(courier_tg_id)
+    cash_received = 0
+    paid = 0
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.SETL_DATA_START_ROW:
+            continue
+        if len(row) < config.SETL_TIME:
+            continue
+        if row[config.SETL_COURIER_TG_ID - 1].strip() != target:
+            continue
+        try:
+            amount = int(row[config.SETL_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        settlement_type = row[config.SETL_TYPE - 1].strip()
+        if settlement_type == config.SETTLEMENT_TYPE_CASH_RECEIVED:
+            cash_received += amount
+        elif settlement_type == config.SETTLEMENT_TYPE_PAID_COURIER:
+            paid += amount
+    return {"cash_received": cash_received, "paid": paid}
+
+
+def get_courier_balance(courier_tg_id) -> dict:
+    """Текущий баланс курьера — см. комментарий в начале этого раздела.
+    balance > 0 — курьер должен передать деньги админу; balance < 0 —
+    админ должен доплатить курьеру."""
+    total_cash = get_cash_total(courier_tg_id)
+    total_earned = get_logistics_total_for_courier(courier_tg_id)
+    settlements = get_courier_settlement_totals(courier_tg_id)
+    balance = (total_cash - settlements["cash_received"]) - (total_earned - settlements["paid"])
+    return {
+        "total_cash": total_cash,
+        "total_earned": total_earned,
+        "cash_received_by_admin": settlements["cash_received"],
+        "paid_to_courier": settlements["paid"],
+        "balance": balance,
+    }
 
 
 # ---------------------------------------------------------------------------

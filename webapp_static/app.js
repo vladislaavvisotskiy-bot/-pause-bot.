@@ -33,9 +33,13 @@
                            // админов именно этого Mini App, не у основного админа бота
     logisticsDateISO: null,
     starts: {},          // {courier_tg_id: "ЧЧ:ММ"} — время "Старта" на state.date, см. renderStartBadge
+    cash: {},             // {точка: сумма наличных, собранных на ней за state.date}, см. buildCard
     kpiPeriod: "today",   // "today" | "7d" | "30d" | "custom" — период для шкалы эффективности в Профиле
     kpiCustomFrom: null,  // ISO (YYYY-MM-DD) — для kpiPeriod "custom"
     kpiCustomTo: null,
+    financePeriod: "today",   // то же самое, но для "Заработок и наличные" (Мои доходы / Курьеры)
+    financeCustomFrom: null,
+    financeCustomTo: null,
   };
 
   // Тёплая палитра для цветов курьеров на вкладке "Все" (см. renderMap,
@@ -579,6 +583,21 @@
     sub.textContent = subParts.join(" · ");
     main.appendChild(addr);
     main.appendChild(sub);
+
+    // "Наличные" — сумма, собранная на этой точке за дату (см.
+    // state.cash, заполняется из /api/route: "cash" — см. loadRoute).
+    // Отдельной строкой ВНУТРИ main (не ещё одним тегом в head рядом со
+    // "Следующая"/"Сдано") — два flex:0 тега в и так тесном head на узком
+    // экране выжимали card-address/card-sub почти до нуля ширины и
+    // ломали перенос текста; здесь же main сам ограничивает ширину.
+    var cashAtPoint = (state.cash && state.cash[point.point]) || 0;
+    if (cashAtPoint > 0) {
+      var cashLine = document.createElement("div");
+      cashLine.className = "card-cash-line";
+      cashLine.textContent = "Наличные " + fmtSum(cashAtPoint);
+      main.appendChild(cashLine);
+    }
+
     head.appendChild(main);
 
     var tagHtml = statusTag(point, active);
@@ -757,6 +776,9 @@
       } else {
         line1.textContent = p.contact + " · " + itemsText(p.items);
       }
+      if (p.sum) {
+        line1.appendChild(document.createTextNode(" · " + fmtSum(p.sum)));
+      }
       pDiv.appendChild(name);
       pDiv.appendChild(line1);
       if (p.comment) {
@@ -786,6 +808,22 @@
       actions.appendChild(goBtn);
       actions.appendChild(doneBtn);
       card.appendChild(actions);
+
+      // "Наличные" — отдельной строкой под основными кнопками, не толкает
+      // их (это не "обязательное" действие на каждой точке, в отличие от
+      // "Поехали"/"Сдано"). Открывает список людей на точке, см.
+      // openCashModal.
+      var cashRow = document.createElement("div");
+      cashRow.className = "card-actions-secondary";
+      var cashBtn = document.createElement("button");
+      cashBtn.className = "btn-ghost cash-btn";
+      cashBtn.textContent = "💵 Наличные";
+      cashBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openCashModal(point);
+      });
+      cashRow.appendChild(cashBtn);
+      card.appendChild(cashRow);
     }
 
     if (state.expanded[point.point]) card.classList.add("expanded");
@@ -925,6 +963,7 @@
       state.depot = data.depot || null;
       state.visible = data.visible !== false;
       state.starts = data.starts || {};
+      state.cash = data.cash || {};
       render();
     }).catch(function (err) {
       toast("Не удалось загрузить маршрут: " + err.message);
@@ -1315,21 +1354,298 @@
   }
 
   // -------------------------------------------------------------------
-  // "Мои доходы" (курьер, не являющийся админом Mini App) — заглушка на
-  // будущее, по прямой просьбе: полноценного расчёта заработка пока нет,
-  // раздел только обозначен.
+  // "Наличные" — курьер отмечает, что получил деньги от конкретного
+  // человека на точке (кнопка на карточке, см. buildCard). Модалка в два
+  // шага: список людей на точке -> сумма для выбранного.
   // -------------------------------------------------------------------
 
-  var ICON_WALLET_BIG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="56" height="56"><rect x="2.5" y="6" width="19" height="13.5" rx="3"/><path d="M2.5 10.5h19"/><circle cx="16" cy="14.5" r="1.2" fill="currentColor" stroke="none"/></svg>';
+  function openCashModal(point) {
+    renderCashPersonList(point);
+    document.getElementById("cash-modal").hidden = false;
+  }
 
-  function renderEarningsStub(root) {
-    root.innerHTML = "";
-    var wrap = el("div", "earnings-stub");
-    wrap.innerHTML =
-      ICON_WALLET_BIG +
-      '<div class="earnings-stub-title">Раздел в разработке</div>' +
-      '<div class="earnings-stub-text">Скоро здесь появится ваш заработок — за день, за месяц, по сменам.</div>';
-    root.appendChild(wrap);
+  function renderCashPersonList(point) {
+    document.getElementById("cash-modal-title").textContent = "Наличные — кто дал?";
+    var body = document.getElementById("cash-modal-body");
+    body.innerHTML = "";
+    if (!point.people.length) {
+      body.innerHTML = "<div class=\"modal-list-empty\">На точке нет заказов</div>";
+      return;
+    }
+    var list = document.createElement("div");
+    list.className = "modal-list";
+    point.people.forEach(function (p) {
+      var item = document.createElement("div");
+      item.className = "modal-list-item";
+      item.innerHTML = escapeHtml(p.name) +
+        '<div class="modal-list-item-sub">' + fmtSum(p.sum) + "</div>";
+      item.addEventListener("click", function () {
+        haptic("select");
+        renderCashAmountView(point, p);
+      });
+      list.appendChild(item);
+    });
+    body.appendChild(list);
+  }
+
+  function renderCashAmountView(point, person) {
+    document.getElementById("cash-modal-title").textContent = "Наличные — " + person.name;
+    var body = document.getElementById("cash-modal-body");
+    body.innerHTML = "";
+
+    var backBtn = document.createElement("button");
+    backBtn.className = "btn-text";
+    backBtn.textContent = "← Назад к списку";
+    backBtn.addEventListener("click", function () { renderCashPersonList(point); });
+    body.appendChild(backBtn);
+
+    var field = el("div", "field");
+    field.innerHTML = "<label>Сумма, которую дал клиент</label>";
+    var input = document.createElement("input");
+    input.type = "number";
+    input.inputMode = "numeric";
+    input.min = "0";
+    input.placeholder = "0";
+    input.value = person.sum ? person.sum : "";
+    field.appendChild(input);
+    body.appendChild(field);
+
+    var confirmBtn = el("button", "btn-primary wizard-footer-btn", "Подтвердить");
+    confirmBtn.addEventListener("click", function () {
+      var amount = parseInt(input.value, 10);
+      if (!amount || amount <= 0) { toast("Введите сумму"); return; }
+      confirmBtn.disabled = true;
+      api("/api/cash", {
+        method: "POST",
+        body: { date: state.date, point: point.point, client_id: person.client_id, amount: amount },
+      }).then(function () {
+        haptic("success");
+        toast("Записано: " + fmtSum(amount) + " от " + person.name);
+        document.getElementById("cash-modal").hidden = true;
+        return loadRoute(state.date);
+      }).catch(function (err) {
+        confirmBtn.disabled = false;
+        toast("Не удалось записать: " + err.message);
+      });
+    });
+    body.appendChild(confirmBtn);
+  }
+
+  // -------------------------------------------------------------------
+  // "Заработок и наличные" — "Мои доходы" (курьер, свои данные без
+  // контактов клиентов) и карточка курьера в "Курьеры" (админ, видит
+  // контакты из get_cash_entries и может отмечать расчёты) — один и тот
+  // же UI (см. renderFinanceSection), отличается только courierTgId
+  // (null = свои данные) и isAdmin (показывать entries/кнопки расчёта).
+  //
+  // "К расчёту" — баланс за ВСЁ ВРЕМЯ (balance из /api/finance), не
+  // зависит от выбранного периода чипов ("Сегодня"/"7 дней"/…) — те
+  // влияют только на "Заработано"/"Собрано наличными" ниже. positive —
+  // курьер должен передать деньги, negative — нужно доплатить курьеру
+  // (см. config.py: get_courier_balance).
+  // -------------------------------------------------------------------
+
+  function financeRangeForPeriod() {
+    var today = todayRuDate();
+    if (state.financePeriod === "7d") return { from: shiftRuDate(today, -6), to: today };
+    if (state.financePeriod === "30d") return { from: shiftRuDate(today, -29), to: today };
+    if (state.financePeriod === "custom" && state.financeCustomFrom && state.financeCustomTo) {
+      return { from: isoToRu(state.financeCustomFrom), to: isoToRu(state.financeCustomTo) };
+    }
+    return { from: today, to: today };
+  }
+
+  function renderFinanceSection(container, courierTgId, isAdmin) {
+    container.innerHTML = "";
+
+    var periodRow = el("div", "feed-filters");
+    KPI_PERIODS.forEach(function (p) {
+      var chip = el("button", "filter-chip" + (state.financePeriod === p[0] ? " active" : ""), p[1]);
+      chip.addEventListener("click", function () {
+        haptic("select");
+        state.financePeriod = p[0];
+        renderFinanceSection(container, courierTgId, isAdmin);
+      });
+      periodRow.appendChild(chip);
+    });
+    container.appendChild(periodRow);
+
+    if (state.financePeriod === "custom") {
+      var rangeRow = el("div", "date-picker-row");
+      var fromField = el("div", "field");
+      fromField.innerHTML = "<label>С</label>";
+      var fromInput = document.createElement("input");
+      fromInput.type = "date";
+      fromInput.value = state.financeCustomFrom || ruToIso(todayRuDate());
+      fromField.appendChild(fromInput);
+      var toField = el("div", "field");
+      toField.innerHTML = "<label>По</label>";
+      var toInput = document.createElement("input");
+      toInput.type = "date";
+      toInput.value = state.financeCustomTo || ruToIso(todayRuDate());
+      toField.appendChild(toInput);
+      rangeRow.appendChild(fromField);
+      rangeRow.appendChild(toField);
+      container.appendChild(rangeRow);
+
+      var applyBtn = el("button", "btn-ghost", "Показать");
+      applyBtn.addEventListener("click", function () {
+        state.financeCustomFrom = fromInput.value;
+        state.financeCustomTo = toInput.value;
+        loadFinance(body, courierTgId, isAdmin);
+      });
+      container.appendChild(applyBtn);
+    }
+
+    var body = el("div", "finance-body");
+    body.appendChild(el("div", "skeleton-block"));
+    container.appendChild(body);
+
+    if (state.financePeriod !== "custom" || (state.financeCustomFrom && state.financeCustomTo)) {
+      loadFinance(body, courierTgId, isAdmin);
+    }
+  }
+
+  function loadFinance(body, courierTgId, isAdmin) {
+    var range = financeRangeForPeriod();
+    var url = "/api/finance?from=" + encodeURIComponent(range.from) + "&to=" + encodeURIComponent(range.to);
+    if (courierTgId) url += "&courier_tg_id=" + encodeURIComponent(courierTgId);
+    api(url).then(function (data) {
+      renderFinanceBody(body, data, courierTgId, isAdmin);
+    }).catch(function (err) {
+      body.innerHTML = "";
+      body.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+    });
+  }
+
+  function financeBalanceInfo(balance) {
+    if (balance > 0) return { text: "Курьер должен передать " + fmtSum(balance), color: "var(--accent-warm)" };
+    if (balance < 0) return { text: "Нужно доплатить курьеру " + fmtSum(-balance), color: "var(--info)" };
+    return { text: "Рассчитались", color: "var(--success)" };
+  }
+
+  function renderFinanceBody(body, data, courierTgId, isAdmin) {
+    body.innerHTML = "";
+
+    var statsCard = el("div", "card finance-stats-card");
+    var earnedRow = el("div", "finance-stat-row");
+    earnedRow.appendChild(el("span", null, "Заработано"));
+    earnedRow.appendChild(el("strong", null, fmtSum(data.earned)));
+    statsCard.appendChild(earnedRow);
+    var collectedRow = el("div", "finance-stat-row");
+    collectedRow.appendChild(el("span", null, "Собрано наличными"));
+    collectedRow.appendChild(el("strong", null, fmtSum(data.collected)));
+    statsCard.appendChild(collectedRow);
+    body.appendChild(statsCard);
+
+    var info = financeBalanceInfo(data.balance);
+    var balanceCard = el("div", "card finance-balance-card");
+    balanceCard.appendChild(el("div", "finance-balance-label", "К расчёту"));
+    var balanceValue = el("div", "finance-balance-value", info.text);
+    balanceValue.style.color = info.color;
+    balanceCard.appendChild(balanceValue);
+
+    if (isAdmin) {
+      var formWrap = el("div", "finance-settle-form");
+      formWrap.hidden = true;
+
+      function openSettleForm(type, label, defaultAmount) {
+        formWrap.innerHTML = "";
+        formWrap.hidden = false;
+        var field = el("div", "field");
+        field.innerHTML = "<label>" + escapeHtml(label) + "</label>";
+        var input = document.createElement("input");
+        input.type = "number";
+        input.inputMode = "numeric";
+        input.min = "0";
+        input.value = defaultAmount > 0 ? defaultAmount : "";
+        field.appendChild(input);
+        formWrap.appendChild(field);
+
+        var actionsRow = el("div", "finance-settle-actions");
+        var confirmBtn = el("button", "btn-primary", "Подтвердить");
+        var cancelBtn = el("button", "btn-ghost", "Отмена");
+        confirmBtn.addEventListener("click", function () {
+          var amount = parseInt(input.value, 10);
+          if (!amount || amount <= 0) { toast("Введите сумму"); return; }
+          confirmBtn.disabled = true;
+          api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/settle", {
+            method: "POST", body: { type: type, amount: amount },
+          }).then(function () {
+            haptic("success");
+            toast("Записано");
+            loadFinance(body, courierTgId, isAdmin);
+          }).catch(function (err) {
+            confirmBtn.disabled = false;
+            toast("Не удалось: " + err.message);
+          });
+        });
+        cancelBtn.addEventListener("click", function () { formWrap.hidden = true; });
+        actionsRow.appendChild(confirmBtn);
+        actionsRow.appendChild(cancelBtn);
+        formWrap.appendChild(actionsRow);
+      }
+
+      var settleRow = el("div", "finance-settle-row");
+      var cashBtn = el("button", "btn-ghost", "Забрал наличные");
+      cashBtn.addEventListener("click", function () {
+        openSettleForm("Забрал наличные", "Сколько наличных забрали у курьера",
+          data.balance > 0 ? data.balance : 0);
+      });
+      var payBtn = el("button", "btn-ghost", "Доплатил курьеру");
+      payBtn.addEventListener("click", function () {
+        openSettleForm("Доплатил курьеру", "Сколько доплатили курьеру",
+          data.balance < 0 ? -data.balance : 0);
+      });
+      settleRow.appendChild(cashBtn);
+      settleRow.appendChild(payBtn);
+      balanceCard.appendChild(settleRow);
+      balanceCard.appendChild(formWrap);
+    }
+
+    body.appendChild(balanceCard);
+
+    if (isAdmin && data.entries) {
+      body.appendChild(el("div", "profile-section-title", "Кто дал наличные"));
+      if (!data.entries.length) {
+        body.appendChild(el("div", "empty-note", "За выбранный период наличных не было."));
+      } else {
+        var entriesCard = el("div", "card");
+        data.entries.forEach(function (e, idx) {
+          var row = el("div", "cash-entry" + (idx ? " cash-entry-sep" : ""));
+          var head = el("div", "cash-entry-head");
+          head.appendChild(el("div", "cash-entry-name", escapeHtml(e.name || e.client_id)));
+          head.appendChild(el("strong", "cash-entry-amount", fmtSum(e.amount)));
+          row.appendChild(head);
+          row.appendChild(el(
+            "div", "cash-entry-sub",
+            escapeHtml(e.point) + " · " + escapeHtml(e.date) + " " + escapeHtml(e.time)
+          ));
+
+          var contactsRow = el("div", "cash-entry-contacts");
+          var tel = telHref(e.contact);
+          if (tel) {
+            var phoneLink = document.createElement("a");
+            phoneLink.href = tel;
+            phoneLink.className = "cash-entry-contact-btn";
+            phoneLink.textContent = e.contact;
+            contactsRow.appendChild(phoneLink);
+          }
+          if (e.telegram) {
+            var username = e.telegram.replace(/^@/, "");
+            var tgBtn = el("button", "cash-entry-contact-btn", "@" + escapeHtml(username));
+            tgBtn.addEventListener("click", function () {
+              window.location.href = "tg://resolve?domain=" + username;
+            });
+            contactsRow.appendChild(tgBtn);
+          }
+          if (contactsRow.childNodes.length) row.appendChild(contactsRow);
+
+          entriesCard.appendChild(row);
+        });
+        body.appendChild(entriesCard);
+      }
+    }
   }
 
   // -------------------------------------------------------------------
@@ -2134,6 +2450,53 @@
     kpiRow.appendChild(switchLabel);
     kpiCard.appendChild(kpiRow);
     root.appendChild(kpiCard);
+
+    // "Заработок" — то, что админ начислил курьеру за конкретный день
+    // (то же поле, что и "Расходы на логистику" → "Оплата за смену", см.
+    // sheets.set_logistics_expense) — полностью независимо от расчёта по
+    // ставкам за сданные точки, по прямой просьбе.
+    var earningsCard = el("div", "card");
+    earningsCard.appendChild(el("div", "profile-section-title", "Заработок"));
+    var earningsRow = el("div", "date-picker-row");
+    var earningsDateField = el("div", "field");
+    earningsDateField.innerHTML = "<label>Дата</label>";
+    var earningsDateInput = document.createElement("input");
+    earningsDateInput.type = "date";
+    earningsDateInput.value = ruToIso(todayRuDate());
+    earningsDateField.appendChild(earningsDateInput);
+    var earningsAmountField = el("div", "field");
+    earningsAmountField.innerHTML = "<label>Сумма за день</label>";
+    var earningsAmountInput = document.createElement("input");
+    earningsAmountInput.type = "number";
+    earningsAmountInput.inputMode = "numeric";
+    earningsAmountInput.min = "0";
+    earningsAmountInput.placeholder = "0";
+    earningsAmountField.appendChild(earningsAmountInput);
+    earningsRow.appendChild(earningsDateField);
+    earningsRow.appendChild(earningsAmountField);
+    earningsCard.appendChild(earningsRow);
+    var earningsSaveBtn = el("button", "btn-ghost", "Сохранить");
+    earningsSaveBtn.addEventListener("click", function () {
+      var amount = parseInt(earningsAmountInput.value, 10) || 0;
+      earningsSaveBtn.disabled = true;
+      api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/earnings", {
+        method: "POST",
+        body: { date: isoToRu(earningsDateInput.value), amount: amount },
+      }).then(function () {
+        haptic("success");
+        toast("Заработок сохранён");
+        financeContainer.innerHTML = "";
+        renderFinanceSection(financeContainer, courier.tg_id, true);
+      }).catch(function (err) {
+        toast("Не удалось сохранить: " + err.message);
+      }).then(function () { earningsSaveBtn.disabled = false; });
+    });
+    earningsCard.appendChild(earningsSaveBtn);
+    root.appendChild(earningsCard);
+
+    var financeContainer = el("div");
+    root.appendChild(financeContainer);
+    renderFinanceSection(financeContainer, courier.tg_id, true);
   }
 
   // -------------------------------------------------------------------
@@ -2202,7 +2565,9 @@
       }));
     } else {
       rows.appendChild(buildProfileRow(ICON_WALLET, "Мои доходы", function () {
-        openProfileSubscreen("Мои доходы", renderEarningsStub);
+        openProfileSubscreen("Мои доходы", function (root) {
+          renderFinanceSection(root, null, false);
+        });
       }));
     }
     root.appendChild(rows);
@@ -2285,6 +2650,13 @@
     });
     document.getElementById("courier-picker-modal").addEventListener("click", function (e) {
       if (e.target.id === "courier-picker-modal") e.target.hidden = true;
+    });
+
+    document.getElementById("cash-modal-cancel").addEventListener("click", function () {
+      document.getElementById("cash-modal").hidden = true;
+    });
+    document.getElementById("cash-modal").addEventListener("click", function (e) {
+      if (e.target.id === "cash-modal") e.target.hidden = true;
     });
 
     document.getElementById("confirm-modal-yes").addEventListener("click", function () {

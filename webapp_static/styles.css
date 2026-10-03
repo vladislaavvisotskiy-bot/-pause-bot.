@@ -17,6 +17,8 @@
   --accent-warm-soft: rgba(177, 68, 46, 0.12);
   --success: #3f7d4f;
   --success-soft: rgba(63, 125, 79, 0.14);
+  --info: #2f6690;
+  --info-soft: rgba(47, 102, 144, 0.14);
   --radius-lg: 20px;
   --radius-md: 14px;
   --radius-sm: 10px;
@@ -263,6 +265,7 @@ p { margin: 0; color: var(--ink-soft); }
   margin-bottom: 8px;
 }
 .modal-list-item:active { background: var(--ink-soft-bg); }
+.modal-list-item-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
 .modal-list-empty { color: var(--ink-soft); text-align: center; padding: 24px 10px; font-size: 14px; }
 
 .empty-note, .empty-state {
@@ -768,6 +771,17 @@ p { margin: 0; color: var(--ink-soft); }
 .card-status-tag.done { background: var(--success-soft); color: var(--success); }
 .card-status-tag.active { background: var(--accent-warm-soft); color: var(--accent-warm); }
 
+.card-cash-line {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: var(--info-soft);
+  color: var(--info);
+}
+
 .card-chevron { flex: 0 0 auto; color: var(--ink-soft); transition: transform .15s; }
 .card.expanded .card-chevron { transform: rotate(180deg); }
 
@@ -821,6 +835,10 @@ p { margin: 0; color: var(--ink-soft); }
 .card-actions { display: flex; gap: 10px; margin-top: 16px; }
 .card-actions .btn-primary { margin-top: 0; }
 
+/* "Наличные" — отдельной необязательной строкой под "Поехали"/"Сдано",
+   не конкурирует с ними визуально (btn-ghost, не btn-primary). */
+.card-actions-secondary { margin-top: 8px; }
+
 .route-comment-block {
   background: var(--ink-soft-bg);
   border-radius: var(--radius-sm);
@@ -870,3 +888,54 @@ p { margin: 0; color: var(--ink-soft); }
   opacity: 0.9;
 }
 .route-comment-save { margin-top: 6px; width: auto; display: inline-block; padding: 6px 2px; }
+
+/* ------------------------------------------------------------------ */
+/* "Заработок и наличные" — "Мои доходы" (курьер) и карточка курьера    */
+/* в "Курьеры" (админ), см. app.js: renderFinanceSection/renderFinanceBody */
+/* ------------------------------------------------------------------ */
+
+.finance-body { margin-top: 4px; }
+
+.finance-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 0;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+.finance-stat-row + .finance-stat-row { border-top: 1px solid var(--line); }
+
+.finance-balance-card { text-align: center; }
+.finance-balance-label {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.finance-balance-value { font-size: 17px; font-weight: 700; margin-top: 6px; }
+
+.finance-settle-row { display: flex; gap: 10px; margin-top: 16px; }
+.finance-settle-form { margin-top: 14px; text-align: left; }
+.finance-settle-actions { display: flex; gap: 10px; margin-top: 10px; }
+
+.cash-entry { padding: 10px 0; }
+.cash-entry-sep { border-top: 1px solid var(--line); }
+.cash-entry-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.cash-entry-name { font-weight: 600; color: var(--ink); }
+.cash-entry-amount { color: var(--info); font-size: 14.5px; }
+.cash-entry-sub { color: var(--ink-soft); font-size: 12.5px; margin-top: 2px; }
+.cash-entry-contacts { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.cash-entry-contact-btn {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  text-decoration: none;
+}
+.cash-entry-contact-btn:active { background: var(--ink-soft-bg); }
