@@ -3118,6 +3118,7 @@ def get_couriers() -> list:
             "kpi_hidden": (row[config.COURIER_KPI_HIDDEN - 1].strip().lower() == "да") if len(row) >= config.COURIER_KPI_HIDDEN else False,
             "is_route_admin": (row[config.COURIER_IS_ROUTE_ADMIN - 1].strip().lower() == "да") if len(row) >= config.COURIER_IS_ROUTE_ADMIN else False,
             "disabled": (row[config.COURIER_DISABLED - 1].strip().lower() == "да") if len(row) >= config.COURIER_DISABLED else False,
+            "notify_off": (row[config.COURIER_NOTIFY_OFF - 1].strip().lower() == "да") if len(row) >= config.COURIER_NOTIFY_OFF else False,
         })
     _cache["couriers"] = out
     _cache["couriers_ts"] = now
@@ -3195,6 +3196,14 @@ def set_courier_disabled(tg_id: str, disabled: bool) -> bool:
     return _set_courier_flag(tg_id, config.COURIER_DISABLED, "Да" if disabled else "")
 
 
+def set_courier_notify_off(tg_id: str, off: bool) -> bool:
+    """Включает/выключает пуш о готовности маршрута (см. webapp.
+    _notify_couriers_route_ready) для ОДНОГО курьера — сам доступ к
+    Mini App при этом не трогается, в отличие от set_courier_disabled.
+    Доступно ЛЮБОМУ администратору "Маршрута"."""
+    return _set_courier_flag(tg_id, config.COURIER_NOTIFY_OFF, "Да" if off else "")
+
+
 def add_courier(tg_id: str, name: str, phone: str = ""):
     """Добавляет курьера в "Курьеры" — тот же лист, который раньше
     приходилось заполнять руками (см. "Профиль" → "Центр управления" →
@@ -3202,8 +3211,19 @@ def add_courier(tg_id: str, name: str, phone: str = ""):
     обновляет на месте имя/телефон (не плодит дубликаты, позволяет
     поправить опечатку), иначе дописывает новую строку; "Статус" у новой
     строки остаётся пустым (тот же смысл, что и раньше — свободная
-    заметка админа, которую можно вписать потом прямо в таблицу)."""
+    заметка админа, которую можно вписать потом прямо в таблицу).
+
+    _ensure_sheet_columns — та же защита, что уже стоит в
+    _set_courier_flag (переключатели "Курьеры"): реальный лист мог быть
+    заведён на меньшее число столбцов, чем сейчас нужно коду, и запись ЗА
+    пределами текущей сетки Google Sheets отклоняет ошибкой ("exceeds
+    grid limits") — это уже ловилось на переключателях и было
+    воспроизведено на реальной таблице; add_courier писал тем же append_row
+    без этой защиты, так что сама ДОБАВКА курьера могла падать той же
+    ошибкой на более старых таблицах, прежде чем до переключателей вообще
+    доходило дело."""
     ws = _ws(config.SHEET_COURIERS)
+    _ensure_sheet_columns(ws, config.COURIER_PHONE)
     rows = ws.get_all_values()
     target = str(tg_id).strip()
     for i, row in enumerate(rows):
@@ -3241,11 +3261,18 @@ def is_courier(tg_id) -> bool:
 def get_route_people(date_str: str) -> dict:
     """Люди с реальными (неотменёнными) заказами на дату, сгруппированные по
     точке доставки, затем по клиенту — {точка: [{"client_id","name",
-    "contact","telegram","comment","items":[{"set","qty"}],"sum"}]}.
+    "contact","telegram","items":[{"set","qty"}],"sum"}]}.
     "sum" — сумма столбца "Сумма" (J, формула цена×количество) по ВСЕМ
     строкам этого клиента за дату, для карточки точки в Mini App "Маршрут"
     (см. app.js: buildCard) и как сумма по умолчанию при отметке
-    "Наличные" (см. record_cash_collection)."""
+    "Наличные" (см. record_cash_collection).
+
+    Столбец "Комментарии" (O_COMMENT) читаем ТОЛЬКО чтобы отсеять
+    отменённые заказы (is_canceled) — в сам словарь больше не кладём: это
+    комментарий клиента для кухни (например конкретный адрес/подъезд или
+    просьба к блюду), курьерам видеть его не нужно и раньше не было
+    задумано — по прямой просьбе убрано после того, как комментарий на
+    одну из точек ("Uzcard Office") оказался виден курьеру."""
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()
     clients = _clients_index()
@@ -3275,7 +3302,7 @@ def get_route_people(date_str: str) -> dict:
         people = by_point.setdefault(point, {})
         person = people.setdefault(client_id, {
             "client_id": client_id, "name": name, "contact": contact,
-            "telegram": telegram, "comment": comment, "items": [], "sum": 0,
+            "telegram": telegram, "items": [], "sum": 0,
         })
         person["items"].append({
             "set": row[config.O_SET - 1].strip(),

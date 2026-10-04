@@ -781,12 +781,6 @@
       }
       pDiv.appendChild(name);
       pDiv.appendChild(line1);
-      if (p.comment) {
-        var line2 = document.createElement("div");
-        line2.className = "person-line";
-        line2.textContent = "💬 " + p.comment;
-        pDiv.appendChild(line2);
-      }
       body.appendChild(pDiv);
     });
 
@@ -2897,6 +2891,29 @@
       }
     ));
     var accessInputRef = card.lastChild.querySelector("input");
+
+    // "Уведомления" — только пуш о готовности маршрута (см. webapp.py:
+    // _notify_couriers_route_ready), который уходит, когда админ включает
+    // видимость маршрута в "Центр управления" → "Видимость маршрутов".
+    // Доступ к самому Mini App не трогает — для этого переключатель выше.
+    card.appendChild(buildToggleRow(
+      "Уведомления",
+      "Присылать ли этому курьеру уведомление, когда администратор открывает ему видимость маршрута. Доступ к самому приложению не меняет — это отдельный переключатель выше.",
+      !courier.notify_off,
+      function (checkedNow) {
+        var off = !checkedNow;
+        return api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/notify-off", { method: "POST", body: { off: off } })
+          .then(function () {
+            courier.notify_off = off;
+            toast(off ? "Уведомления выключены" : "Уведомления включены");
+          })
+          .catch(function (err) {
+            toggleRevert(notifyInputRef);
+            toast("Не удалось изменить: " + err.message);
+          });
+      }
+    ));
+    var notifyInputRef = card.lastChild.querySelector("input");
 
     card.appendChild(buildToggleRow(
       "Показывать на главном экране KPI",

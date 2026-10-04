@@ -505,6 +505,12 @@ COURIER_IS_ROUTE_ADMIN = 6  # F
 # "Маршрута" (не только владелец) — см. sheets.set_courier_disabled,
 # is_courier/is_courier_route_admin (оба учитывают этот флаг).
 COURIER_DISABLED = 7  # G
+# "Да" — этому курьеру НЕ присылать пуш о готовности маршрута, когда
+# админ включает видимость (см. webapp._notify_couriers_route_ready) —
+# отдельно от COURIER_DISABLED (доступ у него остаётся, просто тихо,
+# без уведомления). Включать/выключать может ЛЮБОЙ администратор
+# "Маршрута" — см. sheets.set_courier_notify_off.
+COURIER_NOTIFY_OFF = 8  # H
 
 SHEET_ROUTE = "Маршрут"
 ROUTE_HEADER_ROW = 1

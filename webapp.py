@@ -316,14 +316,21 @@ async def api_route_get(request: web.Request):
 
 
 async def api_route_visibility_get(request: web.Request):
-    if request["role"] != "admin":
+    # "Центр управления" остаётся доступен и когда владелец/назначенный
+    # администратор переключился в режим "Курьер" (см. docstring
+    # _role_for) — тот же is_route_admin, что и у соседнего api_logistics_get
+    # в этом же хабе ("Профиль" → "Центр управления"). Было: request["role"]
+    # != "admin" — тот самый режимный флаг, который для is_route_admin явно
+    # может быть "courier", так что владелец/админ-курьер получал 403 и
+    # включить видимость маршрута себе не мог — воспроизведено.
+    if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
     dates = await _retry_sheets(sheets.get_route_visibility_status)
     return web.json_response({"dates": dates})
 
 
 async def api_route_visibility_set(request: web.Request):
-    if request["role"] != "admin":
+    if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
     date_str = body.get("date") or await _today()
@@ -353,6 +360,14 @@ async def _notify_couriers_route_ready(bot, date_str: str) -> int:
     route = await _retry_sheets(sheets.get_route_for_date, date_str)
     courier_ids = {cid for p in route for cid in p["courier_tg_ids"]}
     if not courier_ids or not config.WEBAPP_URL:
+        return 0
+
+    # "Уведомления" у курьера (см. "Курьеры" → карточка курьера,
+    # sheets.set_courier_notify_off) — выключает ТОЛЬКО этот пуш, доступ
+    # к самому Mini App не трогает (в отличие от COURIER_DISABLED).
+    notify_off = {c["tg_id"] for c in await _retry_sheets(sheets.get_couriers) if c["notify_off"]}
+    courier_ids = courier_ids - notify_off
+    if not courier_ids:
         return 0
 
     url = f"{config.WEBAPP_URL}/miniapp?date={date_str}"
@@ -525,6 +540,23 @@ async def api_courier_disabled_set(request: web.Request):
     tg_id = request.match_info.get("tg_id", "")
     body = await request.json()
     ok = await _retry_sheets(sheets.set_courier_disabled, tg_id, bool(body.get("disabled")))
+    if not ok:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True})
+
+
+async def api_courier_notify_off_set(request: web.Request):
+    """Включает/выключает ЛИЧНЫЙ пуш о готовности маршрута у конкретного
+    курьера (карточка курьера в "Курьеры" → "Уведомления") — тот самый,
+    что уходит при включении видимости маршрута (см.
+    _notify_couriers_route_ready). Доступ к Mini App не трогает — для
+    этого отдельный переключатель "Доступ" (api_courier_disabled_set).
+    Доступно ЛЮБОМУ администратору "Маршрута"."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    ok = await _retry_sheets(sheets.set_courier_notify_off, tg_id, bool(body.get("off")))
     if not ok:
         return web.json_response({"error": "not_found"}, status=404)
     return web.json_response({"ok": True})
@@ -953,6 +985,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/couriers/manage/{tg_id}/kpi-hidden", api_courier_kpi_hidden_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/route-admin", api_courier_route_admin_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/disabled", api_courier_disabled_set)
+    app.router.add_post("/api/couriers/manage/{tg_id}/notify-off", api_courier_notify_off_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/withdraw-cash", api_courier_withdraw_cash)
     app.router.add_post("/api/couriers/manage/{tg_id}/pay-shift", api_courier_pay_shift)
     app.router.add_get("/api/courier/cash-summary", api_courier_cash_summary)
