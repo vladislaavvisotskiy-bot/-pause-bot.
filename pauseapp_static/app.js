@@ -300,6 +300,7 @@
       "support.intro": "С любыми предложениями или проблемами обращайтесь сюда — мы всегда на связи и рады помочь.",
       "support.social": "Соцсети", "support.contacts": "Контакты",
       "support.telegram": "Telegram", "support.instagram": "Instagram", "support.phone": "Телефон",
+      "support.founderBlog": "Блог основателя",
     },
 
     uz: {
@@ -538,6 +539,7 @@
       "support.intro": "Har qanday taklif yoki muammo bilan shu yerga murojaat qiling — biz doim aloqadamiz va yordam berishdan xursandmiz.",
       "support.social": "Ijtimoiy tarmoqlar", "support.contacts": "Aloqa",
       "support.telegram": "Telegram", "support.instagram": "Instagram", "support.phone": "Telefon",
+      "support.founderBlog": "Asoschi blogi",
     },
 
     en: {
@@ -776,6 +778,7 @@
       "support.intro": "For any suggestions or issues, reach out here — we're always around and happy to help.",
       "support.social": "Social", "support.contacts": "Contacts",
       "support.telegram": "Telegram", "support.instagram": "Instagram", "support.phone": "Phone",
+      "support.founderBlog": "Founder's blog",
     },
   };
 
@@ -2906,6 +2909,7 @@
       var social = el("div", "card profile-nav-list");
       social.appendChild(buildContactRow(ICON_TELEGRAM, t("support.telegram"), "@ssaavveeyy", "https://t.me/ssaavveeyy"));
       social.appendChild(buildContactRow(ICON_INSTAGRAM, t("support.instagram"), "@pause.tashkent", "https://instagram.com/pause.tashkent"));
+      social.appendChild(buildContactRow(ICON_INSTAGRAM, t("support.founderBlog"), "@ssaavveeyy", "https://instagram.com/ssaavveeyy"));
       body.appendChild(social);
 
       body.appendChild(el("div", "profile-section-title", t("support.contacts")));
