@@ -35,42 +35,18 @@ async def club_section(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.answer(text, reply_markup=kb.club_kb())
 
-    # Ежедневный розыгрыш "Пауза в подарок" — отдельный блок. Победителя
-    # бот больше не выбирает сам (выбор — вручную, вне бота); блок остаётся
-    # виден и доступен для участия, пока админ вручную не закроет окно
-    # (close_giveaway_window) — снова открывается публикацией нового меню.
-    if sheets.is_giveaway_window_closed():
-        await callback.message.answer(texts.DAILY_GIVEAWAY_CLOSED_TEXT, reply_markup=kb.home_only_kb())
-        await callback.answer()
-        return
-
-    date_str = sheets.get_active_menu_date()
-    tickets = sheets.get_client_ticket_counts(date_str)
-    has_order_today = tickets.get(str(client["id"]), 0) > 0
-    is_participating = has_order_today and sheets.is_in_daily_giveaway(date_str, client.get("tg_id"))
-
-    dg_text = texts.DAILY_GIVEAWAY_BLOCK
-    if is_participating:
-        dg_text += f"\n\n{texts.DAILY_GIVEAWAY_JOINED_TEXT}"
-    await callback.message.answer(
-        dg_text, reply_markup=kb.daily_giveaway_kb(has_order_today, is_participating)
-    )
+    # Ежедневный розыгрыш "Пауза в подарок" в самом боте — временно
+    # отключён по просьбе (технические причины, скоро вернётся в новом
+    # формате). Раньше здесь показывался блок с условиями и кнопкой
+    # "Участвовать" — см. git-историю, если понадобится включить обратно.
+    await callback.message.answer(texts.DAILY_GIVEAWAY_DISABLED_TEXT, reply_markup=kb.home_only_kb())
     await callback.answer()
 
 
 @router.callback_query(F.data == "daily_giveaway_join")
 async def daily_giveaway_join(callback: CallbackQuery):
-    client = sheets.find_client_by_tg_id(callback.from_user.id)
-    if not client:
-        await callback.answer()
-        return
-
-    if sheets.is_giveaway_window_closed():
-        await callback.message.answer(texts.DAILY_GIVEAWAY_CLOSED_TEXT, reply_markup=kb.home_only_kb())
-        await callback.answer()
-        return
-
-    date_str = sheets.get_active_menu_date()
-    sheets.join_daily_giveaway(date_str, client)
-    await callback.message.answer(texts.DAILY_GIVEAWAY_JOINED_TEXT, reply_markup=kb.home_only_kb())
+    # Кнопка "🎉 Участвовать" из старых сообщений (до отключения розыгрыша)
+    # всё ещё может быть на экране у кого-то — тут только безопасный ответ
+    # "не работает", без join_daily_giveaway.
+    await callback.message.answer(texts.DAILY_GIVEAWAY_DISABLED_TEXT, reply_markup=kb.home_only_kb())
     await callback.answer()
