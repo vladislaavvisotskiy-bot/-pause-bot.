@@ -108,6 +108,8 @@
       "menu.addToCart": "Добавить в заказ",
       "menu.pickGarnishFirst": "Выберите гарнир",
       "menu.addedToCart": "Добавлено в заказ",
+      "menu.garnishMixHint": "Можно выбрать один или смешать два — 50/50",
+      "menu.garnishMixed": "Смешали: {text}",
 
       "cart.barLabel": "Позиций: {count}",
       "cart.barButton": "Корзина",
@@ -341,6 +343,8 @@
       "menu.addToCart": "Buyurtma qo'shish",
       "menu.pickGarnishFirst": "Garnir tanlang",
       "menu.addedToCart": "Buyurtmaga qo'shildi",
+      "menu.garnishMixHint": "Bittasini tanlang yoki ikkitasini aralashtiring — 50/50",
+      "menu.garnishMixed": "Aralashtirildi: {text}",
 
       "cart.barLabel": "Pozitsiyalar: {count}",
       "cart.barButton": "Savatcha",
@@ -574,6 +578,8 @@
       "menu.addToCart": "Add to order",
       "menu.pickGarnishFirst": "Choose a side",
       "menu.addedToCart": "Added to your order",
+      "menu.garnishMixHint": "Pick one, or mix two — 50/50",
+      "menu.garnishMixed": "Mixed: {text}",
 
       "cart.barLabel": "Items: {count}",
       "cart.barButton": "Cart",
@@ -1560,8 +1566,24 @@
   function buildMenuSetCard(s) {
     var card = el("div", "card menu-set-card");
     var expanded = false;
-    var sel = { variantIdx: 0, garnish: "", qty: 1 };
+    var sel = { variantIdx: 0, garnish: "", garnishPicks: [], qty: 1 };
     var localizedName = localizedSetName(s.display_name);
+
+    // Гарнир можно смешать (как в самом боте — см. handlers/order.py:
+    // chosen_garnish_mix1/2) — до двух чипов, порядок выбора не важен,
+    // итог "a/b 50/50" (сырые значения, не отображаемый текст — так же,
+    // как и одиночный гарнир, см. texts.display_garnish для рендера).
+    function pickGarnish(value) {
+      var picks = sel.garnishPicks;
+      var idx = picks.indexOf(value);
+      if (idx !== -1) {
+        picks.splice(idx, 1);
+      } else {
+        picks.push(value);
+        if (picks.length > 2) picks.shift();
+      }
+      sel.garnish = picks.length === 2 ? (picks[0] + "/" + picks[1] + " 50/50") : (picks[0] || "");
+    }
 
     function currentEffSet() {
       if (!s.is_variant_group) {
@@ -1667,21 +1689,33 @@
         variantRow.addEventListener("click", function (e) { e.stopPropagation(); });
         s.variants.forEach(function (v, idx) {
           var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(localizedVariantLabel(v.label)));
-          chip.addEventListener("click", function () { sel.variantIdx = idx; sel.garnish = ""; render(); });
+          chip.addEventListener("click", function () { sel.variantIdx = idx; sel.garnish = ""; sel.garnishPicks = []; render(); });
           variantRow.appendChild(chip);
         });
         body.appendChild(variantRow);
       }
 
       if (effSet.has_garnish && effSet.garnish_options.length) {
+        var canMix = effSet.garnish_options.length >= 2;
+        if (canMix) {
+          body.appendChild(el("div", "menu-set-card-note", t("menu.garnishMixHint")));
+        }
         var garnishRow = el("div", "menu-set-chip-row");
         garnishRow.addEventListener("click", function (e) { e.stopPropagation(); });
         effSet.garnish_options.forEach(function (g) {
-          var chip = el("button", "menu-set-chip" + (sel.garnish === g.value ? " active" : ""), escapeHtml(g.display));
-          chip.addEventListener("click", function () { sel.garnish = g.value; render(); });
+          var picked = sel.garnishPicks.indexOf(g.value) !== -1;
+          var chip = el("button", "menu-set-chip" + (picked ? " active" : ""), escapeHtml(g.display));
+          chip.addEventListener("click", function () {
+            if (!canMix) { sel.garnish = picked ? "" : g.value; sel.garnishPicks = picked ? [] : [g.value]; }
+            else pickGarnish(g.value);
+            render();
+          });
           garnishRow.appendChild(chip);
         });
         body.appendChild(garnishRow);
+        if (sel.garnishPicks.length === 2) {
+          body.appendChild(el("div", "menu-set-card-note", "🔀 " + t("menu.garnishMixed", { text: displayGarnishText(sel.garnish) })));
+        }
       }
 
       if (!canOrderNow()) {
@@ -1707,7 +1741,7 @@
           toast(t("menu.addedToCart"));
           // Карточка остаётся раскрытой (можно сразу добавить ещё одну
           // порцию с другим гарниром) — сбрасываем только сам выбор.
-          sel = { variantIdx: 0, garnish: "", qty: 1 };
+          sel = { variantIdx: 0, garnish: "", garnishPicks: [], qty: 1 };
           render();
         });
         addBtnWrap.appendChild(addBtn);
@@ -2224,10 +2258,27 @@
   }
   resetCheckout();
 
+  // Зеркало texts.display_garnish (Python) — нужно на фронте, чтобы
+  // показать смешанный гарнир ("рис/пюре 50/50" -> "Рис/Пюре 50/50") до
+  // отправки заказа на сервер: такого значения нет среди garnish_options
+  // ни у одного сета (это не справочный вариант, а сочетание двух).
+  function displayGarnishText(g) {
+    g = (g || "").trim();
+    if (!g) return g;
+    if (g.indexOf("/") !== -1) {
+      var spIdx = g.indexOf(" ");
+      var head = spIdx === -1 ? g : g.slice(0, spIdx);
+      var tail = spIdx === -1 ? "" : g.slice(spIdx + 1);
+      var headCap = head.split("/").map(function (p) { return p ? p.charAt(0).toUpperCase() + p.slice(1) : p; }).join("/");
+      return tail ? (headCap + " " + tail).trim() : headCap;
+    }
+    return g.charAt(0).toUpperCase() + g.slice(1);
+  }
+
   function garnishDisplayFor(s, value) {
     if (!value || !s.garnish_options) return "";
     var found = s.garnish_options.filter(function (g) { return g.value === value; })[0];
-    return found ? found.display : value;
+    return found ? found.display : displayGarnishText(value);
   }
 
   function addToCart(effSet, sel) {
