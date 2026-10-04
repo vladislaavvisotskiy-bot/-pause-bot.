@@ -625,23 +625,23 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             # Одна метка на ВСЮ корзину этого нажатия "Всё верно, отправить" —
             # чтобы отличать этот заказ от других заказов того же клиента в
             # тот же день (см. config.O_ORDER_BATCH/sheets.get_client_order_groups).
+            # Одним batch-запросом на всю корзину (sheets.append_orders_batch),
+            # а не append_order в цикле — см. её докстринг: раньше каждая
+            # позиция корзины сама заново читала ВЕСЬ растущий лист "Заказы",
+            # чтобы найти свободную строку.
             batch_id = uuid.uuid4().hex
-            row_nums = []
-            for item in cart:
-                row_num = sheets.append_order(
-                    date_str=date_str,
-                    zone=data["cur_zone"],
-                    point=data["cur_point"],
-                    client_id=data["client_id"],
-                    set_name=item["set"],
-                    qty=item["qty"],
-                    garnish=item["garnish"],
-                    payment=payment_value,
-                    comment=full_comment,
-                    screenshot=data.get("card_screenshot") or "",
-                    batch_id=batch_id,
-                )
-                row_nums.append(row_num)
+            items = [{"set": item["set"], "qty": item["qty"], "garnish": item["garnish"]} for item in cart]
+            row_nums = sheets.append_orders_batch(
+                date_str=date_str,
+                zone=data["cur_zone"],
+                point=data["cur_point"],
+                client_id=data["client_id"],
+                items=items,
+                payment=payment_value,
+                comment=full_comment,
+                screenshot=data.get("card_screenshot") or "",
+                batch_id=batch_id,
+            )
     except Exception:
         logger.exception("Order: не удалось записать заказ в таблицу (client_id=%s)", data.get("client_id"))
         await callback.message.answer(texts.ORDER_SEND_FAILED.format(support=texts.SUPPORT_USERNAME))

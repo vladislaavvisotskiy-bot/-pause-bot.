@@ -40,6 +40,7 @@ _cache = {
     "active_menu_date": None, "active_menu_date_ts": 0,
     "order_dates": None, "order_dates_ts": 0,
     "route_visibility": None, "route_visibility_ts": 0,
+    "pause_admins": None, "pause_admins_ts": 0,
 }
 _CACHE_TTL = 60  # секунд — не дёргаем таблицу на каждый чих
 
@@ -986,6 +987,53 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
     return row_num
 
 
+def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: list,
+                         payment: str, comment: str = "", screenshot: str = "", batch_id: str = "") -> list:
+    """Как append_order, но для ВСЕЙ корзины ОДНИМ запросом к Sheets, а не
+    по одному на каждую позицию. items — [{"set","qty","garnish"}, ...].
+
+    Раньше оформление заказа из нескольких позиций вызывало append_order в
+    цикле — КАЖДЫЙ вызов сам заново считал "первую свободную строку"
+    (_next_empty_order_row — читает ВЕСЬ растущий столбец A "Заказы") И
+    делал свой отдельный update_cells. На корзине из, скажем, 4 позиций
+    это было 4 полных чтения всего листа "Заказы" плюс 4 отдельных записи
+    НА ОДНО нажатие "Отправить" — самое частое и самое заметное клиенту
+    действие (оформление заказа), воспроизведено и подтверждено как одна
+    из причин медленного/падающего с server_error оформления. Теперь
+    "первая свободная строка" считается ОДИН раз на всю корзину (следующие
+    позиции в той же корзине просто занимают следующие строки подряд — в
+    пределах одного оформления это безопасно, строки ещё никем не заняты,
+    т.к. только что найдены этим же вызовом), и все ячейки всех позиций
+    пишутся одним update_cells. Возвращает список номеров строк, по одному
+    на каждый item, в том же порядке."""
+    ws = _ws(config.SHEET_ORDERS)
+    start_row = _next_empty_order_row()
+    cells = []
+    row_nums = []
+    for i, item in enumerate(items):
+        row_num = start_row + i
+        row_nums.append(row_num)
+        updates = [
+            (config.O_DATE, date_str),
+            (config.O_ZONE, zone),
+            (config.O_POINT, point),
+            (config.O_CLIENT_ID, _id_value(client_id)),
+            (config.O_SET, item["set"]),
+            (config.O_QTY, str(item["qty"])),
+            (config.O_GARNISH, item.get("garnish", "") or ""),
+            (config.O_PAYMENT, payment),
+            (config.O_COMMENT, comment or ""),
+        ]
+        if screenshot:
+            updates.append((config.O_SCREENSHOT, screenshot))
+        if batch_id:
+            updates.append((config.O_ORDER_BATCH, batch_id))
+        cells.extend(gspread.Cell(row_num, col, value) for col, value in updates)
+    if cells:
+        ws.update_cells(cells)
+    return row_nums
+
+
 def set_order_screenshot(row_nums: list, file_id: str):
     """Сохраняет file_id скрина оплаты в скрытый столбец «Заказы» задним
     числом — для уже существующих строк заказа (например, когда клиент
@@ -1286,9 +1334,44 @@ def get_recent_order_dates() -> list:
 # Справочники (цены, меню на сегодня)
 # ---------------------------------------------------------------------------
 
+# REF_SET_PRICE_RANGE ("F2:G20"), REF_SET_GARNISH_RANGE ("F2:H20") и
+# REF_SET_TABLE_RANGE ("F2:O20") — ВСЕ один и тот же участок таблицы
+# "Справочники" (столбцы F-O, одни и те же строки), просто разной
+# ширины. get_set_prices/get_sets_with_garnish/get_set_extra/
+# get_today_garnishes_for_set(_all_sets) раньше читали его каждая СВОИМ
+# отдельным запросом — а все вместе вызываются на КАЖДУЮ загрузку
+# /api/menu (см. pauseapp.api_menu), то есть каждое открытие приложения
+# любым клиентом делало 4+ запросов на один и тот же диапазон, плюс ещё
+# по 2 запроса НА КАЖДЫЙ сет с гарниром (см. старый
+# get_today_garnishes_for_set, звавшийся в цикле по сетам из
+# pauseapp._serialize_sets) — воспроизведено и подтверждено как прямая
+# причина "server_error" при одновременном открытии приложения
+# несколькими клиентами (например, сразу после рассылки о публикации
+# меню). Теперь один общий короткий кэш на самый широкий диапазон
+# (F2:O20) — туда помещаются все нужные столбцы разом, читается не чаще
+# раза в TTL, и все функции ниже берут данные из него, не делая
+# собственных походов в Sheets.
+_ref_set_table_cache = {"rows": None, "ts": 0}
+_REF_SET_TABLE_TTL = 10  # секунд — каталог почти никогда не меняется чаще
+
+
+def _invalidate_ref_set_table_cache():
+    _ref_set_table_cache["rows"] = None
+    _ref_set_table_cache["ts"] = 0
+
+
+def _ref_set_table_rows() -> list:
+    now = time.time()
+    if _ref_set_table_cache["rows"] is not None and now - _ref_set_table_cache["ts"] < _REF_SET_TABLE_TTL:
+        return _ref_set_table_cache["rows"]
+    rows = _ws(config.SHEET_REFERENCE).get(config.REF_SET_TABLE_RANGE)
+    _ref_set_table_cache["rows"] = rows
+    _ref_set_table_cache["ts"] = now
+    return rows
+
+
 def get_set_prices() -> dict:
-    ws = _ws(config.SHEET_REFERENCE)
-    values = ws.get(config.REF_SET_PRICE_RANGE)
+    values = _ref_set_table_rows()
     out = {}
     for row in values:
         if len(row) >= 2 and row[0]:
@@ -1375,8 +1458,7 @@ def get_sets() -> list:
     с гарниром (оба смотрят в F) — отсюда гарнир не спрашивался, а цена
     в предпросмотре показывала 0. Теперь один источник вместо двух,
     дублировать и рассинхронизировать нечего."""
-    ws = _ws(config.SHEET_REFERENCE)
-    return [row[0] for row in ws.get(config.REF_SET_PRICE_RANGE) if row and row[0]]
+    return [row[0] for row in _ref_set_table_rows() if row and row[0]]
 
 
 def get_sets_with_garnish() -> set:
@@ -1386,8 +1468,7 @@ def get_sets_with_garnish() -> set:
     handlers/order.py: chosen_set). Раньше это было жёстко привязано к
     имени "Сет стандарт" — теперь для нового сета с гарниром достаточно
     отметить "Да" в этой таблице, без правки кода."""
-    ws = _ws(config.SHEET_REFERENCE)
-    values = ws.get(config.REF_SET_GARNISH_RANGE)
+    values = _ref_set_table_rows()
     return {
         row[0].strip().lower()
         for row in values
@@ -1404,8 +1485,7 @@ def get_set_extra() -> dict:
     API на каждую загрузку /api/menu. "description" — сырой текст с
     переводами строк как записал set_set_description; на буллеты его
     режет уже pauseapp.py:_serialize_sets."""
-    ws = _ws(config.SHEET_REFERENCE)
-    rows = ws.get(config.REF_SET_TABLE_RANGE)
+    rows = _ref_set_table_rows()
     out = {}
     for row in rows:
         if not row or not row[0]:
@@ -1441,15 +1521,29 @@ def get_today_garnishes_for_set(set_name: str) -> list:
     список — это не "используй общий справочник", а "гарнира на выбор
     сегодня для ЭТОГО сета нет вообще" (см. handlers/order.py:
     _proceed_after_set_choice)."""
-    ws = _ws(config.SHEET_REFERENCE)
-    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    rows = _ref_set_table_rows()
     name = set_name.strip().lower()
-    for i, row in enumerate(rows):
+    for row in rows:
         if row and row[0].strip().lower() == name:
-            r = 2 + i
-            val = ws.cell(r, config.REF_SET_TODAY_GARNISH_COL).value or ""
+            val = row[3] if len(row) > 3 else ""
             return [g.strip() for g in val.split(",") if g.strip()]
     return []
+
+
+def get_today_garnishes_for_all_sets() -> dict:
+    """{имя сета в нижнем регистре: [гарнир, ...]} для ВСЕХ сетов разом —
+    см. get_today_garnishes_for_set. Для "Меню" в PAUSE App (см.
+    pauseapp.py: api_menu/_serialize_sets), которая раньше звала
+    get_today_garnishes_for_set ПООЧЕРЁДНО на каждый сет с гарниром —
+    на каталоге из нескольких таких сетов это было несколько лишних
+    чтений Sheets на КАЖДОЕ открытие приложения любым клиентом."""
+    out = {}
+    for row in _ref_set_table_rows():
+        if not row or not row[0]:
+            continue
+        val = row[3] if len(row) > 3 else ""
+        out[row[0].strip().lower()] = [g.strip() for g in val.split(",") if g.strip()]
+    return out
 
 
 def set_today_garnishes_for_set(set_name: str, garnishes: list):
@@ -1468,6 +1562,7 @@ def set_today_garnishes_for_set(set_name: str, garnishes: list):
     ]
     if cells:
         ws.update_cells(cells)
+    _invalidate_ref_set_table_cache()
 
 
 def set_set_photo(set_name: str, file_id: str):
@@ -1487,6 +1582,7 @@ def set_set_photo(set_name: str, file_id: str):
     ]
     if cells:
         ws.update_cells(cells)
+    _invalidate_ref_set_table_cache()
 
 
 def set_set_description(set_name: str, description: str):
@@ -1505,6 +1601,7 @@ def set_set_description(set_name: str, description: str):
     ]
     if cells:
         ws.update_cells(cells)
+    _invalidate_ref_set_table_cache()
 
 
 def get_today_sets() -> list:
@@ -1704,6 +1801,7 @@ def publish_draft_menu(date_str: str):
         cells.append(gspread.Cell(r, config.REF_SET_TODAY_GARNISH_COL, draft_val))
     if cells:
         ws.update_cells(cells)
+    _invalidate_ref_set_table_cache()
 
     clear_menu_draft()
 
@@ -4331,7 +4429,16 @@ _PA_HEADER = ["tg_id", "name", "finance", "debtors", "added"]
 
 def get_pause_admins() -> list:
     """[{"tg_id","name","finance","debtors","added"}] — все делегированные
-    админы (не включает главного — ADMIN_IDS, тот не хранится здесь)."""
+    админы (не включает главного — ADMIN_IDS, тот не хранится здесь).
+
+    Кэшируется на _CACHE_TTL секунд — admin_auth_middleware (pauseapp.py)
+    дёргает get_pause_admin (а значит и эту функцию) на КАЖДЫЙ запрос
+    /api/* от любого НЕ главного админа, то есть на каждый клик в
+    приложении — без кэша это было лишним чтением на каждое действие,
+    тем же классом проблемы, что и у остального в этом файле."""
+    now = time.time()
+    if _cache.get("pause_admins") is not None and now - _cache.get("pause_admins_ts", 0) < _CACHE_TTL:
+        return _cache["pause_admins"]
     ws = _ws_or_create(config.SHEET_PAUSE_ADMINS, _PA_HEADER)
     rows = ws.get_all_values()
     out = []
@@ -4348,6 +4455,8 @@ def get_pause_admins() -> list:
             "debtors": row[config.PA_DEBTORS - 1].strip().lower() == "да" if len(row) >= config.PA_DEBTORS else False,
             "added": row[config.PA_ADDED - 1].strip() if len(row) >= config.PA_ADDED else "",
         })
+    _cache["pause_admins"] = out
+    _cache["pause_admins_ts"] = now
     return out
 
 
@@ -4375,6 +4484,7 @@ def add_pause_admin(tg_id, name: str):
         if len(row) >= config.PA_TG_ID and row[config.PA_TG_ID - 1].strip() == target:
             return
     ws.append_row([target, name or "", "", "", today_date_str()], value_input_option="RAW")
+    _cache["pause_admins"] = None
 
 
 def set_pause_admin_feature(tg_id, feature: str, allowed: bool):
@@ -4389,6 +4499,7 @@ def set_pause_admin_feature(tg_id, feature: str, allowed: bool):
             continue
         if len(row) >= config.PA_TG_ID and row[config.PA_TG_ID - 1].strip() == target:
             ws.update_cell(r, col, "да" if allowed else "")
+            _cache["pause_admins"] = None
             return
 
 
@@ -4402,4 +4513,5 @@ def remove_pause_admin(tg_id):
             continue
         if len(row) >= config.PA_TG_ID and row[config.PA_TG_ID - 1].strip() == target:
             ws.delete_rows(r)
+            _cache["pause_admins"] = None
             return

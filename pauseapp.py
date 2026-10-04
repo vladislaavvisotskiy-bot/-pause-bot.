@@ -170,12 +170,21 @@ def _split_description(raw: str) -> list:
     return [line.strip() for line in (raw or "").splitlines() if line.strip()]
 
 
-def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extra: dict = None) -> list:
+def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extra: dict = None, garnish_map: dict = None) -> list:
     """Тот же порядок веток, что и в keyboards.set_kb/handlers/order.py:
     _proceed_after_set_choice — группа переменной цены (config.SET_VARIANTS)
     одной карточкой с вариантами, обычный сет — карточкой с ценой и (если
-    есть) списком гарниров РОВНО этого сета на сегодня (см.
-    sheets.get_today_garnishes_for_set).
+    есть) списком гарниров РОВНО этого сета на сегодня.
+
+    Чистая функция — никаких обращений к Sheets внутри (garnish_map уже
+    готов целиком, см. sheets.get_today_garnishes_for_all_sets). Раньше
+    гарнир на каждый сет с Гарнир=Да дочитывался здесь ОТДЕЛЬНЫМ вызовом
+    sheets.get_today_garnishes_for_set ПРЯМО В ЦИКЛЕ, синхронно, в обход
+    _retry_sheets — на каталоге из нескольких таких сетов это было
+    несколько лишних, ничем не защищённых обращений к Sheets на КАЖДОЕ
+    открытие "Меню" любым клиентом, и именно они (а не сами чтения) были
+    прямой причиной server_error под нагрузкой — воспроизведено и
+    подтверждено.
 
     extra — sheets.get_set_extra(): категория/фото/описание на карточку
     (см. экран Меню в PAUSE App). Все поля необязательны — пустая строка,
@@ -183,6 +192,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
     соответствующий блок карточки (фото/буллеты) и не добавляет её ни в
     один чип категории, кроме "Все"."""
     extra = extra or {}
+    garnish_map = garnish_map or {}
     items = []
     seen_groups = set()
     for name in sets_today:
@@ -203,7 +213,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
                 v_has_garnish = technical.strip().lower() in sets_with_garnish
                 v_garnish_options = []
                 if v_has_garnish:
-                    v_raw = sheets.get_today_garnishes_for_set(technical)
+                    v_raw = garnish_map.get(technical.strip().lower(), [])
                     v_garnish_options = [{"value": g, "display": texts.display_garnish(g)} for g in v_raw]
                 variants.append({
                     "technical": technical, "label": label, "price": prices.get(technical, 0),
@@ -228,7 +238,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
             has_garnish = clean.lower() in sets_with_garnish
             garnish_options = []
             if has_garnish:
-                raw = sheets.get_today_garnishes_for_set(clean)
+                raw = garnish_map.get(clean.lower(), [])
                 garnish_options = [{"value": g, "display": texts.display_garnish(g)} for g in raw]
             clean_extra = extra.get(clean, {})
             items.append({
@@ -261,6 +271,7 @@ async def api_menu(request: web.Request):
     prices = await _retry_sheets(sheets.get_set_prices)
     sets_with_garnish = await _retry_sheets(sheets.get_sets_with_garnish)
     sets_extra = await _retry_sheets(sheets.get_set_extra)
+    garnish_map = await _retry_sheets(sheets.get_today_garnishes_for_all_sets)
     payment_options = [
         o for o in await _retry_sheets(sheets.get_payment_options)
         if "долг" not in o.lower() and "проверке" not in o.lower()
@@ -273,7 +284,7 @@ async def api_menu(request: web.Request):
         "can_order": published and not cutoff_passed,
         "cutoff_passed": cutoff_passed,
         "cutoff_time": config.ORDER_CUTOFF_TIME,
-        "sets": _serialize_sets(sets_today, prices, sets_with_garnish, sets_extra),
+        "sets": _serialize_sets(sets_today, prices, sets_with_garnish, sets_extra, garnish_map),
         "payment_options": payment_options,
         "card_requisites": texts.REQUISITES_TEXT,
     })
@@ -478,15 +489,12 @@ async def api_order_submit(request: web.Request):
         return web.json_response({"status": "pending", "pending_id": pending_id})
 
     batch_id = uuid.uuid4().hex
-    row_nums = []
-    for item in cart:
-        row_num = await _retry_sheets(
-            sheets.append_order,
-            date_str=date_str, zone=zone, point=point, client_id=client["id"],
-            set_name=item["set"], qty=int(item["qty"]), garnish=item.get("garnish", ""),
-            payment=payment_value, comment=comment, screenshot=screenshot, batch_id=batch_id,
-        )
-        row_nums.append(row_num)
+    items = [{"set": item["set"], "qty": int(item["qty"]), "garnish": item.get("garnish", "")} for item in cart]
+    row_nums = await _retry_sheets(
+        sheets.append_orders_batch,
+        date_str=date_str, zone=zone, point=point, client_id=client["id"], items=items,
+        payment=payment_value, comment=comment, screenshot=screenshot, batch_id=batch_id,
+    )
 
     try:
         await _retry_sheets(sheets.update_client_point, client["row"], zone, point)
