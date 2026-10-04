@@ -2929,7 +2929,16 @@
     head.appendChild(avatarSlot);
     var myId = tgUserId();
     if (myId) {
-      fetchAuthedImageBlobUrl("/pauseapp/api/avatar/" + encodeURIComponent(myId))
+      // "?t=" — не для сервера (он и так не кеширует, см. pauseapp.py:
+      // api_avatar_image), а чтобы обойти fetchAuthedImageBlobUrl: его
+      // кеш живёт в памяти по точному URL и держит даже неудачный ответ
+      // (не было фото) — Telegram же нередко не убивает WebView при
+      // закрытии мини-аппа, а замораживает его и возвращает ПРИ
+      // следующем открытии ТУ ЖЕ страницу без перезагрузки, так что без
+      // этого штрих и новую аватарку, и старое "фото нет" можно было бы
+      // видеть сколько угодно переоткрытий подряд — JS ни разу не
+      // перезапускался, сходить за аватаркой заново было неоткуда.
+      fetchAuthedImageBlobUrl("/pauseapp/api/avatar/" + encodeURIComponent(myId) + "?t=" + Date.now())
         .then(function (blobUrl) {
           var img = el("img", "avatar");
           img.alt = "";
