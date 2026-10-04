@@ -1870,11 +1870,21 @@
     }
 
     function loadAll() {
-      Promise.all([api(cashByDayUrl(courier.tg_id)), api(earningsByDayUrl(courier.tg_id))]).then(function (res) {
+      // Все три запроса параллельно, а не "сначала дни, потом сумма" —
+      // сумма за selectedDate не зависит от списков по дням, ждать их
+      // перед вторым round-trip незачем (на открытие карточки курьера
+      // это лишняя задержка в размер одного запроса к серверу).
+      boxesHolder.innerHTML = "";
+      boxesHolder.appendChild(el("div", "skeleton-block"));
+      Promise.all([
+        api(cashByDayUrl(courier.tg_id)),
+        api(earningsByDayUrl(courier.tg_id)),
+        api(cashSummaryUrl(courier.tg_id, selectedDate)),
+      ]).then(function (res) {
         cashDays = res[0].days || [];
         earnDays = res[1].days || [];
         renderPicker();
-        loadSummary();
+        renderBoxes(res[2]);
       }).catch(function (err) {
         pickerHolder.innerHTML = "";
         boxesHolder.innerHTML = "";
@@ -1980,11 +1990,18 @@
       });
     }
 
-    Promise.all([api(cashByDayUrl(null)), api(earningsByDayUrl(null))]).then(function (res) {
+    // Все три запроса параллельно — см. аналогичный комментарий в
+    // renderCourierCashCard.loadAll выше.
+    boxHolder.innerHTML = "";
+    boxHolder.appendChild(el("div", "skeleton-block"));
+    Promise.all([
+      api(cashByDayUrl(null)), api(earningsByDayUrl(null)), api(cashSummaryUrl(null, selectedDate)),
+    ]).then(function (res) {
       cashDays = res[0].days || [];
       earnDays = res[1].days || [];
+      lastData = res[2];
       renderPicker();
-      loadSummary();
+      renderBox();
     }).catch(function (err) {
       pickerHolder.innerHTML = "";
       boxHolder.innerHTML = "";

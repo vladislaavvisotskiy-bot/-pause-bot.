@@ -254,8 +254,17 @@ async def auth_middleware(request: web.Request, handler):
     return await handler(request)
 
 
-def _today() -> str:
-    return sheets.get_active_menu_date()
+async def _today() -> str:
+    # Раньше звала sheets.get_active_menu_date() синхронно, в обход
+    # _retry_sheets — единственное место в webapp.py, где обращение к
+    # Google Sheets не было ни защищено от временных 429/5xx (сразу
+    # падало в необработанное исключение -> "server_error"), ни
+    # вынесено в отдельный поток (блокировало event loop всего процесса,
+    # включая поллинг бота, на время запроса) — воспроизведено и
+    # подтверждено. Используется как запасной "сегодня" в 20 местах
+    # ниже (date_str = ... or await _today()), поэтому ломала ровно те запросы,
+    # где дата не передана явно.
+    return await _retry_sheets(sheets.get_active_menu_date)
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +283,7 @@ async def api_me(request: web.Request):
 
 
 async def api_route_get(request: web.Request):
-    date_str = request.query.get("date") or _today()
+    date_str = request.query.get("date") or await _today()
     role = request["role"]
     depot = {"name": config.DEPOT_NAME, "address": config.DEPOT_ADDRESS, "lat": config.DEPOT_LAT, "lon": config.DEPOT_LNG}
     visible = await _retry_sheets(sheets.is_route_visible_to_courier, date_str)
@@ -317,7 +326,7 @@ async def api_route_visibility_set(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     visible = bool(body.get("visible"))
 
     was_visible = await _retry_sheets(sheets.is_route_visible_to_courier, date_str)
@@ -381,7 +390,7 @@ async def api_logistics_get(request: web.Request):
     "Расходы на логистику")."""
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
-    date_str = request.query.get("date") or _today()
+    date_str = request.query.get("date") or await _today()
     couriers = await _retry_sheets(sheets.get_couriers)
     shift_pay = await _retry_sheets(sheets.get_logistics_expenses, date_str)
     delivery_expense = await _retry_sheets(sheets.get_delivery_expense, date_str)
@@ -399,7 +408,7 @@ async def api_logistics_set(request: web.Request):
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     shifts = body.get("shifts") or []
     for item in shifts:
         tg_id = str(item.get("tg_id") or "").strip()
@@ -546,7 +555,7 @@ async def api_courier_cash_summary(request: web.Request):
     tg_id = request.query.get("courier_tg_id") or str(request["tg_id"])
     if not _courier_scope_ok(request, tg_id):
         return web.json_response({"error": "forbidden"}, status=403)
-    date_str = request.query.get("date") or _today()
+    date_str = request.query.get("date") or await _today()
     cash_day = await _retry_sheets(sheets.get_courier_cash_for_day, tg_id, date_str)
     earned_day = await _retry_sheets(sheets.get_logistics_total_for_courier, tg_id, date_str, date_str)
     balance_as_of = await _retry_sheets(sheets.get_courier_cash_balance_as_of, tg_id, date_str)
@@ -574,7 +583,7 @@ async def api_courier_cash_day_entries(request: web.Request):
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
     tg_id = request.query.get("courier_tg_id") or ""
-    date_str = request.query.get("date") or _today()
+    date_str = request.query.get("date") or await _today()
     entries = await _retry_sheets(sheets.get_cash_entries, tg_id, date_str, date_str)
     return web.json_response({"entries": entries})
 
@@ -618,7 +627,7 @@ async def api_courier_pay_shift(request: web.Request):
         return web.json_response({"error": "forbidden"}, status=403)
     tg_id = request.match_info.get("tg_id", "")
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     try:
         amount = int(body.get("amount") or 0)
     except (TypeError, ValueError):
@@ -644,7 +653,7 @@ async def api_courier_pay_shift(request: web.Request):
 async def api_route_kpi_get(request: web.Request):
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
-    date_from = request.query.get("from") or _today()
+    date_from = request.query.get("from") or await _today()
     date_to = request.query.get("to") or date_from
     data = await _retry_sheets(sheets.get_route_kpi, date_from, date_to, retries=2)
     return web.json_response(data)
@@ -708,7 +717,7 @@ async def api_route_dates(request: web.Request):
     # Не трогает лист "Маршрут" (только "Справочники" через
     # get_active_menu_date) — блокировка _route_lock тут не нужна.
     dates = await _retry_sheets(sheets.get_route_available_dates)
-    return web.json_response({"dates": dates, "active": _today()})
+    return web.json_response({"dates": dates, "active": await _today()})
 
 
 async def api_delivery_points(request: web.Request):
@@ -727,7 +736,7 @@ async def api_route_assign(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     point = (body.get("point") or "").strip()
     # Полный итоговый набор ID (не добавление/удаление одного) — точку
     # можно закрепить сразу за несколькими курьерами (см. set_route_courier).
@@ -743,7 +752,7 @@ async def api_route_reorder(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     order_map = body.get("order") or {}
     # Это осознанное действие админа (перетащил карточку) — потерять его
     # обиднее, чем лишний повторный показ маршрута, поэтому здесь два повтора
@@ -757,7 +766,7 @@ async def api_route_pin(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     point = (body.get("point") or "").strip()
     pinned = bool(body.get("pinned"))
     if not point:
@@ -771,7 +780,7 @@ async def api_route_add(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     point = (body.get("point") or "").strip()
     if not point:
         return web.json_response({"error": "point required"}, status=400)
@@ -784,7 +793,7 @@ async def api_route_remove(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     point = (body.get("point") or "").strip()
     async with _route_lock:
         await _retry_sheets(sheets.remove_route_point, date_str, point)
@@ -795,7 +804,7 @@ async def api_route_comment(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     point = (body.get("point") or "").strip()
     comment = (body.get("comment") or "").strip()
     if not point:
@@ -807,7 +816,7 @@ async def api_route_comment(request: web.Request):
 
 async def api_route_complete(request: web.Request):
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     point = (body.get("point") or "").strip()
     if not point:
         return web.json_response({"error": "point required"}, status=400)
@@ -830,7 +839,7 @@ async def api_route_start(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     await _retry_sheets(sheets.record_route_start, date_str, request["tg_id"])
     return web.json_response({"ok": True})
 
@@ -843,7 +852,7 @@ async def api_cash_record(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
-    date_str = body.get("date") or _today()
+    date_str = body.get("date") or await _today()
     point = (body.get("point") or "").strip()
     client_id = str(body.get("client_id") or "").strip()
     try:
@@ -872,7 +881,7 @@ async def api_cash_record(request: web.Request):
 async def api_earnings(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
-    date_str = request.query.get("date") or _today()
+    date_str = request.query.get("date") or await _today()
     async with _route_lock:
         total = await _retry_sheets(sheets.get_courier_earnings, request["tg_id"], date_str)
     return web.json_response({"date": date_str, "total": total})

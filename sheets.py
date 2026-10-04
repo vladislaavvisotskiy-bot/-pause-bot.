@@ -62,9 +62,33 @@ _CACHE_TTL = 60  # секунд — не дёргаем таблицу на ка
 _route_cache: dict = {}
 _ROUTE_CACHE_TTL = 5  # секунд
 
+# Сырые строки "Маршрут" ЦЕЛИКОМ (не за одну дату, как _route_cache выше) —
+# только для get_route_kpi, который читает лист за произвольный диапазон
+# дат и ничего в нём не меняет. KPI теперь смотрят по нескольку раз подряд
+# (день-пилюли "Сегодня"/"Вчера"/даты/"7 дней"/"30 дней" в один прокручиваемый
+# ряд — см. app.js: kpiDayPeriods) — без кэша каждый клик по пилюле заново
+# читал весь растущий лист "Маршрут", как и было с "Заказы" (см. комментарий
+# у _orders_raw_rows). Инвалидируется тем же _invalidate_route_cache, что и
+# _route_cache — после любой правки маршрута (которая и меняет данные, от
+# которых зависит KPI) оба кэша сбрасываются вместе.
+_route_kpi_raw_cache = {"rows": None, "ts": 0}
+_ROUTE_KPI_CACHE_TTL = 15  # секунд
+
 
 def _invalidate_route_cache(date_str: str):
     _route_cache.pop(date_str, None)
+    _route_kpi_raw_cache["rows"] = None
+    _route_kpi_raw_cache["ts"] = 0
+
+
+def _route_kpi_raw_rows() -> list:
+    now = time.time()
+    if _route_kpi_raw_cache["rows"] is not None and now - _route_kpi_raw_cache["ts"] < _ROUTE_KPI_CACHE_TTL:
+        return _route_kpi_raw_cache["rows"]
+    rows = _ws(config.SHEET_ROUTE).get_all_values()
+    _route_kpi_raw_cache["rows"] = rows
+    _route_kpi_raw_cache["ts"] = now
+    return rows
 
 
 def _connect():
@@ -81,8 +105,33 @@ def _connect():
     return _sheet
 
 
+# Spreadsheet.worksheet(name) ВСЕГДА делает отдельный поход в Google —
+# fetch_sheet_metadata() (список ВСЕХ листов таблицы со свойствами),
+# никак не кэшируясь сама по себе (см. gspread/spreadsheet.py). _ws()
+# вызывается 100+ раз по всему sheets.py, часто по несколько раз за один
+# HTTP-запрос — то есть каждый экран Mini App реально делал в 2+ раза
+# больше обращений к Google Sheets API, чем самих операций чтения/записи,
+# и именно это (а не сами чтения/записи) упиралось в квоту API и роняло
+# запросы в "server_error" под нагрузкой — воспроизведено и подтверждено:
+# при активном использовании (несколько курьеров/админов одновременно)
+# счётчик вызовов fetch_sheet_metadata рос кратно быстрее счётчика
+# реальных операций. Кэшируем САМ ОБЪЕКТ Worksheet по имени листа на
+# несколько секунд, по-прежнему через sh.worksheet(name) (не трогаем
+# реализацию gspread и не ломаем ничего, что ожидает именно этот вызов,
+# включая тестовые фейки _connect) — просто не повторяем его чаще, чем
+# раз в TTL на один и тот же лист.
+_ws_cache: dict = {}  # name -> (worksheet, ts)
+_WS_CACHE_TTL = 20  # секунд
+
+
 def _ws(name):
-    return _connect().worksheet(name)
+    cached = _ws_cache.get(name)
+    now = time.time()
+    if cached is not None and now - cached[1] < _WS_CACHE_TTL:
+        return cached[0]
+    ws = _connect().worksheet(name)
+    _ws_cache[name] = (ws, now)
+    return ws
 
 
 def _ws_or_create(name: str, header: list) -> gspread.Worksheet:
@@ -90,13 +139,18 @@ def _ws_or_create(name: str, header: list) -> gspread.Worksheet:
     для листов, которые не часть исходной таблицы PAUSE, а появились
     вместе с фичей (см. config.SHEET_DEBT_COMMENTS/SHEET_DEBT_REMINDERS):
     админу не нужно вручную готовить структуру в Google Таблице."""
+    cached = _ws_cache.get(name)
+    now = time.time()
+    if cached is not None and now - cached[1] < _WS_CACHE_TTL:
+        return cached[0]
     sh = _connect()
     try:
-        return sh.worksheet(name)
+        ws = sh.worksheet(name)
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title=name, rows=200, cols=max(len(header), 1))
         ws.update([header], "A1")
-        return ws
+    _ws_cache[name] = (ws, now)
+    return ws
 
 
 # ---------------------------------------------------------------------------
@@ -3215,8 +3269,7 @@ def get_route_kpi(date_from: str, date_to: str) -> dict:
     курьерам и дням периода) — для всплывающего окна при нажатии на
     главный кружок KPI в Профиле (см. app.js: renderKpiBody)."""
     deadline = get_delivery_deadline()
-    ws = _ws(config.SHEET_ROUTE)
-    rows = ws.get_all_values()
+    rows = _route_kpi_raw_rows()
 
     try:
         d1 = dt.datetime.strptime(date_from, "%d.%m.%Y").date()
@@ -3542,6 +3595,67 @@ _CASH_HEADER = ["date", "courier_tg_id", "courier_name", "point", "client_id", "
 _SETL_HEADER = ["date", "courier_tg_id", "courier_name", "type", "amount", "time"]
 _SETL_WITHDRAW_TYPES = (config.SETTLEMENT_TYPE_CASH_RECEIVED, config.SETTLEMENT_TYPE_PAID_FROM_CASH)
 
+# Короткий кэш сырых строк каждого из трёх листов (та же идея и тот же
+# TTL, что и у _orders_raw_rows выше, по той же причине: один показ
+# кассы курьера — это get_courier_cash_for_day + get_logistics_total_
+# for_courier + get_courier_cash_balance_as_of ОДНИМ запросом
+# (api_courier_cash_summary), а это 5 отдельных проходов по трём
+# листам БЕЗ кэша — на карточку курьера плюс пара кликов по датам это
+# быстро превращалось в десятки чтений за несколько секунд и упиралось
+# в квоту Google Sheets API (server_error) — воспроизведено и
+# подтверждено. Кэш — по содержимому листа целиком, не по
+# courier_tg_id/датам, поэтому переключение дня/курьера внутри TTL не
+# означает новый поход в Sheets.
+_cash_raw_cache = {"rows": None, "ts": 0}
+_logistics_raw_cache = {"rows": None, "ts": 0}
+_settlement_raw_cache = {"rows": None, "ts": 0}
+_CASH_RAW_CACHE_TTL = 15  # секунд
+
+
+def _invalidate_cash_raw_cache():
+    _cash_raw_cache["rows"] = None
+    _cash_raw_cache["ts"] = 0
+
+
+def _invalidate_logistics_raw_cache():
+    _logistics_raw_cache["rows"] = None
+    _logistics_raw_cache["ts"] = 0
+
+
+def _invalidate_settlement_raw_cache():
+    _settlement_raw_cache["rows"] = None
+    _settlement_raw_cache["ts"] = 0
+
+
+def _cash_raw_rows() -> list:
+    now = time.time()
+    if _cash_raw_cache["rows"] is not None and now - _cash_raw_cache["ts"] < _CASH_RAW_CACHE_TTL:
+        return _cash_raw_cache["rows"]
+    rows = _ws_or_create(config.SHEET_CASH_COLLECTIONS, _CASH_HEADER).get_all_values()
+    _cash_raw_cache["rows"] = rows
+    _cash_raw_cache["ts"] = now
+    return rows
+
+
+def _logistics_raw_rows() -> list:
+    now = time.time()
+    if _logistics_raw_cache["rows"] is not None and now - _logistics_raw_cache["ts"] < _CASH_RAW_CACHE_TTL:
+        return _logistics_raw_cache["rows"]
+    rows = _ws_or_create(config.SHEET_LOGISTICS_EXPENSES, _LOG_HEADER).get_all_values()
+    _logistics_raw_cache["rows"] = rows
+    _logistics_raw_cache["ts"] = now
+    return rows
+
+
+def _settlement_raw_rows() -> list:
+    now = time.time()
+    if _settlement_raw_cache["rows"] is not None and now - _settlement_raw_cache["ts"] < _CASH_RAW_CACHE_TTL:
+        return _settlement_raw_cache["rows"]
+    rows = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER).get_all_values()
+    _settlement_raw_cache["rows"] = rows
+    _settlement_raw_cache["ts"] = now
+    return rows
+
 
 def _date_bounds(date_from, date_to):
     """Парсит независимые (каждая необязательна) границы периода в
@@ -3575,8 +3689,7 @@ def _iter_cash_rows(courier_tg_id=None, date_from: str = None, date_to: str = No
     Все параметры необязательны и независимы: без них — все строки, с
     одним только date_to — "по состоянию на дату" (см.
     get_courier_cash_balance_as_of), с date_from==date_to — один день."""
-    ws = _ws_or_create(config.SHEET_CASH_COLLECTIONS, _CASH_HEADER)
-    rows = ws.get_all_values()
+    rows = _cash_raw_rows()
     target = str(courier_tg_id) if courier_tg_id is not None else None
     try:
         d_from, d_to = _date_bounds(date_from, date_to)
@@ -3646,6 +3759,7 @@ def record_cash_collection(date_str: str, courier_tg_id, courier_name: str, poin
     if cells:
         ows.update_cells(cells, value_input_option="RAW")
     _invalidate_orders_raw_cache()
+    _invalidate_cash_raw_cache()
 
 
 def get_cash_total(courier_tg_id, date_from: str = None, date_to: str = None) -> int:
@@ -3704,8 +3818,7 @@ def get_route_cash_totals(date_str: str) -> dict:
 def _iter_logistics_rows(courier_tg_id=None, date_from: str = None, date_to: str = None):
     """Как _iter_cash_rows, но по SHEET_LOGISTICS_EXPENSES ("Заработок" /
     "Оплата за смену") — см. get_logistics_total_for_courier."""
-    ws = _ws_or_create(config.SHEET_LOGISTICS_EXPENSES, _LOG_HEADER)
-    rows = ws.get_all_values()
+    rows = _logistics_raw_rows()
     target = str(courier_tg_id) if courier_tg_id is not None else None
     try:
         d_from, d_to = _date_bounds(date_from, date_to)
@@ -3763,8 +3876,7 @@ def _parse_ru_date_safe(date_str):
 def _iter_settlement_rows(courier_tg_id=None, date_from: str = None, date_to: str = None):
     """Как _iter_cash_rows, но по SHEET_COURIER_SETTLEMENTS ("Забрал
     наличные"/"Оплата из наличных")."""
-    ws = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER)
-    rows = ws.get_all_values()
+    rows = _settlement_raw_rows()
     target = str(courier_tg_id) if courier_tg_id is not None else None
     try:
         d_from, d_to = _date_bounds(date_from, date_to)
@@ -3795,6 +3907,7 @@ def record_courier_settlement(courier_tg_id, courier_name: str, settlement_type:
         date_str or today_date_str(), str(courier_tg_id), courier_name or "", settlement_type,
         str(int(amount)), now.strftime("%H:%M"),
     ], value_input_option="RAW")
+    _invalidate_settlement_raw_cache()
 
 
 def _withdrawn_total(courier_tg_id, date_from: str = None, date_to: str = None) -> int:
@@ -4023,8 +4136,7 @@ def set_route_admin_mode(tg_id, name: str, mode: str):
 def get_logistics_expenses(date_str: str) -> dict:
     """{courier_tg_id: сумма оплаты за смену} на дату — для экрана "Расходы
     на логистику" в Mini App "Маршрут"."""
-    ws = _ws_or_create(config.SHEET_LOGISTICS_EXPENSES, _LOG_HEADER)
-    rows = ws.get_all_values()
+    rows = _logistics_raw_rows()
     out = {}
     for i, row in enumerate(rows):
         r = i + 1
@@ -4067,20 +4179,44 @@ def set_logistics_expense(date_str: str, courier_tg_id, courier_name: str, amoun
         if len(row) < config.LOG_COURIER_TG_ID:
             continue
         if row[config.LOG_DATE - 1].strip() == date_str and row[config.LOG_COURIER_TG_ID - 1].strip() == target:
-            ws.update_cell(r, config.LOG_COURIER_NAME, courier_name or "")
-            ws.update_cell(r, config.LOG_SHIFT_PAY, amount)
-            ws.update_cell(r, config.LOG_UPDATED, now_str)
-            ws.update_cell(r, config.LOG_FROM_CASH, from_cash_val)
+            # Одним batch-запросом (update_cells), а не четырьмя отдельными
+            # update_cell — та же экономия вызовов API, что и у
+            # record_cash_collection выше.
+            ws.update_cells([
+                gspread.Cell(r, config.LOG_COURIER_NAME, courier_name or ""),
+                gspread.Cell(r, config.LOG_SHIFT_PAY, amount),
+                gspread.Cell(r, config.LOG_UPDATED, now_str),
+                gspread.Cell(r, config.LOG_FROM_CASH, from_cash_val),
+            ], value_input_option="RAW")
+            _invalidate_logistics_raw_cache()
             return
     ws.append_row([date_str, target, courier_name or "", amount, now_str, from_cash_val], value_input_option="RAW")
+    _invalidate_logistics_raw_cache()
+
+
+_delivery_raw_cache = {"rows": None, "ts": 0}
+
+
+def _invalidate_delivery_raw_cache():
+    _delivery_raw_cache["rows"] = None
+    _delivery_raw_cache["ts"] = 0
+
+
+def _delivery_raw_rows() -> list:
+    now = time.time()
+    if _delivery_raw_cache["rows"] is not None and now - _delivery_raw_cache["ts"] < _CASH_RAW_CACHE_TTL:
+        return _delivery_raw_cache["rows"]
+    rows = _ws_or_create(config.SHEET_DELIVERY_EXPENSE, ["date", "sum", "updated"]).get_all_values()
+    _delivery_raw_cache["rows"] = rows
+    _delivery_raw_cache["ts"] = now
+    return rows
 
 
 def get_delivery_expense(date_str: str) -> int:
     """Сумма, потраченная на доставку через сторонние сервисы (Яндекс,
     Uklon и т.п.) за один день — то, что вводит админ в Mini App "Маршрут"
     на экране "Расходы на логистику"."""
-    ws = _ws_or_create(config.SHEET_DELIVERY_EXPENSE, ["date", "sum", "updated"])
-    rows = ws.get_all_values()
+    rows = _delivery_raw_rows()
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.DEL_DATA_START_ROW:
@@ -4110,8 +4246,10 @@ def set_delivery_expense(date_str: str, amount: int):
         if row[config.DEL_DATE - 1].strip() == date_str:
             ws.update_cell(r, config.DEL_SUM, amount)
             ws.update_cell(r, config.DEL_UPDATED, now_str)
+            _invalidate_delivery_raw_cache()
             return
     ws.append_row([date_str, amount, now_str], value_input_option="RAW")
+    _invalidate_delivery_raw_cache()
 
 
 def get_delivery_expense_total(date_from: str, date_to: str) -> int:
@@ -4125,8 +4263,7 @@ def get_delivery_expense_total(date_from: str, date_to: str) -> int:
         d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
     except ValueError:
         return 0
-    ws = _ws_or_create(config.SHEET_DELIVERY_EXPENSE, ["date", "sum", "updated"])
-    rows = ws.get_all_values()
+    rows = _delivery_raw_rows()
     total = 0
     for i, row in enumerate(rows):
         r = i + 1
@@ -4160,11 +4297,7 @@ def get_logistics_expense_total(date_from: str, date_to: str) -> int:
         d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
     except ValueError:
         return 0
-    ws = _ws_or_create(
-        config.SHEET_LOGISTICS_EXPENSES,
-        ["date", "courier_tg_id", "courier_name", "shift_pay", "updated"],
-    )
-    rows = ws.get_all_values()
+    rows = _logistics_raw_rows()
     total = 0
     for i, row in enumerate(rows):
         r = i + 1
