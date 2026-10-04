@@ -1727,20 +1727,6 @@
     return d.innerHTML;
   }
 
-  // Клиентское название + системное в скобках, мельче и приглушённо —
-  // ТОЛЬКО для админских экранов (Операционный центр/Каталог), не для
-  // клиентских (там всегда только клиентское имя). Если имена совпадают
-  // (Prime, Chicken bowl) — скобки не показываем. Возвращает готовый HTML
-  // (обе части уже экранированы), вставлять напрямую, не оборачивать в
-  // escapeHtml повторно.
-  function formatAdminSetName(clientName, systemName) {
-    var html = escapeHtml(clientName);
-    if (systemName && systemName !== clientName) {
-      html += ' <span class="admin-set-system">(' + escapeHtml(systemName) + ')</span>';
-    }
-    return html;
-  }
-
   // -------------------------------------------------------------------
   // PAUSE CLUB — лента
   // -------------------------------------------------------------------
@@ -3169,7 +3155,6 @@
   var ICON_OPS_FINANCE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1.4 1.1-2.5 2.5-2.5s2.5 1 2.5 2.2c0 2.8-5 1.6-5 4.4 0 1.2 1.1 2.2 2.5 2.2s2.5-1.1 2.5-2.5"/></svg>';
   var ICON_OPS_DEBTORS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0.9-3.6 3.2-5.4 6-5.4s5.1 1.8 6 5.4"/><path d="M17 4.5c1.6 0.4 2.8 1.8 2.8 3.5s-1.2 3.1-2.8 3.5M21 20c-0.6-2.4-1.8-4-3.5-4.8"/></svg>';
   var ICON_OPS_ADMINS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-2.9 8-7 10-4.1-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>';
-  var ICON_OPS_CATALOG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v17.5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20.5v-16z"/><path d="M4 18h14"/><path d="M8 8h7M8 11.5h5"/></svg>';
   var ICON_OPS_GIVEAWAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M3 12h18"/><path d="M12 8v12"/><path d="M12 8c-1.8 0-3.2-1.3-3.2-2.8S9.2 3 10.5 3c1.3 0 1.8 1.6 1.5 2.8M12 8c1.8 0 3.2-1.3 3.2-2.8S14.8 3 13.5 3c-1.3 0-1.8 1.6-1.5 2.8"/></svg>';
   var ICON_OPS_MENU = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>';
   var ICON_CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>';
@@ -3248,19 +3233,6 @@
       }));
     }
     if (state.isMainAdmin) {
-      // Каталог — ТОЛЬКО главный админ (ADMIN_CHAT_ID), не выдаётся и не
-      // отзывается как функция делегатам, в отличие от Финансы/Должники/
-      // Меню — сервер проверяет это же на каждом /api/catalog/* отдельно
-      // (request["is_main_admin"], не request["pa_menu"]).
-      rows.appendChild(buildProfileRow(ICON_OPS_CATALOG, "Каталог", function () {
-        wizardStep(function (body) {
-          opsStepHeader(body, "Каталог сетов");
-          var sub = el("div");
-          sub.appendChild(el("div", "skeleton-block"));
-          body.appendChild(sub);
-          loadCatalogSetsList(sub);
-        });
-      }));
       rows.appendChild(buildProfileRow(ICON_OPS_ADMINS, "Администраторы", function () {
         wizardStep(function (body) {
           opsStepHeader(body, "Администраторы");
@@ -3515,8 +3487,7 @@
       var priceText = c.is_group
         ? c.technical_names.map(function (t) { return fmtSum(c.prices[t]); }).join(" / ")
         : fmtSum(c.prices[c.key]);
-      var techLabel = c.is_group ? c.technical_names.join(" / ") : c.key;
-      row.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + formatAdminSetName(c.display_name, techLabel) +
+      row.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(c.display_name) +
         '</div><div class="option-row-sub">' + priceText + ' сум</div></div>';
       row.addEventListener("click", function () {
         haptic("select");
@@ -3570,8 +3541,7 @@
 
     garnishSets.forEach(function (c) {
       var card = el("div", "card");
-      var techLabel = c.is_group ? c.technical_names.join(" / ") : c.key;
-      card.appendChild(el("div", "profile-section-title", formatAdminSetName(c.display_name, techLabel)));
+      card.appendChild(el("div", "profile-section-title", c.display_name));
       card.appendChild(buildGarnishChipEditor(working[c.key], menuDraft.garnish_reference, function (next) {
         working[c.key] = next;
       }));
@@ -3799,19 +3769,9 @@
       root.innerHTML = "";
       var list = el("div", "card profile-nav-list");
       data.sets.forEach(function (c) {
-        // Не buildProfileRow — тот экранирует label целиком, здесь нужен
-        // кусочек HTML (клиентское имя + приглушённое системное в скобках).
-        var row = el("div", "profile-nav-row");
-        var techLabel = c.is_group ? c.technical_names.join(" / ") : c.key;
-        row.innerHTML =
-          '<span class="profile-nav-row-icon">' + ICON_CAMERA + '</span>' +
-          '<span class="profile-nav-row-label">' + formatAdminSetName(c.display_name, techLabel) + '</span>' +
-          '<span class="profile-nav-row-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg></span>';
-        row.addEventListener("click", function () {
-          haptic("select");
+        list.appendChild(buildProfileRow(ICON_CAMERA, c.display_name, function () {
           wizardStep(function (b) { renderMenuCatalogDetail(b, c, data.garnish_reference); });
-        });
-        list.appendChild(row);
+        }));
       });
       root.appendChild(list);
     }).catch(function (err) {
@@ -3822,8 +3782,7 @@
 
   function renderMenuCatalogDetail(body, c, garnishReference) {
     wizardPhaseEl.innerHTML = "";
-    var techLabel = c.is_group ? c.technical_names.join(" / ") : c.key;
-    body.appendChild(el("h2", "wizard-title", formatAdminSetName(c.display_name, techLabel)));
+    body.appendChild(el("h2", "wizard-title", c.display_name));
 
     var photoUrl = c.photo_url;
     var pendingFile = null;
@@ -3960,286 +3919,6 @@
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", "Не удалось загрузить список: " + err.message));
     });
-  }
-
-  // -------------------------------------------------------------------
-  // "Каталог" (Операционный центр → Каталог, ТОЛЬКО главный админ —
-  // state.isMainAdmin, сервер проверяет это же на каждом /api/catalog/*
-  // отдельно). Каталог сетов (создание/переименование/архив — цена и
-  // системное имя задаются один раз при создании и не редактируются) и,
-  // для каждого сета, его "Каталог карточек" — сохранённые составы, НЕ
-  // связанные с черновиком/публикацией меню ("Меню дня" выше их не
-  // видит и не трогает — отдельная задача следующего этапа).
-  // -------------------------------------------------------------------
-
-  function buildCatalogSetRow(s, onChange) {
-    var row = el("div", "card catalog-set-row" + (s.archived ? " is-archived" : ""));
-    var nameLine = el("div", "catalog-set-name");
-    nameLine.innerHTML = formatAdminSetName(s.client_name, s.name);
-    row.appendChild(nameLine);
-    row.appendChild(el("div", "catalog-set-meta", fmtSum(s.price) + " сум" + (s.has_garnish ? " · с гарниром" : "")));
-
-    var actions = el("div", "catalog-set-actions");
-    var renameBtn = el("button", "btn-text", "Переименовать");
-    renameBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      openCatalogRenamePrompt(s, onChange);
-    });
-    actions.appendChild(renameBtn);
-    var archiveBtn = el("button", "btn-text", s.archived ? "Вернуть из архива" : "В архив");
-    archiveBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      api("/api/catalog/sets/" + encodeURIComponent(s.name) + "/archive", { method: "POST", body: { archived: !s.archived } })
-        .then(function () { haptic("success"); onChange(); })
-        .catch(function (err) { toast("Не удалось сохранить: " + err.message); });
-    });
-    actions.appendChild(archiveBtn);
-    row.appendChild(actions);
-
-    row.addEventListener("click", function () {
-      wizardStep(function (b) { openCatalogCardsScreen(b, s); });
-    });
-    return row;
-  }
-
-  function openCatalogRenamePrompt(s, onChange) {
-    wizardStep(function (body) {
-      wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", "Переименовать сет"));
-      body.appendChild(el("p", "center-note", "Системное имя «" + s.name + "» менять нельзя — на нём держится расчёт в \"Заказы\". Это только имя для покупателя."));
-      var field = el("div", "field");
-      field.innerHTML = '<label>Название для покупателя</label>';
-      var input = el("input");
-      input.type = "text";
-      input.value = s.client_name;
-      field.appendChild(input);
-      body.appendChild(field);
-      var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
-      saveBtn.addEventListener("click", function () {
-        saveBtn.disabled = true;
-        api("/api/catalog/sets/" + encodeURIComponent(s.name) + "/display-name", { method: "POST", body: { client_name: input.value.trim() } })
-          .then(function () {
-            haptic("success");
-            wizardBack();
-            onChange();
-          }).catch(function (err) {
-            saveBtn.disabled = false;
-            toast("Не удалось сохранить: " + err.message);
-          });
-      });
-      body.appendChild(saveBtn);
-    });
-  }
-
-  function openCatalogCreateSetForm(onCreated) {
-    wizardStep(function (body) {
-      wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", "Новый сет"));
-      body.appendChild(el("p", "center-note",
-        "Системное название нельзя будет изменить после создания — на нём держится расчёт суммы в \"Заказы\" и все отчёты. " +
-        "Цена тоже задаётся один раз здесь."));
-
-      var sysField = el("div", "field");
-      sysField.innerHTML = '<label>Системное название (как в "Заказы")</label>';
-      var sysInput = el("input");
-      sysInput.type = "text";
-      sysInput.placeholder = "Например: Плов дня";
-      sysField.appendChild(sysInput);
-      body.appendChild(sysField);
-
-      var clientField = el("div", "field");
-      clientField.innerHTML = '<label>Название для покупателя (необязательно)</label>';
-      var clientInput = el("input");
-      clientInput.type = "text";
-      clientInput.placeholder = "Например: Пауза в движении.";
-      clientField.appendChild(clientInput);
-      body.appendChild(clientField);
-
-      var priceField = el("div", "field");
-      priceField.innerHTML = '<label>Цена, сум</label>';
-      var priceInput = el("input");
-      priceInput.type = "number";
-      priceInput.inputMode = "numeric";
-      priceInput.placeholder = "25000";
-      priceField.appendChild(priceInput);
-      body.appendChild(priceField);
-
-      var hasGarnish = false;
-      body.appendChild(buildToggleRow("Есть гарнир", "Клиент сможет выбрать гарнир к этому сету", false, function (next) { hasGarnish = next; }));
-
-      var saveBtn = el("button", "btn-primary wizard-footer-btn", "Создать");
-      saveBtn.addEventListener("click", function () {
-        var price = parseInt(priceInput.value, 10);
-        if (!sysInput.value.trim()) { toast("Укажите системное название"); return; }
-        if (!price || price <= 0) { toast("Укажите цену больше нуля"); return; }
-        saveBtn.disabled = true;
-        api("/api/catalog/sets", {
-          method: "POST",
-          body: { system_name: sysInput.value.trim(), client_name: clientInput.value.trim(), price: price, has_garnish: hasGarnish },
-        }).then(function () {
-          haptic("success");
-          toast("Сет создан");
-          wizardBack();
-          onCreated();
-        }).catch(function (err) {
-          saveBtn.disabled = false;
-          toast(err.data && err.data.message ? err.data.message : "Не удалось создать: " + err.message);
-        });
-      });
-      body.appendChild(saveBtn);
-    });
-  }
-
-  function renderCatalogSetsList(root, sets) {
-    root.innerHTML = "";
-    var addBtn = el("button", "btn-primary", "+ Добавить сет");
-    addBtn.addEventListener("click", function () { openCatalogCreateSetForm(function () { loadCatalogSetsList(root); }); });
-    root.appendChild(addBtn);
-
-    if (!sets.length) {
-      root.appendChild(el("div", "empty-note", "Каталог пока пуст — добавьте первый сет."));
-      return;
-    }
-
-    var active = sets.filter(function (s) { return !s.archived; });
-    var archived = sets.filter(function (s) { return s.archived; });
-
-    var list = el("div");
-    active.forEach(function (s) { list.appendChild(buildCatalogSetRow(s, function () { loadCatalogSetsList(root); })); });
-    root.appendChild(list);
-
-    if (archived.length) {
-      root.appendChild(el("div", "profile-section-title", "В архиве"));
-      var archList = el("div");
-      archived.forEach(function (s) { archList.appendChild(buildCatalogSetRow(s, function () { loadCatalogSetsList(root); })); });
-      root.appendChild(archList);
-    }
-  }
-
-  function loadCatalogSetsList(root) {
-    root.innerHTML = "";
-    root.appendChild(el("div", "skeleton-block"));
-    api("/api/catalog/sets").then(function (data) {
-      renderCatalogSetsList(root, data.sets || []);
-    }).catch(function (err) {
-      root.innerHTML = "";
-      root.appendChild(el("div", "empty-note", "Не удалось загрузить каталог: " + err.message));
-    });
-  }
-
-  function openCatalogCardEditor(body, card, onChange) {
-    wizardPhaseEl.innerHTML = "";
-    var isNew = !card.id;
-    body.appendChild(el("h2", "wizard-title", isNew ? "Новая карточка" : "Карточка"));
-
-    var field = el("div", "field");
-    field.innerHTML = '<label>Состав (каждая строка — отдельный пункт)</label><textarea id="catalog-card-composition" rows="6"></textarea>';
-    body.appendChild(field);
-    var textarea = field.querySelector("textarea");
-    textarea.value = card.composition || "";
-
-    body.appendChild(el("p", "center-note", "Фото карточки — в следующем этапе."));
-
-    var saveBtn = el("button", "btn-primary wizard-footer-btn", isNew ? "Создать" : "Сохранить");
-    saveBtn.addEventListener("click", function () {
-      saveBtn.disabled = true;
-      var req = isNew
-        ? api("/api/catalog/cards", { method: "POST", body: { set_name: card.set_name, composition: textarea.value } })
-        : api("/api/catalog/cards/" + encodeURIComponent(card.id), { method: "POST", body: { composition: textarea.value } });
-      req.then(function () {
-        haptic("success");
-        toast(isNew ? "Карточка создана" : "Сохранено");
-        wizardBack();
-        onChange();
-      }).catch(function (err) {
-        saveBtn.disabled = false;
-        toast("Не удалось сохранить: " + err.message);
-      });
-    });
-    body.appendChild(saveBtn);
-  }
-
-  function buildCatalogCardRow(c, onChange) {
-    var row = el("div", "card catalog-card-row" + (c.archived ? " is-archived" : ""));
-    var firstLine = (c.composition || "").split("\n")[0] || "(пустой состав)";
-    row.appendChild(el("div", "catalog-card-preview", escapeHtml(firstLine)));
-    var metaParts = ["Создана " + c.created];
-    if (c.publish_count) metaParts.push("публикаций: " + c.publish_count);
-    if (c.last_published) metaParts.push("последняя: " + c.last_published);
-    row.appendChild(el("div", "catalog-card-meta", metaParts.join(" · ")));
-
-    var actions = el("div", "catalog-set-actions");
-    var dupBtn = el("button", "btn-text", "Дублировать");
-    dupBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      api("/api/catalog/cards/" + encodeURIComponent(c.id) + "/duplicate", { method: "POST", body: {} })
-        .then(function () { haptic("success"); onChange(); })
-        .catch(function (err) { toast("Не удалось дублировать: " + err.message); });
-    });
-    actions.appendChild(dupBtn);
-    var archBtn = el("button", "btn-text", c.archived ? "Вернуть" : "В архив");
-    archBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      api("/api/catalog/cards/" + encodeURIComponent(c.id) + "/archive", { method: "POST", body: { archived: !c.archived } })
-        .then(function () { haptic("success"); onChange(); })
-        .catch(function (err) { toast("Не удалось сохранить: " + err.message); });
-    });
-    actions.appendChild(archBtn);
-    row.appendChild(actions);
-
-    row.addEventListener("click", function () {
-      wizardStep(function (b) { openCatalogCardEditor(b, c, onChange); });
-    });
-    return row;
-  }
-
-  function openCatalogCardsScreen(body, s) {
-    wizardPhaseEl.innerHTML = "";
-    body.appendChild(el("h2", "wizard-title", "Каталог: " + s.client_name + (s.client_name !== s.name ? " (" + s.name + ")" : "")));
-
-    var searchField = el("div", "field");
-    searchField.innerHTML = '<label>Поиск по составу</label>';
-    var searchInput = el("input");
-    searchInput.type = "text";
-    searchInput.placeholder = "Например: рис";
-    searchField.appendChild(searchInput);
-    body.appendChild(searchField);
-
-    var addBtn = el("button", "btn-ghost", "+ Новая карточка");
-    body.appendChild(addBtn);
-
-    var listWrap = el("div");
-    body.appendChild(listWrap);
-
-    function load() {
-      listWrap.innerHTML = "";
-      listWrap.appendChild(el("div", "skeleton-block"));
-      var q = searchInput.value.trim();
-      var url = "/api/catalog/cards?set=" + encodeURIComponent(s.name) + (q ? "&q=" + encodeURIComponent(q) : "");
-      api(url).then(function (data) {
-        listWrap.innerHTML = "";
-        var cards = data.cards || [];
-        if (!cards.length) {
-          listWrap.appendChild(el("div", "empty-note", q ? "Ничего не найдено." : "Пока нет ни одной карточки — создайте первую."));
-          return;
-        }
-        cards.forEach(function (c) { listWrap.appendChild(buildCatalogCardRow(c, load)); });
-      }).catch(function (err) {
-        listWrap.innerHTML = "";
-        listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
-      });
-    }
-
-    var searchTimer = null;
-    searchInput.addEventListener("input", function () {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(load, 250);
-    });
-    addBtn.addEventListener("click", function () {
-      wizardStep(function (b) { openCatalogCardEditor(b, { set_name: s.name }, load); });
-    });
-
-    load();
   }
 
   // Розыгрыш "Пауза в подарок" — полная история победителей (см.
@@ -4583,12 +4262,8 @@
       }
       ordersData.orders.forEach(function (o) {
         var card = el("div", "card");
-        // Админский экран — клиентское имя + системное в скобках (см.
-        // formatAdminSetName); каждая позиция своим кусочком HTML, не
-        // единой escapeHtml-строкой, иначе скобки не получилось бы
-        // приглушить отдельным span.
-        var itemsHtml = o.items.map(function (it) {
-          return it.qty + "× " + formatAdminSetName(it.display_name, it.set) + (it.garnish ? " (" + escapeHtml(it.garnish) + ")" : "");
+        var itemsText = o.items.map(function (it) {
+          return it.qty + "× " + it.display_name + (it.garnish ? " (" + it.garnish + ")" : "");
         }).join(", ");
         card.innerHTML =
           '<div class="order-card-head">' +
@@ -4597,7 +4272,7 @@
           '</div>' +
           '<div class="ops-order-name">' + escapeHtml(o.name) + '</div>' +
           '<div class="ops-order-zone">' + escapeHtml(o.zone) + (o.point ? ", " + escapeHtml(o.point) : "") + '</div>' +
-          '<div class="order-card-items">' + itemsHtml + '</div>' +
+          '<div class="order-card-items">' + escapeHtml(itemsText) + '</div>' +
           '<div class="ops-order-sum">' + fmtSum(o.sum) + '</div>';
         body.appendChild(card);
       });
@@ -4736,7 +4411,7 @@
           }
           var info = el("div", "ops-debt-line-info");
           info.innerHTML =
-            '<div class="ops-breakdown-name">' + escapeHtml(l.date) + ' — ' + formatAdminSetName(l.display_name, l.set) + (l.qty ? ' ×' + l.qty : '') + '</div>';
+            '<div class="ops-breakdown-name">' + l.date + ' — ' + escapeHtml(l.display_name) + (l.qty ? ' ×' + l.qty : '') + '</div>';
           var sumBtn = el("button", "ops-debt-line-sum", fmtSum(l.sum));
           if (l.resolved) {
             sumBtn.disabled = true;
