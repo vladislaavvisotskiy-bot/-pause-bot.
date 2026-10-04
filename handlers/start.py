@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
+import config
 import sheets
 import texts
 import keyboards as kb
@@ -65,6 +66,24 @@ async def got_phone(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(texts.REGISTERED.format(name=greeting_name))
     await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(message.from_user.id))
+
+
+@router.message(Command("pauseapp"))
+async def cmd_pauseapp_test(message: Message):
+    """ВРЕМЕННО, по прямой просьбе пользователя: обычная кнопка входа в
+    PAUSE App живёт только в /admin (keyboards.admin_panel_kb), а туда
+    пускают строго config.ADMIN_IDS. Аккаунтам из config.
+    PAUSEAPP_TEST_CLIENT_IDS (временный тестовый доступ как к обычному
+    клиенту, см. pauseapp.admin_auth_middleware) физически неоткуда было
+    взять кнопку запуска — эта команда просто её присылает, никаких
+    дополнительных прав не даёт. Для всех остальных — тихо ничего не
+    делаем, не выдавая существование команды."""
+    uid = message.from_user.id
+    if uid not in config.ADMIN_IDS and uid not in config.PAUSEAPP_TEST_CLIENT_IDS:
+        return
+    if not config.WEBAPP_URL:
+        return
+    await message.answer("PAUSE App:", reply_markup=kb.pauseapp_test_kb())
 
 
 @router.callback_query(F.data == "support")

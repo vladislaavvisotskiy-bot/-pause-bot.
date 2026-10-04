@@ -284,6 +284,17 @@ def admin_back_kb(target: str = "panel") -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def pauseapp_test_kb() -> InlineKeyboardMarkup:
+    """ВРЕМЕННО, по прямой просьбе пользователя: единственная кнопка
+    запуска PAUSE App — для аккаунтов из config.PAUSEAPP_TEST_CLIENT_IDS
+    (см. handlers/start.py: cmd_pauseapp_test), у которых нет доступа к
+    /admin (и не должно быть — это НЕ админ-права, только вход в Mini App
+    как обычный клиент, см. pauseapp.admin_auth_middleware)."""
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.ADMIN_PAUSEAPP_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
+    return b.as_markup()
+
+
 def admin_panel_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ADMIN_KITCHEN_REPORT_BTN, callback_data="admin_kitchen_report")
