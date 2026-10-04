@@ -1846,6 +1846,144 @@ async def api_ops_menu_draft_publish(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# Операционный центр → Каталог (ЭТАП 1 — ТОЛЬКО главный админ, config.
+# ADMIN_IDS; НЕ делегируется через "Админы PAUSE App", в отличие от
+# "Меню"/"Финансы"/"Должники" — проверка на КАЖДОМ эндпоинте ниже именно
+# request["is_main_admin"], не request["pa_menu"]). Каталог сетов (sheets.
+# create_set/archive_set/restore_set/get_set_catalog) и каталог карточек
+# составов (sheets.*_set_card*) — полностью отдельно от черновика/
+# публикации меню (handlers/admin.py, sheets.publish_draft_menu — не
+# трогаем ничего там).
+# ---------------------------------------------------------------------------
+
+async def api_catalog_sets_list(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    sets = await _retry_sheets(sheets.get_set_catalog)
+    return web.json_response({"sets": sets})
+
+
+async def api_catalog_sets_create(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    system_name = (body.get("system_name") or "").strip()
+    client_name = (body.get("client_name") or "").strip()
+    has_garnish = bool(body.get("has_garnish"))
+    try:
+        price = int(body.get("price"))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "bad_price", "message": "Цена должна быть числом"}, status=400)
+    try:
+        created = await _retry_sheets(sheets.create_set, system_name, client_name, price, has_garnish)
+    except ValueError as e:
+        return web.json_response({"error": "validation", "message": str(e)}, status=400)
+    return web.json_response({"ok": True, "set": created})
+
+
+async def api_catalog_sets_archive(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    name = request.match_info.get("set_name", "")
+    if not name:
+        return web.json_response({"error": "set_required"}, status=400)
+    body = await request.json()
+    archived = bool(body.get("archived"))
+    if archived:
+        await _retry_sheets(sheets.archive_set, name)
+    else:
+        await _retry_sheets(sheets.restore_set, name)
+    return web.json_response({"ok": True})
+
+
+async def api_catalog_sets_display_name(request: web.Request):
+    """Переименование клиентского имени сета — ОТДЕЛЬНО от /api/ops/menu/
+    catalog/{set}/display-name (та версия доступна и делегированным
+    pa_menu-админам, см. api_ops_menu_set_display_name выше — не трогаем).
+    Обе в итоге пишут в тот же sheets.set_set_display_name, разница
+    только в пороге доступа на вызывающей стороне."""
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    name = request.match_info.get("set_name", "")
+    if not name:
+        return web.json_response({"error": "set_required"}, status=400)
+    body = await request.json()
+    client_name = (body.get("client_name") or "").strip()
+    await _retry_sheets(sheets.set_set_display_name, name, client_name)
+    return web.json_response({"ok": True})
+
+
+async def api_catalog_cards_list(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_name = (request.query.get("set") or "").strip()
+    if not set_name:
+        return web.json_response({"error": "set_required"}, status=400)
+    q = (request.query.get("q") or "").strip().lower()
+    cards = await _retry_sheets(sheets.get_set_cards, set_name)
+    if q:
+        cards = [c for c in cards if q in c["composition"].lower()]
+    return web.json_response({"cards": cards})
+
+
+async def api_catalog_cards_create(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    set_name = (body.get("set_name") or "").strip()
+    composition = (body.get("composition") or "").strip()
+    if not set_name:
+        return web.json_response({"error": "set_required"}, status=400)
+    card = await _retry_sheets(sheets.create_set_card, set_name, composition)
+    return web.json_response({"ok": True, "card": card})
+
+
+async def api_catalog_card_detail(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    card_id = request.match_info.get("card_id", "")
+    card = await _retry_sheets(sheets.get_set_card, card_id)
+    if not card:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"card": card})
+
+
+async def api_catalog_card_update(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    card_id = request.match_info.get("card_id", "")
+    body = await request.json()
+    composition = (body.get("composition") or "").strip()
+    ok = await _retry_sheets(sheets.update_set_card_composition, card_id, composition)
+    if not ok:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True})
+
+
+async def api_catalog_card_duplicate(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    card_id = request.match_info.get("card_id", "")
+    dup = await _retry_sheets(sheets.duplicate_set_card, card_id)
+    if not dup:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True, "card": dup})
+
+
+async def api_catalog_card_archive(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    card_id = request.match_info.get("card_id", "")
+    body = await request.json()
+    archived = bool(body.get("archived"))
+    fn = sheets.archive_set_card if archived else sheets.restore_set_card
+    ok = await _retry_sheets(fn, card_id)
+    if not ok:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # Операционный центр → Администраторы (только главный админ — ADMIN_IDS).
 # Даёт/забирает делегированным админам доступ к "Финансы"/"Должники" —
 # см. admin_auth_middleware (request["is_main_admin"]/["pa_finance"]/
@@ -1937,6 +2075,16 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/menu/draft/garnish", api_ops_menu_draft_garnish)
     app.router.add_post("/api/ops/menu/draft/photo", api_ops_menu_draft_photo)
     app.router.add_post("/api/ops/menu/draft/publish", api_ops_menu_draft_publish)
+    app.router.add_get("/api/catalog/sets", api_catalog_sets_list)
+    app.router.add_post("/api/catalog/sets", api_catalog_sets_create)
+    app.router.add_post("/api/catalog/sets/{set_name}/archive", api_catalog_sets_archive)
+    app.router.add_post("/api/catalog/sets/{set_name}/display-name", api_catalog_sets_display_name)
+    app.router.add_get("/api/catalog/cards", api_catalog_cards_list)
+    app.router.add_post("/api/catalog/cards", api_catalog_cards_create)
+    app.router.add_get("/api/catalog/cards/{card_id}", api_catalog_card_detail)
+    app.router.add_post("/api/catalog/cards/{card_id}", api_catalog_card_update)
+    app.router.add_post("/api/catalog/cards/{card_id}/duplicate", api_catalog_card_duplicate)
+    app.router.add_post("/api/catalog/cards/{card_id}/archive", api_catalog_card_archive)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_get("/api/feed", api_feed_list)
     app.router.add_post("/api/feed", api_feed_publish)
