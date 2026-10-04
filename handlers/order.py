@@ -508,7 +508,7 @@ async def _show_summary(message: Message, state: FSMContext):
         price = prices.get(item["set"], 0)
         sub = price * item["qty"]
         total += sub
-        line = f"• {item['qty']}× {texts.display_set_name(item['set'])}"
+        line = f"• {item['qty']}× {sheets.display_set_name(item['set'])}"
         if item["garnish"]:
             line += f" ({texts.display_garnish(item['garnish'])})"
         line += f" — {sub:,} сум".replace(",", " ")
@@ -654,7 +654,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
                 prices = sheets.get_set_prices()
                 total = sum(prices.get(i["set"], 0) * i["qty"] for i in cart)
                 items_text = ", ".join(
-                    f"{i['qty']}× {texts.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i["garnish"] else "")
+                    f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i["garnish"] else "")
                     for i in cart
                 )
                 alert = texts.ADMIN_PENDING_POINT_ALERT.format(
@@ -698,7 +698,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
             prices = sheets.get_set_prices()
             total = sum(prices.get(i["set"], 0) * i["qty"] for i in cart)
             items_text = ", ".join(
-                f"{i['qty']}× {texts.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i["garnish"] else "")
+                f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i["garnish"] else "")
                 for i in cart
             )
             caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
@@ -777,7 +777,7 @@ async def reminder_screenshot_received(message: Message, state: FSMContext, bot:
             prices = sheets.get_set_prices()
             total = sum(prices.get(o["set"], 0) * int(o["qty"] or 0) for o in order_rows)
             items_text = ", ".join(
-                f"{o['qty']}× {texts.display_set_name(o['set'])}" + (f" ({o['garnish']})" if o["garnish"] else "")
+                f"{o['qty']}× {sheets.display_set_name(o['set'])}" + (f" ({o['garnish']})" if o["garnish"] else "")
                 for o in order_rows
             )
             caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(

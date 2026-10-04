@@ -17,6 +17,7 @@ webapp.run_webapp(extra_subapps=...), bot.py) вместо создания вт
 handlers/club.py в самом боте. Где сравнить с оригиналом, отмечено в
 комментариях у каждой функции.
 """
+import asyncio
 import datetime as dt
 import logging
 import os
@@ -77,10 +78,11 @@ async def admin_auth_middleware(request: web.Request, handler):
     делегированный админ (лист "Админы PAUSE App", см. "Операционный
     центр" → "Администраторы") — базовый доступ к приложению плюс только
     те функции Операционного центра, что ему явно выданы (request["pa_finance"]/
-    ["pa_debtors"], см. проверки в соответствующих api_ops_* ниже).
-    request["is_main_admin"] решает доступ к самому экрану "Администраторы"
-    (api_pause_admins_*) — делегированному админу он никогда не
-    показывается, не выдаётся как "функция" и не может быть включён отсюда."""
+    ["pa_debtors"]/["pa_menu"], см. проверки в соответствующих api_ops_*
+    ниже). request["is_main_admin"] решает доступ к самому экрану
+    "Администраторы" (api_pause_admins_*) — делегированному админу он
+    никогда не показывается, не выдаётся как "функция" и не может быть
+    включён отсюда."""
     if "/api/" in request.path:
         tg_id = _extract_tg_id(request)
         if tg_id is None:
@@ -90,6 +92,7 @@ async def admin_auth_middleware(request: web.Request, handler):
             request["is_main_admin"] = True
             request["pa_finance"] = True
             request["pa_debtors"] = True
+            request["pa_menu"] = True
         else:
             pa = await _retry_sheets(sheets.get_pause_admin, tg_id)
             if not pa:
@@ -98,6 +101,7 @@ async def admin_auth_middleware(request: web.Request, handler):
             request["is_main_admin"] = False
             request["pa_finance"] = pa["finance"]
             request["pa_debtors"] = pa["debtors"]
+            request["pa_menu"] = pa["menu"]
     return await handler(request)
 
 
@@ -139,6 +143,7 @@ async def api_me(request: web.Request):
         "is_main_admin": request["is_main_admin"],
         "pa_finance": request["pa_finance"],
         "pa_debtors": request["pa_debtors"],
+        "pa_menu": request["pa_menu"],
     })
 
 
@@ -225,7 +230,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
             items.append({
                 "key": f"__variant__:{group}",
                 "is_variant_group": True,
-                "display_name": texts.display_set_name(group),
+                "display_name": sheets.display_set_name(group),
                 "variants": variants,
                 "price": None,
                 "has_garnish": False,
@@ -244,7 +249,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
             items.append({
                 "key": clean,
                 "is_variant_group": False,
-                "display_name": texts.display_set_name(clean),
+                "display_name": sheets.display_set_name(clean),
                 "variants": [],
                 "price": prices.get(clean, 0),
                 "has_garnish": bool(garnish_options),
@@ -501,7 +506,7 @@ async def api_order_submit(request: web.Request):
                 prices = await _retry_sheets(sheets.get_set_prices)
                 total = sum(prices.get(i["set"], 0) * int(i.get("qty", 0)) for i in cart)
                 items_text = ", ".join(
-                    f"{i['qty']}× {texts.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
+                    f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
                     for i in cart
                 )
                 alert = texts.ADMIN_PENDING_POINT_ALERT.format(
@@ -544,7 +549,7 @@ async def api_order_submit(request: web.Request):
             prices = await _retry_sheets(sheets.get_set_prices)
             total = sum(prices.get(i["set"], 0) * int(i.get("qty", 0)) for i in cart)
             items_text = ", ".join(
-                f"{i['qty']}× {texts.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
+                f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
                 for i in cart
             )
             caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
@@ -768,7 +773,7 @@ async def api_orders(request: web.Request):
 
     pending_out = [{
         "date": p["date"],
-        "items": [{"set": texts.display_set_name(i["set"]), "qty": i["qty"]} for i in p["items"]],
+        "items": [{"set": sheets.display_set_name(i["set"]), "qty": i["qty"]} for i in p["items"]],
         "payment": p["payment"],
         "status": "pending_point",
     } for p in pending]
@@ -783,7 +788,7 @@ async def api_orders(request: web.Request):
         # Клиенту — только клиентские названия (те же, что на карточках в
         # Меню), техническое имя столбца G "Заказы" наружу не уходит.
         display_items = [
-            {"set": texts.display_set_name(i["set"]), "qty": i["qty"]}
+            {"set": sheets.display_set_name(i["set"]), "qty": i["qty"]}
             for i in g["items"]
         ]
         groups_out.append({
@@ -822,7 +827,7 @@ async def api_orders_cancel(request: web.Request):
     bot = request.app.get("bot")
     if bot and config.ADMIN_IDS:
         try:
-            items_text = ", ".join(f"{i['qty']}× {texts.display_set_name(i['set'])}" for i in g["items"])
+            items_text = ", ".join(f"{i['qty']}× {sheets.display_set_name(i['set'])}" for i in g["items"])
             await notify_admins(bot, texts.ADMIN_ORDER_CANCELLED_ALERT.format(
                 name=client.get("name", ""), client_id=client.get("id", ""),
                 contact=client.get("contact", ""), date=g["date"],
@@ -1202,7 +1207,7 @@ async def api_ops_summary(request: web.Request):
         item_profit = margins.get(i["set"], 0) * i["qty"]
         profit += item_profit
 
-        display_name = texts.display_set_name(i["set"])
+        display_name = sheets.display_set_name(i["set"])
         s = by_set.setdefault(display_name, {"display_name": display_name, "qty": 0, "revenue": 0, "profit": 0})
         s["qty"] += i["qty"]
         s["revenue"] += i["sum"]
@@ -1304,7 +1309,7 @@ async def api_ops_orders(request: web.Request):
             }
             order.append(key)
         g = groups[key]
-        g["items"].append({"set": i["set"], "display_name": texts.display_set_name(i["set"]), "qty": i["qty"], "garnish": i["garnish"]})
+        g["items"].append({"set": i["set"], "display_name": sheets.display_set_name(i["set"]), "qty": i["qty"], "garnish": i["garnish"]})
         g["sum"] += i["sum"]
 
     out = []
@@ -1357,7 +1362,7 @@ async def api_ops_debtor_detail(request: web.Request):
     lines_out = [
         {
             "row": l["row"], "date": l["date"], "set": l["set"],
-            "display_name": texts.display_set_name(l["set"]), "qty": l["qty"],
+            "display_name": sheets.display_set_name(l["set"]), "qty": l["qty"],
             "sum": l["sum"], "resolved": l["resolved"],
         }
         for l in lines
@@ -1449,7 +1454,7 @@ async def api_ops_debtor_line_pay(request: web.Request):
     lines = await _retry_sheets(sheets.get_debtor_lines, client_id)
     return web.json_response({
         "lines": [
-            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]),
+            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": sheets.display_set_name(l["set"]),
              "qty": l["qty"], "sum": l["sum"], "resolved": l["resolved"]}
             for l in lines
         ],
@@ -1473,7 +1478,7 @@ async def api_ops_debtor_lines_pay(request: web.Request):
     lines = await _retry_sheets(sheets.get_debtor_lines, client_id)
     return web.json_response({
         "lines": [
-            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]),
+            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": sheets.display_set_name(l["set"]),
              "qty": l["qty"], "sum": l["sum"], "resolved": l["resolved"]}
             for l in lines
         ],
@@ -1494,7 +1499,7 @@ async def api_ops_debtor_line_unpay(request: web.Request):
     lines = await _retry_sheets(sheets.get_debtor_lines, client_id)
     return web.json_response({
         "lines": [
-            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": texts.display_set_name(l["set"]),
+            {"row": l["row"], "date": l["date"], "set": l["set"], "display_name": sheets.display_set_name(l["set"]),
              "qty": l["qty"], "sum": l["sum"], "resolved": l["resolved"]}
             for l in lines
         ],
@@ -1525,6 +1530,319 @@ async def api_ops_giveaway(request: web.Request):
         return web.json_response({"error": "forbidden"}, status=403)
     tickets = await _retry_sheets(sheets.get_all_tickets)
     return web.json_response({"tickets": tickets})
+
+
+# ---------------------------------------------------------------------------
+# Операционный центр → Меню → "Карточки сетов" (доступ — pa_menu, см.
+# admin_auth_middleware). Постоянные catalog-атрибуты КАЖДОГО сета — фото,
+# описание, доступен ли гарнир в принципе, кастомное клиентское имя — то,
+# что раньше можно было задать только через бот ("/admin → 🖼 Фото блюд" /
+# "✉️ Описание блюд") или вообще только вручную в самой таблице (гарнир
+# Да/Нет). НЕ часть черновика/публикации меню (см. раздел ниже) — эти
+# атрибуты живут сами по себе, день в день, пока админ их не поменяет.
+# ---------------------------------------------------------------------------
+
+async def _catalog_overview() -> list:
+    """Один элемент на карточку — группа переменной цены (config.
+    SET_VARIANTS) одной строкой с несколькими ценами внутри, обычный сет —
+    отдельной строкой. Чистая функция поверх уже прочитанных данных (та же
+    дисциплина, что и в _serialize_sets) — display_name считаем тут же, не
+    через sheets.display_set_name в цикле, чтобы не плодить по одному
+    обращению к Sheets на каждый сет каталога."""
+    sets = await _retry_sheets(sheets.get_sets)
+    prices = await _retry_sheets(sheets.get_set_prices)
+    sets_with_garnish = await _retry_sheets(sheets.get_sets_with_garnish)
+    extra = await _retry_sheets(sheets.get_set_extra)
+    overrides = await _retry_sheets(sheets.get_set_display_name_overrides)
+
+    def _name(n):
+        return overrides.get(n) or texts.SET_DISPLAY_NAMES.get(n, n)
+
+    items = []
+    seen_groups = set()
+    for name in sets:
+        group = config.SET_VARIANT_GROUP.get(name)
+        if group:
+            if group in seen_groups:
+                continue
+            seen_groups.add(group)
+            technicals = [t for t, _ in config.SET_VARIANTS[group]]
+            first_extra = extra.get(technicals[0], {})
+            items.append({
+                "key": group, "is_group": True, "technical_names": technicals,
+                "display_name": _name(group),
+                "prices": {t: prices.get(t, 0) for t in technicals},
+                "has_garnish": technicals[0].strip().lower() in sets_with_garnish,
+                "photo_url": _resolve_photo_url(first_extra.get("photo_url", "")),
+                "description": first_extra.get("description", ""),
+            })
+        else:
+            e = extra.get(name, {})
+            items.append({
+                "key": name, "is_group": False, "technical_names": [name],
+                "display_name": _name(name),
+                "prices": {name: prices.get(name, 0)},
+                "has_garnish": name.strip().lower() in sets_with_garnish,
+                "photo_url": _resolve_photo_url(e.get("photo_url", "")),
+                "description": e.get("description", ""),
+            })
+    return items
+
+
+async def api_ops_menu_catalog(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    items = await _catalog_overview()
+    garnish_reference = await _retry_sheets(sheets.get_garnishes)
+    return web.json_response({"sets": items, "garnish_reference": garnish_reference})
+
+
+async def api_ops_menu_set_photo(request: web.Request):
+    """multipart: photo (одно фото) — как бот ("🖼 Фото блюд"), только из
+    Mini App: ре-загружаем в MEDIA_CHAT_ID (как фото ленты CLUB, см.
+    api_feed_publish), а не храним голый file_id напрямую из chat-сообщения
+    — тот же приём для устойчивого file_id, уже используемый везде, где
+    фото загружают из самого приложения."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_key = request.match_info.get("set_key", "")
+    if not set_key:
+        return web.json_response({"error": "set_required"}, status=400)
+    if not config.MEDIA_CHAT_ID:
+        return web.json_response({"error": "media_chat_not_configured"}, status=503)
+    bot = request.app.get("bot")
+    if not bot:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "photo":
+        return web.json_response({"error": "photo_required"}, status=400)
+    data = await field.read(decode=False)
+    if not data:
+        return web.json_response({"error": "photo_required"}, status=400)
+    if len(data) > MAX_SCREENSHOT_BYTES:
+        return web.json_response({"error": "too_large"}, status=400)
+
+    try:
+        msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=field.filename or "set.jpg"))
+    except Exception:
+        logger.exception("PAUSE App: не удалось загрузить фото сета в канал (set=%s)", set_key)
+        return web.json_response({"error": "upload_failed"}, status=502)
+
+    file_id = msg.photo[-1].file_id
+    await _retry_sheets(sheets.set_set_photo, set_key, file_id)
+    return web.json_response({"ok": True, "photo_url": _resolve_photo_url(file_id)})
+
+
+async def api_ops_menu_set_description(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_key = request.match_info.get("set_key", "")
+    if not set_key:
+        return web.json_response({"error": "set_required"}, status=400)
+    body = await request.json()
+    description = (body.get("description") or "").strip()
+    await _retry_sheets(sheets.set_set_description, set_key, description)
+    return web.json_response({"ok": True})
+
+
+async def api_ops_menu_set_garnish_flag(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_key = request.match_info.get("set_key", "")
+    if not set_key:
+        return web.json_response({"error": "set_required"}, status=400)
+    body = await request.json()
+    enabled = bool(body.get("enabled"))
+    await _retry_sheets(sheets.set_set_garnish_flag, set_key, enabled)
+    return web.json_response({"ok": True})
+
+
+async def api_ops_menu_set_display_name(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_key = request.match_info.get("set_key", "")
+    if not set_key:
+        return web.json_response({"error": "set_required"}, status=400)
+    body = await request.json()
+    display_name = (body.get("display_name") or "").strip()
+    await _retry_sheets(sheets.set_set_display_name, set_key, display_name)
+    return web.json_response({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Операционный центр → Меню → "Меню дня" (доступ — pa_menu). Черновик,
+# готовится ДО публикации, ровно та же механика и те же ячейки черновика
+# (K1/K2/K8/столбец L в "Справочники"), что и у бота — см. handlers/
+# admin.py: AdminMenu FSM, sheets.start_new_menu_draft/set_draft_sets/
+# set_draft_garnishes_for_set/publish_draft_menu. Mini App — просто другой
+# интерфейс поверх ТЕХ ЖЕ данных: если координатор начнёт черновик в чате
+# бота, а потом откроет "Меню дня" в приложении, увидит тот же черновик (и
+# наоборот) — состояние общее, не раздельное.
+# ---------------------------------------------------------------------------
+
+async def api_ops_menu_draft(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    photo_ids, caption = await _retry_sheets(sheets.get_draft_menu)
+    selected_keys = await _retry_sheets(sheets.get_draft_sets_raw)
+    catalog = await _catalog_overview()
+    catalog_by_key = {c["key"]: c for c in catalog}
+
+    garnish = {}
+    for key in selected_keys:
+        c = catalog_by_key.get(key)
+        if c and c["has_garnish"]:
+            garnish[key] = await _retry_sheets(sheets.get_draft_garnishes_for_set, key)
+
+    active_date = await _retry_sheets(sheets.get_active_menu_date)
+    garnish_reference = await _retry_sheets(sheets.get_garnishes)
+    return web.json_response({
+        "photo_urls": [_resolve_photo_url(fid) for fid in photo_ids],
+        "caption": caption,
+        "selected_keys": selected_keys,
+        "garnish": garnish,
+        "catalog": catalog,
+        "garnish_reference": garnish_reference,
+        "active_menu_date": active_date,
+    })
+
+
+async def api_ops_menu_draft_new(request: web.Request):
+    """Полный сброс черновика — та же точка входа, что "координатор
+    прислал новое фото" в боте (см. sheets.start_new_menu_draft: фото/
+    текст/сеты/гарниры черновика все на "не заданы"). Активное
+    (клиентское) меню не трогает вообще."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    await _retry_sheets(sheets.start_new_menu_draft, [], "")
+    return web.json_response({"ok": True})
+
+
+async def api_ops_menu_draft_sets(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    sets = body.get("sets")
+    if not isinstance(sets, list):
+        return web.json_response({"error": "bad_sets"}, status=400)
+    clean = [str(s).strip() for s in sets if str(s).strip()]
+    await _retry_sheets(sheets.set_draft_sets, clean)
+    return web.json_response({"ok": True})
+
+
+async def api_ops_menu_draft_garnish(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    set_key = (body.get("set") or "").strip()
+    if not set_key:
+        return web.json_response({"error": "set_required"}, status=400)
+    garnishes = body.get("garnishes")
+    if not isinstance(garnishes, list):
+        return web.json_response({"error": "bad_garnishes"}, status=400)
+    clean = [str(g).strip() for g in garnishes if str(g).strip()]
+    await _retry_sheets(sheets.set_draft_garnishes_for_set, set_key, clean)
+    return web.json_response({"ok": True})
+
+
+async def api_ops_menu_draft_photo(request: web.Request):
+    """multipart: 0+ полей "photo" (новый набор фото объявления — ПОЛНОСТЬЮ
+    заменяет прежний, если хоть одно фото прислано; если ни одного — старые
+    фото остаются как есть, трогаем только подпись), "caption" (текст,
+    опционально — если поле не прислано, подпись остаётся прежней),
+    "clear_photos"="1" — явно стереть фото (отдельно от "не присылать
+    новых"). Та же логика ре-загрузки в MEDIA_CHAT_ID, что у "Карточки
+    сетов"/ленты CLUB."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+
+    photos = []
+    caption = None
+    clear_photos = False
+    reader = await request.multipart()
+    async for field in reader:
+        if field.name == "photo":
+            data = await field.read(decode=False)
+            if data:
+                if len(data) > MAX_SCREENSHOT_BYTES:
+                    return web.json_response({"error": "too_large"}, status=400)
+                photos.append((data, field.filename or "menu.jpg"))
+        elif field.name == "caption":
+            caption = await field.text()
+        elif field.name == "clear_photos":
+            clear_photos = (await field.text()).strip() == "1"
+
+    existing_ids, existing_caption = await _retry_sheets(sheets.get_draft_menu)
+    if caption is None:
+        caption = existing_caption
+
+    photo_ids = existing_ids
+    if clear_photos:
+        photo_ids = []
+    if photos:
+        if not config.MEDIA_CHAT_ID:
+            return web.json_response({"error": "media_chat_not_configured"}, status=503)
+        bot = request.app.get("bot")
+        if not bot:
+            return web.json_response({"error": "bot_unavailable"}, status=503)
+        new_ids = []
+        try:
+            for data, filename in photos:
+                msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=filename))
+                new_ids.append(msg.photo[-1].file_id)
+        except Exception:
+            logger.exception("PAUSE App: не удалось загрузить фото черновика меню в канал")
+            return web.json_response({"error": "upload_failed"}, status=502)
+        photo_ids = new_ids
+
+    await _retry_sheets(sheets.set_draft_menu, photo_ids, caption)
+    return web.json_response({
+        "ok": True, "caption": caption,
+        "photo_urls": [_resolve_photo_url(fid) for fid in photo_ids],
+    })
+
+
+async def _broadcast_new_menu_from_app(bot):
+    """Точная копия handlers/admin.py:_broadcast_new_menu — своя копия, а
+    не импорт из handlers.admin, чтобы не тащить в pauseapp.py чужие
+    зависимости того модуля (например pdf_report) только ради одной
+    функции рассылки."""
+    for c in await _retry_sheets(sheets.get_broadcast_clients):
+        if c.get("notify_menu_off"):
+            continue
+        try:
+            greeting = texts.NEW_MENU_GREETING.format(name=c.get("name") or "")
+            await bot.send_message(int(c["tg_id"]), greeting, reply_markup=kb.menu_broadcast_kb())
+        except Exception:
+            logger.exception("PAUSE App: не удалось отправить оповещение о новом меню клиенту ID %s", c.get("id"))
+        await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
+
+
+async def api_ops_menu_draft_publish(request: web.Request):
+    """Единственный шаг, переносящий черновик в активные ячейки (см.
+    sheets.publish_draft_menu) — до этого клиенты продолжают видеть
+    предыдущее опубликованное меню. Рассылка клиентам (как в боте, см.
+    _broadcast_new_menu_from_app) запускается ФОНОВОЙ задачей, а не
+    ожидается внутри самого запроса — иначе админ сидел бы с крутящимся
+    спиннером в приложении, пока бот по очереди пишет каждому клиенту
+    (может быть десятки секунд и больше на большой базе)."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = (body.get("date") or "").strip()
+    if not date_str:
+        return web.json_response({"error": "date_required"}, status=400)
+
+    await _retry_sheets(sheets.publish_draft_menu, date_str)
+
+    bot = request.app.get("bot")
+    will_broadcast = bool(bot) and not await _retry_sheets(sheets.is_broadcasts_disabled)
+    if will_broadcast:
+        asyncio.create_task(_broadcast_new_menu_from_app(bot))
+
+    return web.json_response({"ok": True, "date": date_str, "broadcasted": will_broadcast})
 
 
 # ---------------------------------------------------------------------------
@@ -1561,7 +1879,7 @@ async def api_pause_admins_feature(request: web.Request):
     tg_id = request.match_info.get("tg_id", "")
     body = await request.json()
     feature = (body.get("feature") or "").strip()
-    if feature not in ("finance", "debtors"):
+    if feature not in ("finance", "debtors", "menu"):
         return web.json_response({"error": "bad_feature"}, status=400)
     allowed = bool(body.get("allowed"))
     await _retry_sheets(sheets.set_pause_admin_feature, tg_id, feature, allowed)
@@ -1608,6 +1926,17 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/club/giveaway", api_club_giveaway)
     app.router.add_get("/api/bonuses", api_bonuses)
     app.router.add_get("/api/ops/giveaway", api_ops_giveaway)
+    app.router.add_get("/api/ops/menu/catalog", api_ops_menu_catalog)
+    app.router.add_post("/api/ops/menu/catalog/{set_key}/photo", api_ops_menu_set_photo)
+    app.router.add_post("/api/ops/menu/catalog/{set_key}/description", api_ops_menu_set_description)
+    app.router.add_post("/api/ops/menu/catalog/{set_key}/garnish-flag", api_ops_menu_set_garnish_flag)
+    app.router.add_post("/api/ops/menu/catalog/{set_key}/display-name", api_ops_menu_set_display_name)
+    app.router.add_get("/api/ops/menu/draft", api_ops_menu_draft)
+    app.router.add_post("/api/ops/menu/draft/new", api_ops_menu_draft_new)
+    app.router.add_post("/api/ops/menu/draft/sets", api_ops_menu_draft_sets)
+    app.router.add_post("/api/ops/menu/draft/garnish", api_ops_menu_draft_garnish)
+    app.router.add_post("/api/ops/menu/draft/photo", api_ops_menu_draft_photo)
+    app.router.add_post("/api/ops/menu/draft/publish", api_ops_menu_draft_publish)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_get("/api/feed", api_feed_list)
     app.router.add_post("/api/feed", api_feed_publish)

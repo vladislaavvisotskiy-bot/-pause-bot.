@@ -1325,6 +1325,56 @@ p { margin: 0; color: var(--ink-soft); }
 .pa-switch input:checked + .pa-switch-slider::before { transform: translateX(19px); }
 .pa-switch input:disabled + .pa-switch-slider { opacity: .6; }
 
+/* ------------------------------------------------------------------ */
+/* "Операционный центр" → "Меню" — создание меню дня, карточки сетов,  */
+/* названия для покупателей. admin-only, без i18n, как остальной       */
+/* Операционный центр.                                                 */
+/* ------------------------------------------------------------------ */
+
+.menu-draft-summary { cursor: pointer; }
+.menu-draft-photo-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.menu-draft-photo-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--ivory-deep);
+}
+.menu-draft-caption { font-size: 13.5px; color: var(--ink); line-height: 1.4; }
+
+/* Подсказка формата фото + живое демо того же переключателя "свёрнуто/
+   развёрнуто", что видит клиент на реальной карточке сета (переиспользует
+   .menu-set-card/.menu-set-thumb/.expanded — см. styles выше, не копия). */
+.photo-format-demo { margin: 14px 0; }
+.field-hint { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 10px; }
+
+.garnish-chip-editor { margin-top: 4px; }
+.garnish-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.garnish-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--card);
+  color: var(--ink);
+}
+.garnish-chip.active { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
+.garnish-chip.suggestion { background: var(--ink-soft-bg); color: var(--ink-soft); border-style: dashed; }
+.garnish-chips-suggestions { margin-top: -2px; }
+.garnish-add-row { display: flex; gap: 8px; }
+.garnish-add-row input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  background: var(--card);
+  color: var(--ink);
+}
+.garnish-add-row button { flex: 0 0 auto; width: auto; padding: 0 16px; }
+
 @media (min-width: 480px) {
   #content { max-width: 480px; margin: 0 auto; }
   #bottom-nav { max-width: 480px; margin: 0 auto; left: 50%; transform: translateX(-50%); }

@@ -101,9 +101,9 @@ def set_kb(sets: list, back: bool = False) -> InlineKeyboardMarkup:
             if group in shown_variant_groups:
                 continue
             shown_variant_groups.add(group)
-            b.button(text=texts.display_set_name(group), callback_data=f"set:__variant__:{group}")
+            b.button(text=sheets.display_set_name(group), callback_data=f"set:__variant__:{group}")
         else:
-            b.button(text=texts.display_set_name(opt), callback_data=f"set:{opt}")
+            b.button(text=sheets.display_set_name(opt), callback_data=f"set:{opt}")
     if back:
         b.button(text=texts.BACK_BTN, callback_data="set:__back__")
     _home(b)
@@ -445,9 +445,9 @@ def admin_preview_kb(sets: list) -> InlineKeyboardMarkup:
             if group in shown_variant_groups:
                 continue
             shown_variant_groups.add(group)
-            b.button(text=texts.display_set_name(group), callback_data=f"pvset:__variant__:{group}")
+            b.button(text=sheets.display_set_name(group), callback_data=f"pvset:__variant__:{group}")
         else:
-            b.button(text=texts.display_set_name(opt), callback_data=f"pvset:{opt}")
+            b.button(text=sheets.display_set_name(opt), callback_data=f"pvset:{opt}")
     b.button(text=texts.ADMIN_PREVIEW_EDIT_SETS_BTN, callback_data="pveditsets")
     b.button(text=texts.ADMIN_PREVIEW_EDIT_GARNISH_BTN, callback_data="pveditgarnish")
     b.button(text=texts.ADMIN_PREVIEW_NEXT_BTN, callback_data="pvnext")

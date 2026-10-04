@@ -51,6 +51,7 @@
     isMainAdmin: false,    // главный админ бота (config.ADMIN_IDS) — доступ ко всем функциям всегда
     paFinance: false,      // видит "Финансы" в Операционном центре (главному админу — всегда true)
     paDebtors: false,      // видит "Должники" в Операционном центре (главному админу — всегда true)
+    paMenu: false,         // видит "Меню" в Операционном центре (главному админу — всегда true)
   };
 
   // -------------------------------------------------------------------
@@ -2916,7 +2917,7 @@
     // У делегированного админа без единой выданной функции (см.
     // "Операционный центр" → "Администраторы") скрываем саму карточку —
     // незачем вести в пустой хаб без единой доступной кнопки.
-    if (state.isMainAdmin || state.paFinance || state.paDebtors) {
+    if (state.isMainAdmin || state.paFinance || state.paDebtors || state.paMenu) {
       var adminRows = el("div", "card profile-nav-list");
       adminRows.appendChild(buildProfileRow(ICON_OPS, "Операционный центр", function () { openProfileSubscreen("Операционный центр", loadOpsHub); }));
       root.appendChild(adminRows);
@@ -3155,6 +3156,8 @@
   var ICON_OPS_DEBTORS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0.9-3.6 3.2-5.4 6-5.4s5.1 1.8 6 5.4"/><path d="M17 4.5c1.6 0.4 2.8 1.8 2.8 3.5s-1.2 3.1-2.8 3.5M21 20c-0.6-2.4-1.8-4-3.5-4.8"/></svg>';
   var ICON_OPS_ADMINS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-2.9 8-7 10-4.1-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>';
   var ICON_OPS_GIVEAWAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M3 12h18"/><path d="M12 8v12"/><path d="M12 8c-1.8 0-3.2-1.3-3.2-2.8S9.2 3 10.5 3c1.3 0 1.8 1.6 1.5 2.8M12 8c1.8 0 3.2-1.3 3.2-2.8S14.8 3 13.5 3c-1.3 0-1.8 1.6-1.5 2.8"/></svg>';
+  var ICON_OPS_MENU = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>';
+  var ICON_CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>';
 
   function opsStepHeader(body, title) {
     body.appendChild(el("h2", "wizard-title", title));
@@ -3188,6 +3191,36 @@
         });
       }));
     }
+    if (state.isMainAdmin || state.paMenu) {
+      rows.appendChild(buildProfileRow(ICON_OPS_MENU, "Меню", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "Меню");
+          var menuRows = el("div", "card profile-nav-list");
+          menuRows.appendChild(buildProfileRow(ICON_EDIT, "Меню дня", function () {
+            wizardStep(function (b) { openMenuDraftWizard(b); });
+          }));
+          menuRows.appendChild(buildProfileRow(ICON_CAMERA, "Карточки сетов", function () {
+            wizardStep(function (b) {
+              opsStepHeader(b, "Карточки сетов");
+              var sub = el("div");
+              sub.appendChild(el("div", "skeleton-block"));
+              b.appendChild(sub);
+              loadMenuCatalogList(sub);
+            });
+          }));
+          menuRows.appendChild(buildProfileRow(ICON_TAG, "Названия для покупателей", function () {
+            wizardStep(function (b) {
+              opsStepHeader(b, "Названия для покупателей");
+              var sub = el("div");
+              sub.appendChild(el("div", "skeleton-block"));
+              b.appendChild(sub);
+              loadMenuDisplayNames(sub);
+            });
+          }));
+          body.appendChild(menuRows);
+        });
+      }));
+    }
     if (state.isMainAdmin || state.paDebtors) {
       rows.appendChild(buildProfileRow(ICON_OPS_DEBTORS, "Должники", function () {
         wizardStep(function (body) {
@@ -3211,6 +3244,681 @@
       }));
     }
     root.appendChild(rows);
+  }
+
+  // -------------------------------------------------------------------
+  // "Меню" (Операционный центр → Меню, доступ — pa_menu) — создание меню
+  // через сам Mini App, по той же механике, что и у бота (черновик ->
+  // сеты -> гарниры -> фото/текст -> предпросмотр -> публикация, см.
+  // pauseapp.py: api_ops_menu_draft*), только интерфейс — хаб с тремя
+  // независимыми разделами внутри одного черновика, а не жёсткий порядок
+  // шагов чата. "Карточки сетов" и "Названия для покупателей" — отдельные
+  // от черновика, постоянные catalog-атрибуты (см. api_ops_menu_catalog).
+  // -------------------------------------------------------------------
+
+  // Общий блок-подсказка по формату фото + живое демо того же самого
+  // переключателя "свёрнуто/развёрнуто", что видит клиент на карточке
+  // сета (.menu-set-card/.menu-set-thumb — те же классы, тот же CSS, не
+  // имитация). getPhotoUrl — функция, чтобы демо подхватывало СВЕЖЕЕ фото
+  // сразу после выбора файла, до какой-либо отправки на сервер.
+  function buildPhotoFormatDemo(getPhotoUrl) {
+    var wrap = el("div", "photo-format-demo");
+    wrap.appendChild(el("div", "field-hint",
+      "Совет по фото: альбомная ориентация, примерно 4:3 (например 1600×1200), блюдо по центру кадра — " +
+      "тогда оно одинаково хорошо смотрится и маленькой квадратной миниатюрой в списке, и широким баннером, " +
+      "когда карточку разворачивают. Нажмите карточку ниже, чтобы увидеть оба варианта."));
+    var expanded = false;
+    var demoCard = el("div", "card menu-set-card");
+    function render() {
+      demoCard.innerHTML = "";
+      demoCard.classList.toggle("expanded", expanded);
+      var url = getPhotoUrl();
+      if (url) {
+        var img = el("img", "menu-set-thumb");
+        img.alt = "";
+        if (/^blob:|^https?:\/\//.test(url)) img.src = url; else setPhotoSrc(img, url);
+        demoCard.appendChild(img);
+      } else {
+        demoCard.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
+      }
+      var body = el("div", "menu-set-card-body");
+      body.appendChild(el("div", "menu-set-card-name", "Так будет выглядеть карточка"));
+      body.appendChild(el("div", "menu-set-card-note",
+        expanded ? "Развёрнуто (широкий формат 16:9) — нажмите, чтобы свернуть" : "Свёрнуто (квадрат) — нажмите, чтобы развернуть"));
+      demoCard.appendChild(body);
+    }
+    demoCard.addEventListener("click", function () { expanded = !expanded; render(); });
+    render();
+    wrap.appendChild(demoCard);
+    return wrap;
+  }
+
+  // Гарниры — чипы: уже добавленные (можно убрать тапом), подсказки из
+  // общего справочника (sheets.get_garnishes, тап — добавить), и поле для
+  // своего варианта. onChange зовётся с полным текущим списком при любом
+  // изменении — вызывающий код сам решает, когда сохранять на сервер.
+  function buildGarnishChipEditor(initial, referenceList, onChange) {
+    var current = initial.slice();
+    var wrap = el("div", "garnish-chip-editor");
+    function render() {
+      wrap.innerHTML = "";
+      if (current.length) {
+        var chips = el("div", "garnish-chips");
+        current.forEach(function (g) {
+          var chip = el("button", "garnish-chip active", escapeHtml(g) + " ✕");
+          chip.addEventListener("click", function () {
+            current = current.filter(function (x) { return x !== g; });
+            onChange(current.slice());
+            render();
+          });
+          chips.appendChild(chip);
+        });
+        wrap.appendChild(chips);
+      }
+      var suggestions = referenceList.filter(function (g) { return current.indexOf(g) === -1; });
+      if (suggestions.length) {
+        var sugWrap = el("div", "garnish-chips garnish-chips-suggestions");
+        suggestions.forEach(function (g) {
+          var chip = el("button", "garnish-chip suggestion", "+ " + escapeHtml(g));
+          chip.addEventListener("click", function () {
+            current.push(g);
+            onChange(current.slice());
+            render();
+          });
+          sugWrap.appendChild(chip);
+        });
+        wrap.appendChild(sugWrap);
+      }
+      var addRow = el("div", "garnish-add-row");
+      var input = el("input");
+      input.type = "text";
+      input.placeholder = "Свой вариант";
+      var addBtn = el("button", "btn-ghost", "Добавить");
+      addBtn.addEventListener("click", function () {
+        var v = input.value.trim();
+        if (!v || current.indexOf(v) !== -1) return;
+        current.push(v);
+        input.value = "";
+        onChange(current.slice());
+        render();
+      });
+      addRow.appendChild(input);
+      addRow.appendChild(addBtn);
+      wrap.appendChild(addRow);
+    }
+    render();
+    return wrap;
+  }
+
+  // --- Черновик "Меню дня" --------------------------------------------
+
+  var menuDraft = null;          // последний загруженный черновик (см. GET /api/ops/menu/draft)
+  var _menuSetsSelected = null;  // рабочая копия выбора на время шага "Сеты сегодня"
+
+  function loadMenuDraft(onReady, onError) {
+    api("/api/ops/menu/draft").then(function (data) {
+      menuDraft = data;
+      _menuSetsSelected = null;
+      onReady();
+    }).catch(function (err) {
+      if (onError) onError(err);
+    });
+  }
+
+  function openMenuDraftWizard(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Меню дня"));
+    var sub = el("div");
+    sub.appendChild(el("div", "skeleton-block"));
+    body.appendChild(sub);
+    loadMenuDraft(function () {
+      wizardReplace(renderMenuDraftHub);
+    }, function (err) {
+      sub.innerHTML = "";
+      sub.appendChild(el("div", "empty-note", "Не удалось загрузить черновик меню: " + err.message));
+    });
+  }
+
+  function renderMenuDraftHub(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Меню дня"));
+
+    var d = menuDraft;
+    var photoCard = el("div", "card menu-draft-summary");
+    if (d.photo_urls.length) {
+      var thumbRow = el("div", "menu-draft-photo-row");
+      d.photo_urls.forEach(function (u) {
+        var img = el("img", "menu-draft-photo-thumb");
+        img.alt = "";
+        setPhotoSrc(img, u);
+        thumbRow.appendChild(img);
+      });
+      photoCard.appendChild(thumbRow);
+    } else {
+      photoCard.appendChild(el("div", "empty-note", "Фото пока не загружено"));
+    }
+    photoCard.appendChild(el("div", "menu-draft-caption", escapeHtml(d.caption || "Текста пока нет")));
+    photoCard.addEventListener("click", function () { wizardStep(renderMenuDraftPhotoStep); });
+    body.appendChild(photoCard);
+
+    var rows = el("div", "card profile-nav-list");
+    var setsLabel = d.selected_keys.length ? (d.selected_keys.length + " выбрано") : "весь каталог";
+    rows.appendChild(buildProfileRow(ICON_ORDERS, "Сеты сегодня — " + setsLabel, function () { wizardStep(renderMenuDraftSetsStep); }));
+    var garnishCount = Object.keys(d.garnish).length;
+    rows.appendChild(buildProfileRow(ICON_SLIDERS, "Гарниры" + (garnishCount ? " — " + garnishCount : ""), function () { wizardStep(renderMenuDraftGarnishStep); }));
+    body.appendChild(rows);
+
+    var previewBtn = el("button", "btn-ghost", "Предпросмотр как у клиента");
+    previewBtn.addEventListener("click", function () { wizardStep(renderMenuDraftPreviewStep); });
+    body.appendChild(previewBtn);
+
+    var resetBtn = el("button", "btn-text", "Начать новый черновик");
+    resetBtn.addEventListener("click", function () {
+      showConfirm("Стереть текущий черновик (фото, текст, выбор сетов и гарниры) и начать заново?", "Да, начать заново", function () {
+        api("/api/ops/menu/draft/new", { method: "POST", body: {} }).then(function () {
+          haptic("success");
+          wizardReplace(openMenuDraftWizard);
+        }).catch(function (err) { toast("Не удалось сбросить черновик: " + err.message); });
+      });
+    });
+    body.appendChild(resetBtn);
+
+    var publishCard = el("div", "card");
+    publishCard.appendChild(el("div", "profile-section-title", "Опубликовать"));
+    var selectedDate = "";
+    var dateField = el("div", "field");
+    dateField.innerHTML = '<label>Дата доставки</label>';
+    var tilesRow = el("div", "payment-tiles-row");
+    var todayStr = _opsFmtDate(new Date());
+    var tomorrowStr = _opsFmtDate(new Date(Date.now() + 86400000));
+    var manualInput = el("input");
+    manualInput.type = "text";
+    manualInput.placeholder = "ДД.ММ.ГГГГ";
+    [{ label: "Сегодня, " + todayStr, value: todayStr }, { label: "Завтра, " + tomorrowStr, value: tomorrowStr }].forEach(function (opt) {
+      var tile = el("button", "payment-tile", opt.label);
+      tile.addEventListener("click", function () {
+        selectedDate = opt.value;
+        haptic("select");
+        Array.prototype.forEach.call(tilesRow.children, function (c) { c.classList.remove("active"); });
+        tile.classList.add("active");
+        manualInput.value = "";
+      });
+      tilesRow.appendChild(tile);
+    });
+    dateField.appendChild(tilesRow);
+    manualInput.addEventListener("input", function () {
+      selectedDate = manualInput.value.trim();
+      Array.prototype.forEach.call(tilesRow.children, function (c) { c.classList.remove("active"); });
+    });
+    dateField.appendChild(manualInput);
+    publishCard.appendChild(dateField);
+
+    var publishBtn = el("button", "btn-primary wizard-footer-btn", "Опубликовать меню");
+    publishBtn.addEventListener("click", function () {
+      if (!/^\d{2}\.\d{2}\.\d{4}$/.test(selectedDate)) { toast("Укажите дату в формате ДД.ММ.ГГГГ"); return; }
+      showConfirm("Опубликовать меню на " + selectedDate + "? Клиенты сразу увидят новое меню.", "Опубликовать", function () {
+        publishBtn.disabled = true;
+        api("/api/ops/menu/draft/publish", { method: "POST", body: { date: selectedDate } }).then(function (res) {
+          haptic("success");
+          toast(res.broadcasted ? "Меню опубликовано, рассылаем клиентам" : "Меню опубликовано");
+          closeWizard();
+        }).catch(function (err) {
+          publishBtn.disabled = false;
+          toast("Не удалось опубликовать: " + err.message);
+        });
+      });
+    });
+    publishCard.appendChild(publishBtn);
+    body.appendChild(publishCard);
+  }
+
+  function renderMenuDraftSetsStep(body) {
+    wizardPhaseEl.innerHTML = "";
+    if (_menuSetsSelected === null) _menuSetsSelected = menuDraft.selected_keys.slice();
+    body.appendChild(el("h2", "wizard-title", "Сеты сегодня"));
+    body.appendChild(el("p", "center-note",
+      "Отметьте, что сегодня в меню. Если не отметить ни одного — клиенты увидят весь каталог целиком " +
+      "(так безопаснее, чем оставить меню вовсе без кнопок заказа)."));
+
+    var listCard = el("div", "card");
+    menuDraft.catalog.forEach(function (c) {
+      var isSel = _menuSetsSelected.indexOf(c.key) !== -1;
+      var row = el("div", "card option-row" + (isSel ? " selected" : ""));
+      var priceText = c.is_group
+        ? c.technical_names.map(function (t) { return fmtSum(c.prices[t]); }).join(" / ")
+        : fmtSum(c.prices[c.key]);
+      row.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(c.display_name) +
+        '</div><div class="option-row-sub">' + priceText + ' сум</div></div>';
+      row.addEventListener("click", function () {
+        haptic("select");
+        var idx = _menuSetsSelected.indexOf(c.key);
+        if (idx === -1) _menuSetsSelected.push(c.key); else _menuSetsSelected.splice(idx, 1);
+        row.classList.toggle("selected");
+      });
+      listCard.appendChild(row);
+    });
+    body.appendChild(listCard);
+
+    var selectAllBtn = el("button", "btn-ghost", _menuSetsSelected.length === menuDraft.catalog.length ? "Снять все" : "Выбрать все");
+    selectAllBtn.addEventListener("click", function () {
+      _menuSetsSelected = _menuSetsSelected.length === menuDraft.catalog.length ? [] : menuDraft.catalog.map(function (c) { return c.key; });
+      wizardReplace(renderMenuDraftSetsStep);
+    });
+    body.appendChild(selectAllBtn);
+
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    saveBtn.addEventListener("click", function () {
+      saveBtn.disabled = true;
+      api("/api/ops/menu/draft/sets", { method: "POST", body: { sets: _menuSetsSelected } }).then(function () {
+        haptic("success");
+        menuDraft.selected_keys = _menuSetsSelected;
+        _menuSetsSelected = null;
+        wizardBack();
+      }).catch(function (err) {
+        saveBtn.disabled = false;
+        toast("Не удалось сохранить: " + err.message);
+      });
+    });
+    body.appendChild(saveBtn);
+  }
+
+  function renderMenuDraftGarnishStep(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Гарниры на сегодня"));
+
+    var garnishSets = menuDraft.catalog.filter(function (c) {
+      return c.has_garnish && menuDraft.selected_keys.indexOf(c.key) !== -1;
+    });
+    if (!garnishSets.length) {
+      body.appendChild(el("div", "empty-note",
+        "Среди выбранных сегодня сетов нет ни одного с гарниром — сначала отметьте сеты на предыдущем шаге, " +
+        "или включите гарнир сету в \"Карточки сетов\"."));
+      return;
+    }
+
+    var working = {};
+    garnishSets.forEach(function (c) { working[c.key] = (menuDraft.garnish[c.key] || []).slice(); });
+
+    garnishSets.forEach(function (c) {
+      var card = el("div", "card");
+      card.appendChild(el("div", "profile-section-title", c.display_name));
+      card.appendChild(buildGarnishChipEditor(working[c.key], menuDraft.garnish_reference, function (next) {
+        working[c.key] = next;
+      }));
+      body.appendChild(card);
+    });
+
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    saveBtn.addEventListener("click", function () {
+      saveBtn.disabled = true;
+      var keys = Object.keys(working);
+      function saveNext(i) {
+        if (i >= keys.length) {
+          haptic("success");
+          keys.forEach(function (k) { menuDraft.garnish[k] = working[k]; });
+          wizardBack();
+          return;
+        }
+        api("/api/ops/menu/draft/garnish", { method: "POST", body: { set: keys[i], garnishes: working[keys[i]] } })
+          .then(function () { saveNext(i + 1); })
+          .catch(function (err) { saveBtn.disabled = false; toast("Не удалось сохранить гарниры: " + err.message); });
+      }
+      saveNext(0);
+    });
+    body.appendChild(saveBtn);
+  }
+
+  function renderMenuDraftPhotoStep(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Фото и текст меню"));
+
+    var photoUrls = menuDraft.photo_urls.slice();
+    var pendingFiles = [];
+
+    var thumbsWrap = el("div", "menu-draft-photo-row");
+    function renderThumbs() {
+      thumbsWrap.innerHTML = "";
+      photoUrls.forEach(function (u) {
+        var img = el("img", "menu-draft-photo-thumb");
+        img.alt = "";
+        setPhotoSrc(img, u);
+        thumbsWrap.appendChild(img);
+      });
+      pendingFiles.forEach(function (f) {
+        var img = el("img", "menu-draft-photo-thumb");
+        img.src = URL.createObjectURL(f);
+        thumbsWrap.appendChild(img);
+      });
+    }
+    renderThumbs();
+    body.appendChild(thumbsWrap);
+
+    body.appendChild(buildPhotoFormatDemo(function () {
+      if (pendingFiles.length) return URL.createObjectURL(pendingFiles[pendingFiles.length - 1]);
+      return photoUrls[0] || "";
+    }));
+
+    var fileInput = el("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.multiple = true;
+    fileInput.style.display = "none";
+    var attachBtn = el("button", "btn-ghost", "Выбрать фото (можно несколько)");
+    attachBtn.addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function () {
+      if (!fileInput.files || !fileInput.files.length) return;
+      pendingFiles = Array.prototype.slice.call(fileInput.files);
+      photoUrls = [];
+      renderThumbs();
+    });
+    body.appendChild(fileInput);
+    body.appendChild(attachBtn);
+
+    var captionField = el("div", "field");
+    captionField.innerHTML = '<label>Текст объявления</label><textarea id="menu-draft-caption" rows="4"></textarea>';
+    body.appendChild(captionField);
+    var captionInput = captionField.querySelector("textarea");
+    captionInput.value = menuDraft.caption || "";
+
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    saveBtn.addEventListener("click", function () {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Сохраняю…";
+      var fd = new FormData();
+      fd.append("caption", captionInput.value);
+      pendingFiles.forEach(function (f) { fd.append("photo", f, f.name); });
+      fetch(API_BASE + "/api/ops/menu/draft/photo", {
+        method: "POST", headers: { "X-Telegram-Init-Data": initData() }, body: fd,
+      }).then(function (resp) {
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        return resp.json();
+      }).then(function (data) {
+        haptic("success");
+        menuDraft.photo_urls = data.photo_urls;
+        menuDraft.caption = data.caption;
+        wizardBack();
+      }).catch(function (err) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Сохранить";
+        toast("Не удалось сохранить: " + err.message);
+      });
+    });
+    body.appendChild(saveBtn);
+
+    if (photoUrls.length || pendingFiles.length) {
+      var clearBtn = el("button", "btn-text", "Удалить фото");
+      clearBtn.addEventListener("click", function () {
+        var fd2 = new FormData();
+        fd2.append("clear_photos", "1");
+        fd2.append("caption", captionInput.value);
+        fetch(API_BASE + "/api/ops/menu/draft/photo", {
+          method: "POST", headers: { "X-Telegram-Init-Data": initData() }, body: fd2,
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          haptic("success");
+          menuDraft.photo_urls = [];
+          menuDraft.caption = data.caption;
+          photoUrls = [];
+          pendingFiles = [];
+          renderThumbs();
+        });
+      });
+      body.appendChild(clearBtn);
+    }
+  }
+
+  function buildMenuPreviewItems() {
+    var keys = menuDraft.selected_keys.length ? menuDraft.selected_keys : menuDraft.catalog.map(function (c) { return c.key; });
+    return keys.map(function (key) {
+      var c = null;
+      for (var i = 0; i < menuDraft.catalog.length; i++) {
+        if (menuDraft.catalog[i].key === key) { c = menuDraft.catalog[i]; break; }
+      }
+      if (!c) return null;
+      var priceText = c.is_group
+        ? c.technical_names.map(function (t) { return fmtSum(c.prices[t]); }).join(" / ")
+        : fmtSum(c.prices[c.key]);
+      return {
+        display_name: c.display_name, price_text: priceText,
+        garnish_list: menuDraft.garnish[key] || [],
+        photo_url: c.photo_url,
+        description: c.description ? c.description.split("\n").filter(function (l) { return l.trim(); }) : [],
+      };
+    }).filter(Boolean);
+  }
+
+  // Карточка предпросмотра — визуально ИДЕНТИЧНА клиентской
+  // (.menu-set-card/.menu-set-thumb, тот же CSS), но полностью
+  // read-only: без выбора гарнира/варианта, без "Добавить в заказ", без
+  // избранного — это предпросмотр для админа, а не форма заказа, тап по
+  // карточке только разворачивает/сворачивает фото, как и было.
+  function buildMenuPreviewCard(item) {
+    var card = el("div", "card menu-set-card");
+    var expanded = false;
+    function render() {
+      card.innerHTML = "";
+      card.classList.toggle("expanded", expanded);
+      if (item.photo_url) {
+        var img = el("img", "menu-set-thumb");
+        img.alt = "";
+        setPhotoSrc(img, item.photo_url);
+        card.appendChild(img);
+      } else {
+        card.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
+      }
+      var cbody = el("div", "menu-set-card-body");
+      var head = el("div", "menu-set-card-head");
+      head.appendChild(el("div", "menu-set-card-name", escapeHtml(item.display_name)));
+      head.appendChild(el("div", "menu-set-card-chevron" + (expanded ? " up" : ""), ICON_CHEVRON));
+      cbody.appendChild(head);
+      if (item.description.length) {
+        var list = el("ul", "menu-set-card-desc");
+        item.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
+        cbody.appendChild(list);
+      }
+      cbody.appendChild(el("div", "menu-set-card-price", item.price_text));
+      if (item.garnish_list.length) {
+        cbody.appendChild(el("div", "menu-set-card-note", "Гарнир: " + item.garnish_list.map(function (g) { return escapeHtml(g); }).join(", ")));
+      }
+      card.appendChild(cbody);
+    }
+    card.addEventListener("click", function () { expanded = !expanded; render(); });
+    render();
+    return card;
+  }
+
+  function renderMenuDraftPreviewStep(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Предпросмотр"));
+    body.appendChild(el("p", "center-note", "Ровно так сеты увидят клиенты — фото сворачивается/разворачивается по тапу, как в самом приложении."));
+
+    if (menuDraft.photo_urls.length || menuDraft.caption) {
+      var annCard = el("div", "card");
+      if (menuDraft.photo_urls.length) {
+        var row = el("div", "menu-draft-photo-row");
+        menuDraft.photo_urls.forEach(function (u) {
+          var img = el("img", "menu-draft-photo-thumb");
+          img.alt = "";
+          setPhotoSrc(img, u);
+          row.appendChild(img);
+        });
+        annCard.appendChild(row);
+      }
+      if (menuDraft.caption) annCard.appendChild(el("div", "menu-draft-caption", escapeHtml(menuDraft.caption)));
+      body.appendChild(annCard);
+    }
+
+    var items = buildMenuPreviewItems();
+    if (!items.length) {
+      body.appendChild(el("div", "empty-note", "Пока нет ни одного выбранного сета."));
+    } else {
+      items.forEach(function (item) { body.appendChild(buildMenuPreviewCard(item)); });
+    }
+  }
+
+  // --- "Карточки сетов" — постоянные catalog-атрибуты (фото/описание/
+  // гарнир-флаг), НЕ часть черновика меню (см. api_ops_menu_catalog). ---
+
+  function _menuCatalogUrl(key, suffix) {
+    return "/api/ops/menu/catalog/" + encodeURIComponent(key) + "/" + suffix;
+  }
+
+  function loadMenuCatalogList(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/ops/menu/catalog").then(function (data) {
+      root.innerHTML = "";
+      var list = el("div", "card profile-nav-list");
+      data.sets.forEach(function (c) {
+        list.appendChild(buildProfileRow(ICON_CAMERA, c.display_name, function () {
+          wizardStep(function (b) { renderMenuCatalogDetail(b, c, data.garnish_reference); });
+        }));
+      });
+      root.appendChild(list);
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить каталог: " + err.message));
+    });
+  }
+
+  function renderMenuCatalogDetail(body, c, garnishReference) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", c.display_name));
+
+    var photoUrl = c.photo_url;
+    var pendingFile = null;
+    var thumbWrap = el("div", "menu-draft-photo-row");
+    function renderThumb() {
+      thumbWrap.innerHTML = "";
+      var img = el("img", "menu-draft-photo-thumb");
+      img.alt = "";
+      if (pendingFile) img.src = URL.createObjectURL(pendingFile);
+      else if (photoUrl) setPhotoSrc(img, photoUrl);
+      else { thumbWrap.appendChild(el("div", "empty-note", "Фото пока нет")); return; }
+      thumbWrap.appendChild(img);
+    }
+    renderThumb();
+    body.appendChild(thumbWrap);
+
+    body.appendChild(buildPhotoFormatDemo(function () {
+      if (pendingFile) return URL.createObjectURL(pendingFile);
+      return photoUrl || "";
+    }));
+
+    var fileInput = el("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.style.display = "none";
+    var attachBtn = el("button", "btn-ghost", "Выбрать фото");
+    attachBtn.addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function () {
+      if (!fileInput.files || !fileInput.files[0]) return;
+      pendingFile = fileInput.files[0];
+      renderThumb();
+      attachBtn.disabled = true;
+      attachBtn.textContent = "Загружаю…";
+      apiUpload(_menuCatalogUrl(c.key, "photo"), pendingFile, pendingFile.name).then(function (res) {
+        haptic("success");
+        photoUrl = res.photo_url;
+        pendingFile = null;
+        attachBtn.disabled = false;
+        attachBtn.textContent = "Выбрать фото";
+        renderThumb();
+      }).catch(function (err) {
+        attachBtn.disabled = false;
+        attachBtn.textContent = "Выбрать фото";
+        toast("Не удалось загрузить фото: " + err.message);
+      });
+    });
+    body.appendChild(fileInput);
+    body.appendChild(attachBtn);
+
+    var descField = el("div", "field");
+    descField.innerHTML = '<label>Описание (состав, каждая строка — отдельный пункт)</label><textarea id="menu-catalog-desc" rows="4"></textarea>';
+    body.appendChild(descField);
+    var descInput = descField.querySelector("textarea");
+    descInput.value = c.description || "";
+    var descSaveBtn = el("button", "btn-ghost", "Сохранить описание");
+    descSaveBtn.addEventListener("click", function () {
+      descSaveBtn.disabled = true;
+      api(_menuCatalogUrl(c.key, "description"), { method: "POST", body: { description: descInput.value } }).then(function () {
+        haptic("success");
+        descSaveBtn.disabled = false;
+        toast("Описание сохранено");
+      }).catch(function (err) {
+        descSaveBtn.disabled = false;
+        toast("Не удалось сохранить: " + err.message);
+      });
+    });
+    body.appendChild(descSaveBtn);
+
+    var garnishCard = el("div", "card");
+    garnishCard.appendChild(buildToggleRow("Гарнир доступен", "Можно ли вообще выбирать гарнир к этому сету", c.has_garnish, function (next) {
+      api(_menuCatalogUrl(c.key, "garnish-flag"), { method: "POST", body: { enabled: next } }).then(function () {
+        haptic("success");
+      }).catch(function (err) {
+        toast("Не удалось сохранить: " + err.message);
+      });
+    }));
+    body.appendChild(garnishCard);
+
+    if (garnishReference && garnishReference.length) {
+      body.appendChild(el("p", "center-note", "Справочник гарниров: " + garnishReference.join(", ") + ". Какие именно доступны СЕГОДНЯ — задаётся в \"Меню дня\" → \"Гарниры\"."));
+    }
+  }
+
+  // --- "Названия для покупателей" — переопределение texts.SET_DISPLAY_
+  // NAMES через таблицу (см. sheets.set_set_display_name/display_set_
+  // name — единая точка входа, подхватывается ВЕЗДЕ: и в боте, и в PAUSE
+  // App, не только на этом экране). Пустое значение = откат к дефолту. ---
+
+  function loadMenuDisplayNames(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/ops/menu/catalog").then(function (data) {
+      root.innerHTML = "";
+      root.appendChild(el("p", "center-note", "Как сет называется для покупателя — в боте и в приложении. Пусто — вернётся имя по умолчанию."));
+      data.sets.forEach(function (c) {
+        var card = el("div", "card");
+        var techLabel = c.is_group ? c.technical_names.join(" / ") : c.key;
+        card.appendChild(el("div", "profile-section-title", techLabel));
+        var field = el("div", "field");
+        var input = el("input");
+        input.type = "text";
+        input.value = c.display_name;
+        input.placeholder = techLabel;
+        field.appendChild(input);
+        card.appendChild(field);
+
+        function doSave(value) {
+          saveBtn.disabled = true;
+          api(_menuCatalogUrl(c.key, "display-name"), { method: "POST", body: { display_name: value } }).then(function () {
+            haptic("success");
+            toast(value ? "Имя сохранено" : "Сброшено к стандартному");
+            // Перезагружаем весь список — после сброса реальное имя по
+            // умолчанию (texts.SET_DISPLAY_NAMES или само техническое имя)
+            // знает только сервер, локально его не угадать корректно.
+            loadMenuDisplayNames(root);
+          }).catch(function (err) {
+            saveBtn.disabled = false;
+            toast("Не удалось сохранить: " + err.message);
+          });
+        }
+
+        var actionsRow = el("div", "checkout-attach-row");
+        var saveBtn = el("button", "btn-ghost", "Сохранить");
+        saveBtn.addEventListener("click", function () { doSave(input.value.trim()); });
+        var resetBtn = el("button", "btn-text", "Сбросить к стандартному");
+        resetBtn.addEventListener("click", function () { doSave(""); });
+        actionsRow.appendChild(saveBtn);
+        actionsRow.appendChild(resetBtn);
+        card.appendChild(actionsRow);
+
+        root.appendChild(card);
+      });
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить список: " + err.message));
+    });
   }
 
   // Розыгрыш "Пауза в подарок" — полная история победителей (см.
@@ -4361,6 +5069,7 @@
       state.isMainAdmin = !!me.is_main_admin;
       state.paFinance = !!me.pa_finance;
       state.paDebtors = !!me.pa_debtors;
+      state.paMenu = !!me.pa_menu;
       showScreen("home");
     }).catch(function (err) {
       var root = document.getElementById("home-root");

@@ -15,6 +15,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 import config
+import texts
 
 _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -1603,6 +1604,79 @@ def set_set_description(set_name: str, description: str):
     rows = ws.get(config.REF_SET_TABLE_RANGE)
     cells = [
         gspread.Cell(2 + i, config.REF_SET_DESCRIPTION_COL, description)
+        for i, row in enumerate(rows)
+        if row and row[0].strip() in names
+    ]
+    if cells:
+        ws.update_cells(cells)
+    _invalidate_ref_set_table_cache()
+
+
+def set_set_garnish_flag(set_name: str, enabled: bool):
+    """Переключает catalog-признак "есть ли у сета гарнир вообще"
+    (столбец H, см. config.REF_SET_GARNISH_RANGE/get_sets_with_garnish) —
+    раньше его можно было поменять только вручную прямо в таблице, теперь
+    и через PAUSE App ("Операционный центр" → "Меню" → "Карточки сетов").
+    ВАЖНО: это НЕ то же самое, что гарниры "на сегодня" (столбцы I/L) —
+    здесь только да/нет "в принципе предлагать выбор гарнира"; сам список
+    гарниров на сегодня для этого сета по-прежнему задаётся отдельно (см.
+    set_today_garnishes_for_set/set_draft_garnishes_for_set). Та же
+    группировка вариантов переменной цены, что у set_set_photo и соседей."""
+    names = [t for t, _ in config.SET_VARIANTS[set_name]] if set_name in config.SET_VARIANTS else [set_name]
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_GARNISH_RANGE)
+    cells = [
+        gspread.Cell(2 + i, 8, "Да" if enabled else "Нет")  # H = абсолютный столбец 8
+        for i, row in enumerate(rows)
+        if row and row[0].strip() in names
+    ]
+    if cells:
+        ws.update_cells(cells)
+    _invalidate_ref_set_table_cache()
+
+
+def get_set_display_name_overrides() -> dict:
+    """{техническое_имя: кастомное_клиентское_имя}, только непустые
+    переопределения — столбец Q (см. config.REF_SET_DISPLAY_NAME_COL),
+    тот же общий короткий кэш _ref_set_table_rows(), что и у категории/
+    фото/описания рядом. Используется display_set_name() ниже."""
+    idx = config.REF_SET_DISPLAY_NAME_COL_IDX
+    out = {}
+    for row in _ref_set_table_rows():
+        if row and row[0] and len(row) > idx and row[idx].strip():
+            out[row[0]] = row[idx].strip()
+    return out
+
+
+def display_set_name(name: str) -> str:
+    """Клиентское имя сета — ЕДИНСТВЕННАЯ точка входа везде (бот и PAUSE
+    App), заменяет собой прямые вызовы texts.display_set_name. Порядок:
+    1) переопределение из таблицы (админ переименовал через PAUSE App →
+    "Меню" → "Названия для покупателей", см. set_set_display_name), 2)
+    дефолт из texts.SET_DISPLAY_NAMES (тот словарь остаётся только как
+    набор стартовых значений, сам по себе больше нигде не вызывается
+    напрямую), 3) само техническое имя как есть, если нигде не задано."""
+    overrides = get_set_display_name_overrides()
+    if name in overrides:
+        return overrides[name]
+    return texts.SET_DISPLAY_NAMES.get(name, name)
+
+
+def set_set_display_name(set_name: str, display_name: str):
+    """Пишет кастомное клиентское имя в столбец Q — пустая строка стирает
+    переопределение (откат к дефолту из texts.SET_DISPLAY_NAMES/самому
+    техническому имени, см. display_set_name). Та же группировка
+    вариантов переменной цены, что у set_set_photo/set_set_description:
+    группа (например "Самса") пишется в ОБА технических варианта разом —
+    иначе заказ именно "без компота" варианта (см. display_set_name,
+    вызывается с ТЕХНИЧЕСКИМ именем строки заказа, не именем группы) всё
+    ещё показывал бы старое имя."""
+    names = [t for t, _ in config.SET_VARIANTS[set_name]] if set_name in config.SET_VARIANTS else [set_name]
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_TABLE_RANGE)
+    value = (display_name or "").strip()
+    cells = [
+        gspread.Cell(2 + i, config.REF_SET_DISPLAY_NAME_COL, value)
         for i, row in enumerate(rows)
         if row and row[0].strip() in names
     ]
@@ -4648,7 +4722,7 @@ def get_logistics_expense_total(date_from: str, date_to: str) -> int:
 # остальные листы, появившиеся вместе с фичами (долги, логистика).
 # ---------------------------------------------------------------------------
 
-_PA_HEADER = ["tg_id", "name", "finance", "debtors", "added"]
+_PA_HEADER = ["tg_id", "name", "finance", "debtors", "added", "menu"]
 
 
 def get_pause_admins() -> list:
@@ -4678,6 +4752,7 @@ def get_pause_admins() -> list:
             "finance": row[config.PA_FINANCE - 1].strip().lower() == "да" if len(row) >= config.PA_FINANCE else False,
             "debtors": row[config.PA_DEBTORS - 1].strip().lower() == "да" if len(row) >= config.PA_DEBTORS else False,
             "added": row[config.PA_ADDED - 1].strip() if len(row) >= config.PA_ADDED else "",
+            "menu": row[config.PA_MENU - 1].strip().lower() == "да" if len(row) >= config.PA_MENU else False,
         })
     _cache["pause_admins"] = out
     _cache["pause_admins_ts"] = now
@@ -4712,8 +4787,8 @@ def add_pause_admin(tg_id, name: str):
 
 
 def set_pause_admin_feature(tg_id, feature: str, allowed: bool):
-    """feature: "finance" | "debtors"."""
-    col = config.PA_FINANCE if feature == "finance" else config.PA_DEBTORS
+    """feature: "finance" | "debtors" | "menu"."""
+    col = {"finance": config.PA_FINANCE, "debtors": config.PA_DEBTORS, "menu": config.PA_MENU}[feature]
     ws = _ws_or_create(config.SHEET_PAUSE_ADMINS, _PA_HEADER)
     rows = ws.get_all_values()
     target = str(tg_id)

@@ -21,7 +21,7 @@ def _is_card_payment(payment: str) -> bool:
 
 
 def _order_items_text(items: list) -> str:
-    return ", ".join(f"{i['qty']}× {texts.display_set_name(i['set'])}" for i in items)
+    return ", ".join(f"{i['qty']}× {sheets.display_set_name(i['set'])}" for i in items)
 
 
 def _card_pending_status(payment: str) -> str:

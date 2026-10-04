@@ -410,7 +410,7 @@ async def admin_preview_set_info(callback: CallbackQuery):
     if value.startswith("__variant__:"):
         group = value.split(":", 1)[1]
         garnishes = sheets.get_draft_garnishes_for_set(group)
-        lines = [texts.display_set_name(group)]
+        lines = [sheets.display_set_name(group)]
         for technical, label in config.SET_VARIANTS[group]:
             price_text = f"{prices.get(technical, 0):,}".replace(",", " ")
             lines.append(f"{label}: {price_text} сум")
@@ -420,7 +420,7 @@ async def admin_preview_set_info(callback: CallbackQuery):
 
     price_text = f"{prices.get(value, 0):,}".replace(",", " ")
     garnishes = sheets.get_draft_garnishes_for_set(value)
-    lines = [texts.display_set_name(value), f"Цена: {price_text} сум"]
+    lines = [sheets.display_set_name(value), f"Цена: {price_text} сум"]
     lines.append("Гарнир: " + (", ".join(garnishes) if garnishes else "нет"))
     await callback.answer("\n".join(lines), show_alert=True)
 
@@ -1130,7 +1130,7 @@ async def _send_payments_for_date(bot: Bot, chat_id: int, date_str: str):
     )
     for entry in entries:
         items_text = ", ".join(
-            f"{s['qty']}× {texts.display_set_name(s['set'])}" if s.get("qty") else texts.display_set_name(s["set"])
+            f"{s['qty']}× {sheets.display_set_name(s['set'])}" if s.get("qty") else sheets.display_set_name(s["set"])
             for s in entry["sets"]
         )
         caption = texts.ADMIN_PAYMENT_ITEM_CAPTION.format(
