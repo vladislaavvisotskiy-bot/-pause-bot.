@@ -3384,7 +3384,22 @@
     body.appendChild(el("h2", "wizard-title", "Меню дня"));
 
     var d = menuDraft;
+
+    var rows = el("div", "card profile-nav-list");
+    var setsLabel = d.selected_keys.length ? (d.selected_keys.length + " выбрано") : "весь каталог";
+    rows.appendChild(buildProfileRow(ICON_ORDERS, "Сеты сегодня — " + setsLabel, function () { wizardStep(renderMenuDraftSetsStep); }));
+    var garnishCount = Object.keys(d.garnish).length;
+    rows.appendChild(buildProfileRow(ICON_SLIDERS, "Гарниры" + (garnishCount ? " — " + garnishCount : ""), function () { wizardStep(renderMenuDraftGarnishStep); }));
+    var dishKeys = d.selected_keys.length ? d.selected_keys : d.catalog.map(function (c) { return c.key; });
+    var missingDishes = dishKeys.filter(function (key) {
+      var c = _menuDraftCatalogItem(key);
+      return !c || !c.photo_url || !c.description;
+    }).length;
+    rows.appendChild(buildProfileRow(ICON_CAMERA, "Фото и описание блюд" + (missingDishes ? " — не хватает " + missingDishes : ""), function () { wizardStep(renderMenuDraftDishesStep); }));
+    body.appendChild(rows);
+
     var photoCard = el("div", "card menu-draft-summary");
+    photoCard.appendChild(el("div", "profile-section-title", "Текст и фото рассылки клиентам"));
     if (d.photo_urls.length) {
       var thumbRow = el("div", "menu-draft-photo-row");
       d.photo_urls.forEach(function (u) {
@@ -3400,13 +3415,6 @@
     photoCard.appendChild(el("div", "menu-draft-caption", escapeHtml(d.caption || "Текста пока нет")));
     photoCard.addEventListener("click", function () { wizardStep(renderMenuDraftPhotoStep); });
     body.appendChild(photoCard);
-
-    var rows = el("div", "card profile-nav-list");
-    var setsLabel = d.selected_keys.length ? (d.selected_keys.length + " выбрано") : "весь каталог";
-    rows.appendChild(buildProfileRow(ICON_ORDERS, "Сеты сегодня — " + setsLabel, function () { wizardStep(renderMenuDraftSetsStep); }));
-    var garnishCount = Object.keys(d.garnish).length;
-    rows.appendChild(buildProfileRow(ICON_SLIDERS, "Гарниры" + (garnishCount ? " — " + garnishCount : ""), function () { wizardStep(renderMenuDraftGarnishStep); }));
-    body.appendChild(rows);
 
     var previewBtn = el("button", "btn-ghost", "Предпросмотр как у клиента");
     previewBtn.addEventListener("click", function () { wizardStep(renderMenuDraftPreviewStep); });
@@ -3568,9 +3576,55 @@
     body.appendChild(saveBtn);
   }
 
+  // Найти элемент каталога по ключу сета — тот же массив объектов, что
+  // отдаёт /api/ops/menu/draft (menuDraft.catalog), используется и для
+  // карточек предпросмотра, и для шага "Фото и описание блюд": один и
+  // тот же объект, поэтому правка фото/описания в renderMenuCatalogDetail
+  // (ниже) сразу видна и в предпросмотре, без повторной загрузки черновика.
+  function _menuDraftCatalogItem(key) {
+    for (var i = 0; i < menuDraft.catalog.length; i++) {
+      if (menuDraft.catalog[i].key === key) return menuDraft.catalog[i];
+    }
+    return null;
+  }
+
+  // Третий шаг после "Сеты сегодня"/"Гарниры" — фото и состав КАЖДОГО
+  // блюда (то, что клиент видит на самой карточке сета при развороте).
+  // Отдельно от "Текст и фото рассылки" на хабе — та пара фото/текст это
+  // объявление в чате бота, а не карточка сета в приложении.
+  function renderMenuDraftDishesStep(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Фото и описание блюд"));
+    body.appendChild(el("p", "center-note",
+      "Фото и состав для каждого сегодняшнего блюда — именно это клиент видит на карточке в приложении. " +
+      "Не путать с «Текстом и фото рассылки» на предыдущем экране — это текст объявления в чате бота."));
+
+    var keys = menuDraft.selected_keys.length ? menuDraft.selected_keys : menuDraft.catalog.map(function (c) { return c.key; });
+    if (!keys.length) {
+      body.appendChild(el("div", "empty-note", "Сначала отметьте сеты на сегодня."));
+      return;
+    }
+    var listCard = el("div", "card profile-nav-list");
+    keys.forEach(function (key) {
+      var c = _menuDraftCatalogItem(key);
+      if (!c) return;
+      var missing = [];
+      if (!c.photo_url) missing.push("нет фото");
+      if (!c.description) missing.push("нет описания");
+      var label = c.display_name + (missing.length ? " — ⚠ " + missing.join(", ") : " — ✓ готово");
+      listCard.appendChild(buildProfileRow(ICON_CAMERA, label, function () {
+        wizardStep(function (b) { renderMenuCatalogDetail(b, c, menuDraft.garnish_reference); });
+      }));
+    });
+    body.appendChild(listCard);
+  }
+
   function renderMenuDraftPhotoStep(body) {
     wizardPhaseEl.innerHTML = "";
-    body.appendChild(el("h2", "wizard-title", "Фото и текст меню"));
+    body.appendChild(el("h2", "wizard-title", "Текст и фото рассылки"));
+    body.appendChild(el("p", "center-note",
+      "Фото и текст объявления, которое бот отправит клиентам о новом меню — не карточки блюд (их фото и " +
+      "состав редактируются в «Фото и описание блюд»)."));
 
     var photoUrls = menuDraft.photo_urls.slice();
     var pendingFiles = [];
@@ -3819,6 +3873,7 @@
       apiUpload(_menuCatalogUrl(c.key, "photo"), pendingFile, pendingFile.name).then(function (res) {
         haptic("success");
         photoUrl = res.photo_url;
+        c.photo_url = res.photo_url;
         pendingFile = null;
         attachBtn.disabled = false;
         attachBtn.textContent = "Выбрать фото";
@@ -3842,6 +3897,7 @@
       descSaveBtn.disabled = true;
       api(_menuCatalogUrl(c.key, "description"), { method: "POST", body: { description: descInput.value } }).then(function () {
         haptic("success");
+        c.description = descInput.value;
         descSaveBtn.disabled = false;
         toast("Описание сохранено");
       }).catch(function (err) {
@@ -3855,6 +3911,7 @@
     garnishCard.appendChild(buildToggleRow("Гарнир доступен", "Можно ли вообще выбирать гарнир к этому сету", c.has_garnish, function (next) {
       api(_menuCatalogUrl(c.key, "garnish-flag"), { method: "POST", body: { enabled: next } }).then(function () {
         haptic("success");
+        c.has_garnish = next;
       }).catch(function (err) {
         toast("Не удалось сохранить: " + err.message);
       });
