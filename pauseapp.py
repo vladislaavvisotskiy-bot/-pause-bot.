@@ -1018,14 +1018,22 @@ async def run_daily_giveaway_draw(bot):
 
 
 async def api_avatar_image(request: web.Request):
-    """Аватар клиента из Telegram (его собственное фото профиля) — для
-    таблицы лидеров: своё фото человек видит через tg.initDataUnsafe.user
-    (см. app.js: tgPhotoUrl), а вот чужие аватарки оттуда взять нельзя —
-    единственный способ показать аватарку ДРУГОГО человека — спросить её у
-    Bot API самим (getUserProfilePhotos) и отдать клиенту уже готовые байты,
-    не светя сам BOT_TOKEN во фронтенде (прямая ссылка api.telegram.org/
-    file/bot<TOKEN>/... его как раз содержит). Тот же приём скачивания, что
-    и у api_feed_image выше (bot.download сам делает getFile + скачивание)."""
+    """Аватар клиента из Telegram (его собственное фото профиля) — и для
+    таблицы лидеров (чужие аватарки), и для своего же профиля (см. app.js:
+    renderProfileScreen) — initDataUnsafe.user.photo_url Telegram отдаёт
+    ТОЛЬКО если Mini App открыт из attachment menu, у нас же всегда через
+    обычную inline-кнопку (web_app), так что единственный надёжный способ —
+    спросить Bot API самим (getUserProfilePhotos) и отдать клиенту уже
+    готовые байты, не светя сам BOT_TOKEN во фронтенде (прямая ссылка
+    api.telegram.org/file/bot<TOKEN>/... его как раз содержит). Тот же
+    приём скачивания, что и у api_feed_image выше (bot.download сам делает
+    getFile + скачивание).
+
+    Кеш браузеру НЕ разрешаем (ни одного Cache-Control на долгий срок) —
+    это живое фото профиля, человек может сменить его в Telegram в любой
+    момент и тут же открыть приложение снова; раньше здесь стоял
+    max-age=3600, из-за которого смена аватарки не подхватывалась иногда
+    даже после нескольких перезаходов в течение этого часа."""
     tg_id = request.match_info.get("tg_id", "")
     bot = request.app.get("bot")
     if not bot or not tg_id:
@@ -1051,7 +1059,7 @@ async def api_avatar_image(request: web.Request):
         return web.Response(status=404)
     return web.Response(
         body=buf.read(), content_type="image/jpeg",
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={"Cache-Control": "no-store"},
     )
 
 
