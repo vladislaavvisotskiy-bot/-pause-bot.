@@ -1491,8 +1491,11 @@
   }
 
   function cashSummaryUrl(courierTgId, dateRu) {
-    var url = "/api/courier/cash-summary?date=" + encodeURIComponent(dateRu);
-    if (courierTgId) url += "&courier_tg_id=" + encodeURIComponent(courierTgId);
+    var url = "/api/courier/cash-summary";
+    var params = [];
+    if (dateRu) params.push("date=" + encodeURIComponent(dateRu));
+    if (courierTgId) params.push("courier_tg_id=" + encodeURIComponent(courierTgId));
+    if (params.length) url += "?" + params.join("&");
     return url;
   }
   function cashByDayUrl(courierTgId) {
@@ -1503,21 +1506,34 @@
   }
 
   // "Оплатить курьеру наличными?" — перед сохранением "Заработка"/"Оплаты
-  // за смену" админа всегда спрашивают, откуда платить, и показывают,
-  // сколько у курьера сейчас собрано наличными (по прямой просьбе).
-  // "Да, из наличных" списывает сумму с остатка (может быть отклонено
-  // сервером, если наличных не хватает, см. sheets.pay_courier_shift) —
-  // "Оплатить отдельно" остаток не трогает совсем.
+  // за смену" спрашивают, откуда платить, ТОЛЬКО если у курьера сейчас
+  // реально хватает собранных наличных на эту сумму (по прямой просьбе —
+  // раньше спрашивали всегда, даже когда наличных не хватало, и
+  // предлагали вариант "из наличных", который сервер всё равно отклонит).
+  // Если наличных хватает (>= amount) — показываем, сколько собрано, и
+  // даём выбрать; если не хватает — платим "отдельно" сразу, без вопроса.
+  //
+  // Остаток запрашиваем БЕЗ даты (сервер сам возьмёт свой "сегодня", см.
+  // api_courier_cash_summary) — ровно то же "сегодня", которое
+  // sheets.pay_courier_shift использует при серверной проверке
+  // достаточности наличных (тоже без даты). Раньше здесь передавался
+  // todayRuDate() — дата по часам БРАУЗЕРА, которая может на день
+  // отличаться от даты сервера (другой часовой пояс на устройстве) — это
+  // и давало "0 собранных" при реально собранных наличных.
   function confirmAndPayShift(courierTgId, dateRu, amount, onSaved) {
-    api(cashSummaryUrl(courierTgId, todayRuDate())).then(function (summary) {
-      confirmSheet(
-        "Оплатить курьеру наличными?",
-        "Собрано наличными у курьера: " + fmtSum(summary.balance_as_of) + ". Сумма оплаты за смену: " + fmtSum(amount) + ".",
-        [
-          { label: "Да, из наличных", className: "btn-primary", onClick: function () { doPay(true); } },
-          { label: "Оплатить отдельно", className: "btn-ghost", onClick: function () { doPay(false); } },
-        ]
-      );
+    api(cashSummaryUrl(courierTgId)).then(function (summary) {
+      if (summary.balance_as_of >= amount) {
+        confirmSheet(
+          "Оплатить курьеру наличными?",
+          "Собрано наличными у курьера: " + fmtSum(summary.balance_as_of) + ". Сумма оплаты за смену: " + fmtSum(amount) + ".",
+          [
+            { label: "Да, из наличных", className: "btn-primary", onClick: function () { doPay(true); } },
+            { label: "Оплатить отдельно", className: "btn-ghost", onClick: function () { doPay(false); } },
+          ]
+        );
+      } else {
+        doPay(false);
+      }
     }).catch(function (err) {
       toast("Не удалось загрузить остаток наличных: " + err.message);
     });

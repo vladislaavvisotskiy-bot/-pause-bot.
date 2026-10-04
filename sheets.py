@@ -4533,9 +4533,19 @@ def pay_courier_shift(courier_tg_id, courier_name: str, date_str: str, amount: i
     отклоняет запись целиком, ничего не пишет (по прямой просьбе: сумма
     "из наличных" не может быть больше того, что реально у него на
     руках). Возвращает {"ok": True} или {"error": "insufficient_cash",
-    "available": N}."""
+    "available": N}.
+
+    "СЕЙЧАС" здесь — get_active_menu_date(), а не календарный
+    today_date_str(): это та же дата, которую Mini App "Маршрут" считает
+    "сегодня" везде (см. webapp._today) и под которой курьер реально
+    записывает наличные (api_cash_record). Когда админ публикует
+    следующий день заранее вечером, get_active_menu_date() уже "завтра"
+    по календарю — наличные, собранные курьером под этой датой,
+    календарным today_date_str() не увидены бы вовсе (отсюда "0
+    собранных" при реально собранных деньгах) — воспроизведено и
+    подтверждено."""
     if from_cash:
-        available = get_courier_cash_balance_as_of(courier_tg_id)
+        available = get_courier_cash_balance_as_of(courier_tg_id, get_active_menu_date())
         if amount > available:
             return {"error": "insufficient_cash", "available": available}
     set_logistics_expense(date_str, courier_tg_id, courier_name, amount, from_cash=from_cash)
