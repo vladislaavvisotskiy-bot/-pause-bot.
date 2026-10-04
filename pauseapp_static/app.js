@@ -1495,7 +1495,13 @@
   }
 
   var ICON_CLOCK = '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>';
-  var ICON_LEAF = '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M5 19c8 0 14-6 14-14-8 0-14 6-14 14Z"/><path d="M5 19c3-6 6-9 12-12"/></svg>';
+  // Веточка с листьями вместо одиночного "лепестка" — по прямой просьбе
+  // (старый вариант путали с чем-то непонятным). Один источник для ВСЕХ
+  // мест, где раньше стоял ICON_LEAF (пустое фото сета, заглушки
+  // Pause Club/Послания, промо на Главной, подтверждение заказа) —
+  // меняется теперь всегда и везде разом, отдельно синхронизировать не
+  // нужно.
+  var ICON_LEAF = '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 1.8 C10.3 5 8.8 8.2 8.6 11.5 C8.4 14.6 10.2 16.9 13.3 18.2 C15.9 19.3 18 19.9 20 21.6"/><path d="M12.8 2.6 Q9.6 0.6 6.8 1.4 Q8.2 4.2 12.8 2.6 Z"/><path d="M7.6 2 Q9.8 2.4 12.3 2.8"/><path d="M10.2 7.3 Q13.2 5.8 16 6.8 Q14.6 9.5 10.2 7.3 Z"/><path d="M11 7.4 Q13.3 7 15.3 7.2"/><path d="M8.7 11.9 Q5.6 10.6 2.9 11.8 Q4.5 14.3 8.7 11.9 Z"/><path d="M7.9 12.1 Q5.5 12.3 3.5 12.3"/><path d="M11.1 15.3 Q14 13.8 16.8 15 Q15.3 17.5 11.1 15.3 Z"/><path d="M11.9 15.4 Q14.1 15 16.1 15.2"/><path d="M13.9 18.1 Q11 16.6 8.1 17.6 Q9.6 20.1 13.9 18.1 Z"/><path d="M12.9 18.2 Q10.6 18.4 8.9 18.5"/></svg>';
 
   function renderMenuScreen() {
     screenHeader("menu-header", {
