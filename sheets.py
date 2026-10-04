@@ -2452,6 +2452,76 @@ def get_all_tickets() -> list:
 
 
 # ---------------------------------------------------------------------------
+# Уведомления PAUSE App — колокольчик в шапке Главной (см. config.
+# SHEET_APP_NOTIFICATIONS). Первый источник — выигрыш в ежедневном
+# розыгрыше "Пауза в подарок" (см. pauseapp.run_daily_giveaway_draw),
+# дальше сюда же лягут объявления/обновления — формат уже на это рассчитан
+# (поле "kind" для будущей иконки/фильтра, текст уже готовый, без шаблонов
+# на фронте).
+# ---------------------------------------------------------------------------
+
+_AN_HEADER = ["tg_id", "created", "kind", "text", "read"]
+
+
+def create_app_notification(tg_id, text: str, kind: str = ""):
+    ws = _ws_or_create(config.SHEET_APP_NOTIFICATIONS, _AN_HEADER)
+    ws.append_row([str(tg_id), _now().strftime("%d.%m.%Y %H:%M"), kind, text, ""], value_input_option="RAW")
+
+
+def get_app_notifications(tg_id, limit: int = 30) -> list:
+    ws = _ws_or_create(config.SHEET_APP_NOTIFICATIONS, _AN_HEADER)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.AN_DATA_START_ROW:
+            continue
+        if len(row) < config.AN_READ or row[config.AN_TG_ID - 1].strip() != str(tg_id):
+            continue
+        out.append({
+            "row": r,
+            "created": row[config.AN_CREATED - 1].strip(),
+            "kind": row[config.AN_KIND - 1].strip(),
+            "text": row[config.AN_TEXT - 1].strip(),
+            "read": row[config.AN_READ - 1].strip().lower() == "да",
+        })
+    out.sort(key=lambda n: n["row"], reverse=True)  # новые сверху
+    return out[:limit]
+
+
+def count_unread_app_notifications(tg_id) -> int:
+    ws = _ws_or_create(config.SHEET_APP_NOTIFICATIONS, _AN_HEADER)
+    rows = ws.get_all_values()
+    count = 0
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.AN_DATA_START_ROW:
+            continue
+        if len(row) < config.AN_READ or row[config.AN_TG_ID - 1].strip() != str(tg_id):
+            continue
+        if row[config.AN_READ - 1].strip().lower() != "да":
+            count += 1
+    return count
+
+
+def mark_app_notifications_read(tg_id):
+    ws = _ws_or_create(config.SHEET_APP_NOTIFICATIONS, _AN_HEADER)
+    rows = ws.get_all_values()
+    cells = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.AN_DATA_START_ROW:
+            continue
+        if len(row) < config.AN_READ or row[config.AN_TG_ID - 1].strip() != str(tg_id):
+            continue
+        if row[config.AN_READ - 1].strip().lower() != "да":
+            cells.append(gspread.Cell(r, config.AN_READ, "Да"))
+    if not cells:
+        return
+    ws.update_cells(cells, value_input_option="RAW")
+
+
+# ---------------------------------------------------------------------------
 # Операционный центр (PAUSE App, админ-раздел) — сводка/разбивки/список
 # заказов за произвольный период. Один проход по "Заказы", строки-позиции
 # (один сет заказа — одна запись), группировку по заказу делает вызывающий

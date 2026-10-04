@@ -656,6 +656,38 @@ async def api_bonuses(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# Колокольчик уведомлений (шапка Главной, заменил собой переключатель
+# языка — см. app.js: buildHeaderBell/loadNotifications). НЕ дублирует
+# обычные сообщения бота (утреннее напоминание, публикация меню — см.
+# предыдущий раздел с настройками уведомлений выше) — отдельный поток
+# только для того, что стоит показать как отдельное событие внутри
+# самого приложения. Первый источник — выигрыш в "Пауза в подарок" (см.
+# run_daily_giveaway_draw ниже), пишется в config.SHEET_APP_NOTIFICATIONS
+# (см. sheets.create_app_notification и соседние функции). По tg_id, без
+# привязки к регистрации в "Клиенты" — колокольчик работает даже для
+# того, кто ещё не успел /start.
+# ---------------------------------------------------------------------------
+
+async def api_notifications(request: web.Request):
+    tg_id = request["tg_id"]
+    items = await _retry_sheets(sheets.get_app_notifications, tg_id)
+    unread = sum(1 for n in items if not n["read"])
+    return web.json_response({
+        "notifications": [
+            {"created": n["created"], "kind": n["kind"], "text": n["text"], "read": n["read"]}
+            for n in items
+        ],
+        "unread_count": unread,
+    })
+
+
+async def api_notifications_read(request: web.Request):
+    tg_id = request["tg_id"]
+    await _retry_sheets(sheets.mark_app_notifications_read, tg_id)
+    return web.json_response({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # Настройки уведомлений — Профиль → Уведомления. Два независимых
 # переключателя поверх уже существующих рассылок (см. bot.send_warm_broadcast
 # и handlers/admin.py:_broadcast_new_menu — оба сами проверяют эти флаги на
@@ -1011,6 +1043,15 @@ async def run_daily_giveaway_draw(bot):
         await bot.send_message(int(winner["tg_id"]), texts.APP_DAILY_GIVEAWAY_WINNER_MSG)
     except Exception:
         logger.exception("Не удалось уведомить победителя 'Паузы в подарок' (tg_id=%s)", winner.get("tg_id"))
+
+    # Тот же текст — ещё и в колокольчик PAUSE App (см. api_notifications
+    # выше), отдельно от личного сообщения бота: человек может не
+    # заметить/удалить чат с ботом, а уведомление в приложении останется,
+    # пока он сам его не откроет.
+    try:
+        sheets.create_app_notification(winner["tg_id"], texts.APP_DAILY_GIVEAWAY_WINNER_MSG, kind="giveaway_win")
+    except Exception:
+        logger.exception("Не удалось записать уведомление в колокольчик PAUSE App (tg_id=%s)", winner.get("tg_id"))
 
     await notify_admins(bot, texts.APP_ADMIN_DAILY_GIVEAWAY_WINNER_ALERT.format(
         date=date_str, name=winner.get("name", ""), client_id=winner.get("client_id", ""),
@@ -1947,6 +1988,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/club/leaderboard", api_club_leaderboard)
     app.router.add_get("/api/club/giveaway", api_club_giveaway)
     app.router.add_get("/api/bonuses", api_bonuses)
+    app.router.add_get("/api/notifications", api_notifications)
+    app.router.add_post("/api/notifications/read", api_notifications_read)
     app.router.add_get("/api/ops/giveaway", api_ops_giveaway)
     app.router.add_get("/api/ops/menu/catalog", api_ops_menu_catalog)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/photo", api_ops_menu_set_photo)

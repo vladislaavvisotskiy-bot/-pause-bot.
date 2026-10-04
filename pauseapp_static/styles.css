@@ -79,28 +79,19 @@ input, textarea, select { font-family: inherit; font-size: 15px; }
 }
 .screen-header:not(.screen-header-center) .screen-header-title { text-align: left; }
 .screen-header.screen-header-center .screen-header-title { text-align: center; }
-/* Переключатель языка в шапке Главной (ru/uz/en) — замена колокольчику
-   уведомлений, та же "пилюля-трек" с активным сегментом, что и везде в
-   приложении (см. .filter-chip/.mode-switch-row), без новых цветов. */
-.screen-header-right-lang { flex: 0 0 auto; }
-.header-lang-switch {
-  display: flex;
-  gap: 2px;
-  background: var(--ink-soft-bg);
-  border-radius: 999px;
-  padding: 3px;
+/* Колокольчик уведомлений в шапке Главной (см. app.js: buildHeaderBell) —
+   точка поверх иконки, пока есть непрочитанные. --accent-warm — тот же
+   акцент, что и у "Розыгрыша": первый (и пока единственный) источник
+   уведомлений — выигрыш именно в нём. */
+.header-bell-btn { position: relative; }
+.header-bell-dot {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--accent-warm);
+  border: 2px solid var(--ivory);
 }
-.header-lang-btn {
-  background: none;
-  border: none;
-  color: var(--ink-soft);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 6px 10px;
-  border-radius: 999px;
-}
-.header-lang-btn.active { background: var(--ink); color: var(--ivory); }
 .header-icon-btn {
   background: none;
   border: none;
@@ -882,6 +873,17 @@ p { margin: 0; color: var(--ink-soft); }
 }
 .bonus-ticket-card.is-used .bonus-ticket-status { background: var(--ink-soft-bg); color: var(--ink-soft); }
 .bonus-ticket-date { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+
+/* Список уведомлений (колокольчик на Главной, см. app.js:
+   loadNotifications) — та же логика акцента слева, что у билетов
+   бонусов: непрочитанное отмечено, прочитанное — приглушено. Список
+   всегда "прочитан" сразу по открытию (помечаем на сервере), is-unread
+   тут только про МОМЕНТ открытия — для одной-единственной отрисовки до
+   следующего визита, а не постоянный статус. */
+.notification-card { border-left: 3px solid var(--line); }
+.notification-card.is-unread { border-left-color: var(--accent-warm); }
+.notification-text { font-size: 14px; color: var(--ink); line-height: 1.45; white-space: pre-line; }
+.notification-date { font-size: 12px; color: var(--ink-soft); margin-top: 8px; }
 
 .empty-note { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
 

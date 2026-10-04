@@ -199,6 +199,9 @@
       "bonuses.ticketHint": "Оплатите билетом любой один сет при следующем заказе — спишем его сами.",
       "bonuses.empty": "Пока бонусов нет — победите в «Паузе в подарок», и билет появится здесь 🤎",
       "bonuses.loadFailed": "Не удалось загрузить бонусы.",
+      "notifications.title": "Уведомления",
+      "notifications.empty": "Пока ничего нет — здесь будут появляться важные новости: выигрыши в розыгрыше и обновления PAUSE App.",
+      "notifications.loadFailed": "Не удалось загрузить уведомления.",
       "bonuses.notRegistered": "Вы ещё не зарегистрированы. Напишите /start в чате с ботом.",
 
       "messages.title": "Послания",
@@ -434,6 +437,9 @@
       "bonuses.ticketHint": "Keyingi buyurtmada chipta bilan istalgan bir setni to'lang — o'zimiz hisoblaymiz.",
       "bonuses.empty": "Hozircha bonuslar yo'q — «Sovg'adagi pauza»da g'alaba qozonsangiz, chipta shu yerda paydo bo'ladi 🤎",
       "bonuses.loadFailed": "Bonuslarni yuklab bo'lmadi.",
+      "notifications.title": "Bildirishnomalar",
+      "notifications.empty": "Hozircha hech narsa yo'q — bu yerda muhim yangiliklar paydo bo'ladi: lotereya yutuqlari va PAUSE App yangilanishlari.",
+      "notifications.loadFailed": "Bildirishnomalarni yuklab bo'lmadi.",
       "bonuses.notRegistered": "Siz hali ro'yxatdan o'tmagansiz. Botga /start yozing.",
 
       "messages.title": "Xabarlar",
@@ -669,6 +675,9 @@
       "bonuses.ticketHint": "Pay with your ticket for any one set next time — we'll apply it ourselves.",
       "bonuses.empty": "No bonuses yet — win the “Pause as a gift” draw and a ticket will show up here 🤎",
       "bonuses.loadFailed": "Couldn't load bonuses.",
+      "notifications.title": "Notifications",
+      "notifications.empty": "Nothing yet — important news will show up here: giveaway wins and PAUSE App updates.",
+      "notifications.loadFailed": "Couldn't load notifications.",
       "bonuses.notRegistered": "You're not registered yet. Send /start in the bot chat.",
 
       "messages.title": "Messages",
@@ -1135,8 +1144,11 @@
   //   center   — true, если заголовок по центру (Меню/Профиль), иначе слева
   //              прижатый к началу (Pause Club/Послания — как на макете)
   //   right    — {icon, label, onClick} — иконка справа, необязательна
-  //   rightLang — true на Главной: переключатель языка RU/UZ/EN справа
-  //              вместо иконки (см. buildHeaderLangSwitch)
+  //   rightBell — true на Главной: колокольчик уведомлений справа вместо
+  //              иконки (см. buildHeaderBell) — раньше тут был
+  //              переключатель языка (RU/UZ/EN) в одно касание, убрали по
+  //              прямой просьбе; сама смена языка никуда не делась,
+  //              осталась в Профиль → Настройки → Язык.
   // -------------------------------------------------------------------
 
   function screenHeader(containerId, opts) {
@@ -1153,9 +1165,8 @@
     bar.appendChild(left);
     bar.appendChild(el("div", "screen-header-title", escapeHtml(opts.title || "")));
     var right = el("div", "screen-header-side screen-header-right");
-    if (opts.rightLang) {
-      right.classList.add("screen-header-right-lang");
-      right.appendChild(buildHeaderLangSwitch());
+    if (opts.rightBell) {
+      right.appendChild(buildHeaderBell());
     } else if (opts.right) {
       var rightBtn = el("button", "header-icon-btn", opts.right.icon);
       rightBtn.setAttribute("aria-label", opts.right.label || "");
@@ -1166,25 +1177,20 @@
     root.appendChild(bar);
   }
 
-  // Переключатель языка в шапке Главной (ru/uz/en, см. LANGUAGES ниже) —
-  // та же смена языка, что и в Настройках (setLang + applyLangToUI), только
-  // в одно касание, без захода в Профиль. HEADER_LANG_CODES — короткие
-  // подписи пилюль ("RU"/"UZ"/"EN"), не через t() — как и LANGUAGES ниже,
-  // обозначения языка всегда на своём коде, а не переводятся.
-  var HEADER_LANG_CODES = ["ru", "uz", "en"];
-  function buildHeaderLangSwitch() {
-    var wrap = el("div", "header-lang-switch");
-    HEADER_LANG_CODES.forEach(function (code) {
-      var btn = el("button", "header-lang-btn" + (state.lang === code ? " active" : ""), code.toUpperCase());
-      btn.addEventListener("click", function () {
-        if (state.lang === code) return;
-        haptic("select");
-        setLang(code);
-        applyLangToUI();
-      });
-      wrap.appendChild(btn);
+  // Колокольчик уведомлений в шапке Главной — см. config.
+  // SHEET_APP_NOTIFICATIONS/sheets.get_app_notifications. Открывает
+  // отдельный список (loadNotifications), точка над иконкой — пока есть
+  // хоть одно непрочитанное (state.notifUnread, см. loadHome). ICON_BELL
+  // определена чуть ниже, рядом с остальными иконками шапки.
+  function buildHeaderBell() {
+    var btn = el("button", "header-icon-btn header-bell-btn", ICON_BELL);
+    btn.setAttribute("aria-label", t("notifications.title"));
+    if (state.notifUnread > 0) btn.appendChild(el("span", "header-bell-dot"));
+    btn.addEventListener("click", function () {
+      haptic("select");
+      openProfileSubscreen(t("notifications.title"), loadNotifications);
     });
-    return wrap;
+    return btn;
   }
 
   var ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22"><path d="M15 5l-7 7 7 7"/></svg>';
@@ -1193,6 +1199,8 @@
   // неровно (зубцы разного размера/шага), заменена на готовый, точный путь.
   var ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="21" height="21" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   var ICON_KEBAB = '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
+  // Стандартный колокольчик (Feather Icons, bell) — см. buildHeaderBell.
+  var ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="21" height="21" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
 
   // -------------------------------------------------------------------
   // Навигация — нижняя панель, 5 экранов
@@ -1366,9 +1374,11 @@
     Promise.all([
       state.profile ? Promise.resolve(state.profile) : api("/api/profile"),
       api("/api/menu"),
+      api("/api/notifications").catch(function () { return { unread_count: state.notifUnread || 0 }; }),
     ]).then(function (results) {
       state.profile = results[0];
       state.menu = results[1];
+      state.notifUnread = results[2].unread_count || 0;
       state.home = true;
       renderHomeScreen();
     }).catch(function (err) {
@@ -1382,7 +1392,7 @@
 
   function renderHomeScreen() {
     screenHeader("home-header", {
-      rightLang: true,
+      rightBell: true,
     });
     var root = document.getElementById("home-root");
     root.innerHTML = "";
@@ -4901,6 +4911,40 @@
     }).catch(function () {
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", t("profile.myMessagesLoadFailed")));
+    });
+  }
+
+  // Колокольчик уведомлений (см. buildHeaderBell) — пока только выигрыш в
+  // ежедневном розыгрыше "Пауза в подарок" (см. pauseapp.py:
+  // run_daily_giveaway_draw), позже сюда же лягут объявления/обновления.
+  // Отмечаем прочитанными сразу по открытию списка — пока человек видит
+  // текст, нет смысла держать точку на колокольчике дальше; хаб (Главная)
+  // перерисовывается следом, чтобы точка пропала, не дожидаясь обратного
+  // перехода на вкладку.
+  function loadNotifications(root) {
+    api("/api/notifications").then(function (data) {
+      root.innerHTML = "";
+      var items = data.notifications || [];
+      if (!items.length) {
+        root.appendChild(el("div", "empty-note", t("notifications.empty")));
+      } else {
+        items.forEach(function (n) {
+          var card = el("div", "card notification-card" + (n.read ? "" : " is-unread"));
+          card.innerHTML =
+            '<div class="notification-text">' + escapeHtml(n.text) + '</div>' +
+            '<div class="notification-date">' + escapeHtml(n.created) + '</div>';
+          root.appendChild(card);
+        });
+      }
+      if (data.unread_count > 0) {
+        api("/api/notifications/read", { method: "POST", body: {} }).then(function () {
+          state.notifUnread = 0;
+          if (state.home) renderHomeScreen();
+        }).catch(function () { /* не критично — просто не погасла точка до следующего открытия */ });
+      }
+    }).catch(function () {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", t("notifications.loadFailed")));
     });
   }
 
