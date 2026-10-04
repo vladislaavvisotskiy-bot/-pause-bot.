@@ -359,6 +359,14 @@ async def _notify_couriers_route_ready(bot, date_str: str) -> int:
     открытии)."""
     route = await _retry_sheets(sheets.get_route_for_date, date_str)
     courier_ids = {cid for p in route for cid in p["courier_tg_ids"]}
+    return await _send_route_ready_push(bot, date_str, courier_ids)
+
+
+async def _send_route_ready_push(bot, date_str: str, courier_ids: set) -> int:
+    """Общая часть _notify_couriers_route_ready (массовая рассылка при
+    включении видимости) и api_couriers_manage_add (один новый курьер,
+    см. там же) — одна и та же логика "уведомления"/URL/текста, без
+    дублирования."""
     if not courier_ids or not config.WEBAPP_URL:
         return 0
 
@@ -497,6 +505,23 @@ async def api_couriers_manage_add(request: web.Request):
     if not name:
         return web.json_response({"error": "name_required"}, status=400)
     await _retry_sheets(sheets.add_courier, tg_id, name, phone)
+
+    # Пуш "маршрут готов" шлём на переходе "выключено -> включили" (см.
+    # api_route_visibility_set) — если видимость на сегодня уже была
+    # включена РАНЬШЕ (обычный случай: курьера добавляют в течение дня,
+    # когда маршрут давно открыт), этот переход уже не наступит, и курьер,
+    # только что подключённый sheets.add_courier к сегодняшним точкам
+    # (backfill), тихо остался бы без уведомления о том, что они у него
+    # появились — воспроизведено и подтверждено. Шлём ему лично, раз уж он
+    # только что получил доступ к уже видимому маршруту.
+    date_str = await _today()
+    visible = await _retry_sheets(sheets.is_route_visible_to_courier, date_str)
+    if visible:
+        route = await _retry_sheets(sheets.get_route_for_date, date_str)
+        has_points = any(tg_id in p["courier_tg_ids"] for p in route)
+        bot = request.app.get("bot")
+        if has_points and bot is not None:
+            await _send_route_ready_push(bot, date_str, {tg_id})
     return web.json_response({"ok": True})
 
 

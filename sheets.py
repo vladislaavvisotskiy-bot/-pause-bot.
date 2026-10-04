@@ -3221,7 +3221,15 @@ def add_courier(tg_id: str, name: str, phone: str = ""):
     воспроизведено на реальной таблице; add_courier писал тем же append_row
     без этой защиты, так что сама ДОБАВКА курьера могла падать той же
     ошибкой на более старых таблицах, прежде чем до переключателей вообще
-    доходило дело."""
+    доходило дело.
+
+    Для ДЕЙСТВИТЕЛЬНО нового курьера (не правка имени/телефона у уже
+    существующего) — ещё и _backfill_courier_into_active_route: без неё
+    курьер, добавленный уже ПОСЛЕ того, как точки на сегодня создались
+    (см. sync_daily_route — новая точка при создании достаётся ВСЕМ, кто
+    на тот момент уже в "Курьеры"), не попадал ни в одну из них и видел
+    пустой маршрут даже при включённой видимости — воспроизведено и
+    подтверждено."""
     ws = _ws(config.SHEET_COURIERS)
     _ensure_sheet_columns(ws, config.COURIER_PHONE)
     rows = ws.get_all_values()
@@ -3243,6 +3251,45 @@ def add_courier(tg_id: str, name: str, phone: str = ""):
     row_values[config.COURIER_PHONE - 1] = phone
     ws.append_row(row_values, value_input_option="RAW")
     _cache["couriers"] = None
+    _backfill_courier_into_active_route(target)
+
+
+def _backfill_courier_into_active_route(tg_id: str):
+    """Добавляет tg_id в столбец "Курьер" (C) каждой ещё НЕ сданной и НЕ
+    убранной точки сегодняшнего маршрута, где его ещё нет — see
+    add_courier выше за объяснением, зачем. Намеренно не трогает:
+    - ROUTE_STATUS_DELIVERED — иначе курьер задним числом получил бы
+      чужую доставку в заработок (см. get_courier_earnings — считает по
+      courier_tg_ids сданной точки);
+    - ROUTE_STATUS_REMOVED — точка явно убрана админом с маршрута.
+    Только дата get_active_menu_date() — то, что сейчас видит курьер в
+    Mini App по умолчанию; более поздние уже синхронизированные даты (если
+    админ успел открыть "завтра" заранее) не трогает — на новый день
+    sync_daily_route и так включит всех текущих курьеров автоматически."""
+    date_str = get_active_menu_date()
+    ws = _ws(config.SHEET_ROUTE)
+    rows = ws.get_all_values()
+    cells = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ROUTE_DATA_START_ROW:
+            continue
+        if len(row) < config.ROUTE_STATUS:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() != date_str:
+            continue
+        status = row[config.ROUTE_STATUS - 1].strip()
+        if status in (config.ROUTE_STATUS_REMOVED, config.ROUTE_STATUS_DELIVERED):
+            continue
+        raw_ids = row[config.ROUTE_COURIER_TG_ID - 1] if len(row) >= config.ROUTE_COURIER_TG_ID else ""
+        current_ids = _parse_courier_ids(raw_ids)
+        if tg_id in current_ids:
+            continue
+        current_ids.append(tg_id)
+        cells.append(gspread.Cell(r, config.ROUTE_COURIER_TG_ID, ",".join(current_ids)))
+    if cells:
+        ws.update_cells(cells, value_input_option="RAW")
+        _invalidate_route_cache(date_str)
 
 
 def is_courier(tg_id) -> bool:
