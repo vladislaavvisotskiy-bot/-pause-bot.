@@ -2,9 +2,12 @@
 """
 Telegram Mini App "PAUSE App" — новый клиентский интерфейс, ОТДЕЛЬНЫЙ от
 Mini App "Маршрут" (webapp.py, не тронут ни строкой). Пока доступен только
-админам (config.ADMIN_IDS) — обычные клиенты продолжают заказывать через
-чат-бота как раньше; вся админская часть (отчёты, рассылки, публикация
-меню и т.п.) остаётся только в самом боте, сюда не переносится.
+админам (config.ADMIN_IDS) плюс отдельным tg_id из config.
+PAUSEAPP_TEST_CLIENT_IDS — временный список для тестирования клиентской
+стороны приложения до публичного запуска (см. admin_auth_middleware ниже).
+Обычные клиенты продолжают заказывать через чат-бота как раньше; вся
+админская часть (отчёты, рассылки, публикация меню и т.п.) остаётся
+только в самом боте, сюда не переносится.
 
 Работает в том же aiohttp-процессе, что и webapp.py — Railway отдаёт всего
 один публичный порт, поэтому монтируется как отдельный aiohttp-subapp (см.
@@ -82,7 +85,12 @@ async def admin_auth_middleware(request: web.Request, handler):
     ниже). request["is_main_admin"] решает доступ к самому экрану
     "Администраторы" (api_pause_admins_*) — делегированному админу он
     никогда не показывается, не выдаётся как "функция" и не может быть
-    включён отсюда."""
+    включён отсюда.
+
+    Третий, ВРЕМЕННЫЙ случай — config.PAUSEAPP_TEST_CLIENT_IDS (см. там
+    же): пускает внутрь как обычного клиента, без единой админской
+    привилегии, чтобы протестировать само приложение со стороны клиента
+    до публичного запуска."""
     if "/api/" in request.path:
         tg_id = _extract_tg_id(request)
         if tg_id is None:
@@ -93,6 +101,12 @@ async def admin_auth_middleware(request: web.Request, handler):
             request["pa_finance"] = True
             request["pa_debtors"] = True
             request["pa_menu"] = True
+        elif tg_id in config.PAUSEAPP_TEST_CLIENT_IDS:
+            request["tg_id"] = tg_id
+            request["is_main_admin"] = False
+            request["pa_finance"] = False
+            request["pa_debtors"] = False
+            request["pa_menu"] = False
         else:
             pa = await _retry_sheets(sheets.get_pause_admin, tg_id)
             if not pa:
