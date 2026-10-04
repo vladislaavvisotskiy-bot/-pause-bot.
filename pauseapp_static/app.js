@@ -2602,10 +2602,26 @@
     });
   }
 
+  // photo_url в tg.initDataUnsafe.user Telegram отдаёт ТОЛЬКО когда Mini
+  // App открыт из attachment menu — у нас же вход всегда через обычную
+  // inline-кнопку (web_app) в сообщении бота (/admin, /pauseapp), так что
+  // это поле пустое всегда, независимо от того, есть у человека аватарка
+  // или нет — отсюда и "поставил аватарку, а в профиле всё равно пусто".
+  // tgUserId ниже используется вместо этого — настоящий аватар теперь
+  // берём тем же способом, что и чужие на таблице лидеров (см.
+  // buildLeaderboardAvatar/api/avatar/{tg_id} — живой запрос к Bot API
+  // при каждом открытии профиля, без кеша на сервере).
   function tgPhotoUrl() {
     try {
       var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
       return u && u.photo_url ? u.photo_url : null;
+    } catch (e) { return null; }
+  }
+
+  function tgUserId() {
+    try {
+      var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      return u && u.id ? u.id : null;
     } catch (e) { return null; }
   }
 
@@ -2906,13 +2922,21 @@
     }
 
     var head = el("div", "profile-head");
-    var photo = tgPhotoUrl();
-    if (photo) {
-      var img = el("img", "avatar");
-      img.src = photo;
-      head.appendChild(img);
-    } else {
-      head.appendChild(el("div", "avatar", initials(p.name)));
+    // Сразу инициалы (не ждём сеть) — подменяем на настоящее фото, если
+    // Telegram его отдаст (см. tgUserId выше про то, почему не из
+    // initDataUnsafe.user.photo_url напрямую).
+    var avatarSlot = el("div", "avatar", initials(p.name));
+    head.appendChild(avatarSlot);
+    var myId = tgUserId();
+    if (myId) {
+      fetchAuthedImageBlobUrl("/pauseapp/api/avatar/" + encodeURIComponent(myId))
+        .then(function (blobUrl) {
+          var img = el("img", "avatar");
+          img.alt = "";
+          img.src = blobUrl;
+          if (avatarSlot.parentNode) avatarSlot.parentNode.replaceChild(img, avatarSlot);
+        })
+        .catch(function () { /* нет фото в Telegram — инициалы и остаются */ });
     }
     head.appendChild(el("div", "profile-name", p.name || t("profile.noName")));
     head.appendChild(el("div", "profile-contact", formatPhone(p.phone)));
