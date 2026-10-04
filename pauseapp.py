@@ -407,6 +407,23 @@ async def api_upload_screenshot(request: web.Request):
     return web.json_response({"file_id": msg.photo[-1].file_id})
 
 
+async def _refresh_giveaway_state(tg_id: int, date_str: str) -> dict:
+    """После оформления заказа — подхватить клиента в сегодняшний пул
+    "Пауза в подарок", если уже положено по статусу (см.
+    sheets.auto_join_daily_giveaway — именно под "свежий order_count сразу
+    после своего же заказа" и был добавлен force= у find_client_by_tg_id).
+    Не критично для самого заказа — ошибка тут не должна ронять его
+    оформление, поэтому гасится на месте, а не всплывает наружу."""
+    try:
+        client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id, force=True)
+        joined = bool(client) and await _retry_sheets(sheets.auto_join_daily_giveaway, date_str, client)
+        has_ticket = await _retry_sheets(sheets.has_available_ticket, tg_id)
+        return {"joined": bool(joined), "has_ticket": has_ticket}
+    except Exception:
+        logger.exception("PAUSE App: не удалось обновить состояние розыгрыша после заказа (tg_id=%s)", tg_id)
+        return {"joined": False, "has_ticket": False}
+
+
 async def api_order_submit(request: web.Request):
     """Оформление заказа — те же два пути, что и confirm_order в
     handlers/order.py: обычная точка -> append_order на каждую позицию
@@ -439,6 +456,20 @@ async def api_order_submit(request: web.Request):
         return web.json_response({"error": "point_required"}, status=400)
     if not payment:
         return web.json_response({"error": "payment_required"}, status=400)
+
+    is_ticket_payment = payment.strip() == config.PAYMENT_TICKET
+    if is_ticket_payment:
+        # Билет "Пауза в подарок" — ровно один сет, без скрина и модерации
+        # (билет сам по себе уже подтверждение, см. sheets.use_ticket). На
+        # новую (ещё не в каталоге) точку билетом не принимаем — такой
+        # заказ и так уходит на модерацию админу, а билет должен списаться
+        # сразу и один раз, без гонки с решением админа по заявке.
+        if is_new_point:
+            return web.json_response({"error": "ticket_new_point_not_allowed"}, status=400)
+        if len(cart) != 1 or int(cart[0].get("qty", 0)) != 1:
+            return web.json_response({"error": "ticket_single_set_only"}, status=400)
+        if not await _retry_sheets(sheets.has_available_ticket, tg_id):
+            return web.json_response({"error": "no_ticket"}, status=400)
 
     date_str = await _retry_sheets(sheets.get_active_menu_date)
     payment_value = _payment_value(payment, bool(screenshot))
@@ -486,7 +517,8 @@ async def api_order_submit(request: web.Request):
                     await notify_admins(bot, alert, reply_markup=markup)
             except Exception:
                 logger.exception("PAUSE App: не удалось уведомить админов о заказе на новую точку")
-        return web.json_response({"status": "pending", "pending_id": pending_id})
+        giveaway = await _refresh_giveaway_state(tg_id, date_str)
+        return web.json_response({"status": "pending", "pending_id": pending_id, "giveaway": giveaway})
 
     batch_id = uuid.uuid4().hex
     items = [{"set": item["set"], "qty": int(item["qty"]), "garnish": item.get("garnish", "")} for item in cart]
@@ -500,6 +532,12 @@ async def api_order_submit(request: web.Request):
         await _retry_sheets(sheets.update_client_point, client["row"], zone, point)
     except Exception:
         logger.exception("PAUSE App: не удалось сохранить точку по умолчанию (tg_id=%s)", tg_id)
+
+    if is_ticket_payment:
+        try:
+            await _retry_sheets(sheets.use_ticket, tg_id, order_row=row_nums[0])
+        except Exception:
+            logger.exception("PAUSE App: не удалось списать билет 'Пауза в подарок' (tg_id=%s)", tg_id)
 
     if screenshot and bot and config.ADMIN_IDS:
         try:
@@ -522,11 +560,13 @@ async def api_order_submit(request: web.Request):
     phrase = random.choice(CARE_PHRASES)
     date_today = sheets.today_date_str()
     await _retry_sheets(sheets.save_care_message, number, tg_id, client.get("name", ""), date_today, phrase)
+    giveaway = await _refresh_giveaway_state(tg_id, date_str)
 
     return web.json_response({
         "status": "ok",
         "row_nums": row_nums,
         "care": {"number": number, "total": config.CARE_MESSAGE_TOTAL, "phrase": phrase},
+        "giveaway": giveaway,
     })
 
 
@@ -542,6 +582,11 @@ async def api_profile(request: web.Request):
         return web.json_response({"registered": False})
     order_count = client.get("order_count", 0)
     level = sheets.get_club_level(order_count)  # чистая функция, таблицу не трогает
+    # has_ticket — нужен на экране оформления заказа (3-я плитка оплаты
+    # "Билетом", см. app.js: stepCheckout), чтобы не делать отдельный
+    # запрос только для этого; state.profile и так уже грузится первым
+    # (см. loadHome) и переживает между экранами внутри сессии.
+    has_ticket = await _retry_sheets(sheets.has_available_ticket, tg_id)
     return web.json_response({
         "registered": True,
         "name": client.get("name", ""),
@@ -550,6 +595,7 @@ async def api_profile(request: web.Request):
         "point": client.get("point", ""),
         "order_count": order_count,
         "reg_date": client.get("reg_date", ""),
+        "has_ticket": has_ticket,
         "club": {
             "key": level.get("key"),
             "emoji": level["emoji"],
@@ -564,6 +610,30 @@ async def api_profile(request: web.Request):
             "levels": sheets.get_club_levels_overview(order_count),
         },
     })
+
+
+# ---------------------------------------------------------------------------
+# "Бонусы и промокоды" — пока только билеты "Пауза в подарок", выигранные в
+# ежедневном розыгрыше (см. sheets.get_client_tickets). Список, новые
+# сверху, со статусом "Доступен"/"Использован" на каждом.
+# ---------------------------------------------------------------------------
+
+async def api_bonuses(request: web.Request):
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"registered": False})
+    tickets = await _retry_sheets(sheets.get_client_tickets, tg_id)
+    # "available" — булевым, а не статусом-строкой на русском (как в
+    # самом листе/в админском /api/ops/giveaway) — у фронтенда тут
+    # i18n на 3 языка (см. I18N "bonuses.ticket*"), сравнивать с русским
+    # текстом из таблицы ему не нужно.
+    out = [
+        {"date_won": tk["date_won"], "date_used": tk["date_used"],
+         "available": tk["status"] == config.TICKET_STATUS_AVAILABLE}
+        for tk in tickets
+    ]
+    return web.json_response({"registered": True, "tickets": out})
 
 
 # ---------------------------------------------------------------------------
@@ -853,6 +923,79 @@ async def api_messages(request: web.Request):
 async def api_club_leaderboard(request: web.Request):
     leaderboard = await _retry_sheets(sheets.get_club_leaderboard)
     return web.json_response({"leaderboard": leaderboard})
+
+
+# ---------------------------------------------------------------------------
+# "Пауза в подарок" — ежедневный розыгрыш, видимый ВСЕМ во вкладке Pause
+# Club (и участникам, и тем, кому статус пока не позволяет — им просто
+# показывается, какой статус нужен заработать, см. config.GIVEAWAY_REQUIRED_
+# LEVEL). Добавление в сегодняшний пул — автоматом после заказа (см.
+# _refresh_giveaway_state выше), подведение итога — по расписанию (см.
+# bot.py: scheduler, pauseapp.run_daily_giveaway_draw). Этот эндпоинт сам
+# ничего не решает и не пишет — чистое отображение текущего состояния.
+# ---------------------------------------------------------------------------
+
+async def api_club_giveaway(request: web.Request):
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    order_count = client.get("order_count", 0) if client else 0
+
+    required_key, required_threshold, required_emoji, required_label = next(
+        lvl for lvl in config.CLUB_LEVELS if lvl[0] == config.GIVEAWAY_REQUIRED_LEVEL
+    )
+    eligible = sheets.is_giveaway_eligible(order_count)
+
+    date_str = await _retry_sheets(sheets.get_active_menu_date)
+    closed = await _retry_sheets(sheets.is_giveaway_window_closed)
+    participants = await _retry_sheets(sheets.get_daily_giveaway_participants, date_str)
+    joined = bool(client) and any(p["tg_id"] == str(tg_id) for p in participants)
+    winner = await _retry_sheets(sheets.get_daily_giveaway_winner, date_str) if closed else None
+
+    return web.json_response({
+        "eligible": eligible,
+        "joined": joined,
+        "closed": closed,
+        "winner_name": winner["name"] if winner else None,
+        "participant_names": [p["name"] for p in participants],
+        "participant_count": len(participants),
+        "required_level": {
+            "key": required_key, "emoji": required_emoji, "label": required_label,
+            "threshold": required_threshold, "left": max(0, required_threshold - order_count),
+        },
+        "draw_time": config.GIVEAWAY_DRAW_TIME,
+    })
+
+
+async def run_daily_giveaway_draw(bot):
+    """Ежедневный автоматический розыгрыш "Пауза в подарок" — запускается
+    планировщиком в config.GIVEAWAY_DRAW_TIME (см. bot.py: scheduler).
+    Сам выбор победителя и начисление билета — в sheets.
+    pick_daily_giveaway_winner (идемпотентна сама по себе, безопасно
+    звать повторно — см. её докстринг); здесь только уведомления:
+    победителю лично и админам, для учёта (см. api_ops_giveaway). Вызовы
+    sheets — синхронные, как и у остальных once-a-day джобов бота (см.
+    send_morning_reports/send_warm_broadcast) — не через _retry_sheets,
+    тот нужен только под нагрузкой параллельных HTTP-запросов самого
+    Mini App."""
+    date_str = sheets.get_active_menu_date()
+    try:
+        winner = sheets.pick_daily_giveaway_winner(date_str)
+    except Exception:
+        logger.exception("Не удалось подвести ежедневный розыгрыш 'Пауза в подарок' (%s)", date_str)
+        return
+
+    if not winner:
+        await notify_admins(bot, texts.APP_ADMIN_DAILY_GIVEAWAY_EMPTY_ALERT.format(date=date_str))
+        return
+
+    try:
+        await bot.send_message(int(winner["tg_id"]), texts.APP_DAILY_GIVEAWAY_WINNER_MSG)
+    except Exception:
+        logger.exception("Не удалось уведомить победителя 'Паузы в подарок' (tg_id=%s)", winner.get("tg_id"))
+
+    await notify_admins(bot, texts.APP_ADMIN_DAILY_GIVEAWAY_WINNER_ALERT.format(
+        date=date_str, name=winner.get("name", ""), client_id=winner.get("client_id", ""),
+    ))
 
 
 async def api_avatar_image(request: web.Request):
@@ -1371,6 +1514,20 @@ async def api_ops_debtor_delete_history(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# Операционный центр → Розыгрыш "Пауза в подарок" (доступ как у "Финансы" —
+# pa_finance: начисление бесплатных сетов — это расходы бренда, тот же
+# контур ответственности). Полная история победителей + потрачен ли билет
+# или нет (см. sheets.get_all_tickets).
+# ---------------------------------------------------------------------------
+
+async def api_ops_giveaway(request: web.Request):
+    if not request["pa_finance"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tickets = await _retry_sheets(sheets.get_all_tickets)
+    return web.json_response({"tickets": tickets})
+
+
+# ---------------------------------------------------------------------------
 # Операционный центр → Администраторы (только главный админ — ADMIN_IDS).
 # Даёт/забирает делегированным админам доступ к "Финансы"/"Должники" —
 # см. admin_auth_middleware (request["is_main_admin"]/["pa_finance"]/
@@ -1448,6 +1605,9 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/feedback", api_feedback)
     app.router.add_get("/api/messages", api_messages)
     app.router.add_get("/api/club/leaderboard", api_club_leaderboard)
+    app.router.add_get("/api/club/giveaway", api_club_giveaway)
+    app.router.add_get("/api/bonuses", api_bonuses)
+    app.router.add_get("/api/ops/giveaway", api_ops_giveaway)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_get("/api/feed", api_feed_list)
     app.router.add_post("/api/feed", api_feed_publish)

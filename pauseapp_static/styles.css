@@ -369,6 +369,55 @@ p { margin: 0; color: var(--ink-soft); }
 .leaderboard-toggle { width: 100%; text-align: center; margin-top: 2px; }
 
 /* ------------------------------------------------------------------ */
+/* "Пауза в подарок" — ежедневный розыгрыш (Pause Club). Единственный  */
+/* цветной акцент приложения (--accent-warm) — тот же, что уже служит  */
+/* меткой "Розыгрыш" в ленте и 1-м местом рейтинга, здесь просто его   */
+/* главная витрина.                                                    */
+/* ------------------------------------------------------------------ */
+
+.giveaway-card {
+  background: linear-gradient(165deg, var(--accent-warm-soft) 0%, var(--card) 70%);
+  border-color: var(--accent-warm);
+  margin-bottom: 14px;
+}
+.giveaway-card.is-closed { background: var(--card); }
+.giveaway-card-title { font-size: 16px; font-weight: 700; color: var(--accent-warm); }
+.giveaway-card-subtitle { font-size: 13px; color: var(--ink-soft); margin-top: 3px; margin-bottom: 14px; }
+
+.giveaway-joined { margin-bottom: 14px; }
+.giveaway-joined-badge {
+  display: inline-block;
+  background: var(--accent-warm);
+  color: var(--ivory);
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+.giveaway-joined-note { font-size: 13px; color: var(--ink-soft); margin-top: 6px; }
+
+.giveaway-locked { margin-bottom: 14px; padding: 12px 14px; background: var(--ivory-deep); border-radius: var(--radius-md); }
+.giveaway-locked-title { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+.giveaway-locked-note { font-size: 13px; color: var(--ink-soft); margin-top: 4px; }
+
+.giveaway-pool { margin-top: 6px; }
+.giveaway-pool-title { font-size: 12px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+.giveaway-names { display: flex; flex-wrap: wrap; gap: 6px; }
+.giveaway-name-pill {
+  background: var(--ink-soft-bg);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+.giveaway-pool .leaderboard-toggle { margin-top: 10px; }
+
+.giveaway-winner { text-align: center; padding: 10px 0 2px; }
+.giveaway-winner-title { font-size: 16px; font-weight: 700; color: var(--accent-warm); margin-bottom: 6px; }
+.giveaway-winner-name { font-size: 14.5px; color: var(--ink); line-height: 1.5; }
+
+/* ------------------------------------------------------------------ */
 /* PAUSE Club / Послания — лента                                       */
 /* ------------------------------------------------------------------ */
 
@@ -681,6 +730,11 @@ p { margin: 0; color: var(--ink-soft); }
   text-align: center;
 }
 .payment-tile.active { border-color: var(--ink); background: var(--ink-soft-bg); }
+/* Билетом "Пауза в подарок" — тот же акцент, что у самого розыгрыша, не
+   просто третий вариант оплаты вперемешку с обычными. */
+.payment-tile-ticket { border-color: var(--accent-warm); color: var(--accent-warm); background: var(--accent-warm-soft); }
+.payment-tile-ticket.active { background: var(--accent-warm); color: var(--ivory); border-color: var(--accent-warm); }
+.checkout-ticket-hint { font-size: 12.5px; color: var(--accent-warm); margin-top: 10px; text-align: center; }
 .checkout-attach-row { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .checkout-screenshot-ok { color: var(--success); font-weight: 600; font-size: 13.5px; margin-top: 10px; }
 
@@ -804,6 +858,23 @@ p { margin: 0; color: var(--ink-soft); }
 .message-card-num { font-size: 11px; color: var(--ink-soft); font-weight: 600; margin-bottom: 4px; }
 .message-card-text { font-size: 16px; font-weight: 600; color: var(--ink); }
 .message-card-date { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+
+/* "Бонусы и промокоды" — билеты "Пауза в подарок" (см. app.js: loadBonuses). */
+.bonus-ticket-card { border-left: 3px solid var(--accent-warm); }
+.bonus-ticket-card.is-used { border-left-color: var(--line); opacity: .7; }
+.bonus-ticket-name { font-size: 15px; font-weight: 700; color: var(--ink); }
+.bonus-ticket-status {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-warm-soft);
+  color: var(--accent-warm);
+}
+.bonus-ticket-card.is-used .bonus-ticket-status { background: var(--ink-soft-bg); color: var(--ink-soft); }
+.bonus-ticket-date { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
 
 .empty-note { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
 

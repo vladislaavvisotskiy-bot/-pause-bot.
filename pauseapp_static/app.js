@@ -165,6 +165,39 @@
       "feed.type.photo": "Фото", "feed.type.message": "Послание", "feed.type.announcement": "Анонс",
       "feed.type.giveaway": "Розыгрыш", "feed.type.news": "Новость",
 
+      "club.giveaway.title": "🤎 Пауза в подарок",
+      "club.giveaway.subtitle": "Каждый день дарим один сет PAUSE тому, кого выберет случай.",
+      "club.giveaway.poolTitle": "Сегодня в пуле",
+      "club.giveaway.poolCount": "Участников сегодня: {count}",
+      "club.giveaway.empty": "Пока в пуле никого — оформите заказ и станьте первым 🌿",
+      "club.giveaway.joined": "Вы участвуете 🌿",
+      "club.giveaway.joinedNote": "Удачи! Итоги подводим каждый день в {time}.",
+      "club.giveaway.lockedTitle": "Доступно со статуса «{emoji} {label}»",
+      "club.giveaway.lockedNote": "Ещё {left} заказов — и каждый ваш заказ будет попадать в пул автоматически.",
+      "club.giveaway.winnerTitle": "🎉 Победитель дня",
+      "club.giveaway.winnerNote": "{name} получает сет за наш счёт. Поздравляем!",
+      "club.giveaway.noWinner": "Сегодня в пуле никого не было — ждём вас в следующий раз 🌿",
+      "club.giveaway.showAll": "Показать всех",
+      "club.giveaway.showLess": "Свернуть",
+      "club.giveaway.loadFailed": "Не удалось загрузить розыгрыш.",
+
+      "checkout.paymentTicket": "Билетом 🤎",
+      "checkout.paymentTicketHint": "Один билет = один сет бесплатно",
+      "checkout.noTicket": "У вас сейчас нет доступного билета.",
+      "checkout.ticketSingleSetOnly": "Билетом можно оплатить только один сет за раз.",
+      "checkout.ticketNewPointNotAllowed": "Билетом нельзя оплатить заказ на новую точку — выберите точку из списка.",
+
+      "bonuses.title": "Бонусы и промокоды",
+      "bonuses.ticketName": "Билет «Пауза в подарок»",
+      "bonuses.ticketAvailable": "Доступен",
+      "bonuses.ticketUsed": "Использован",
+      "bonuses.ticketWonOn": "Выигран {date}",
+      "bonuses.ticketUsedOn": "Использован {date}",
+      "bonuses.ticketHint": "Оплатите билетом любой один сет при следующем заказе — спишем его сами.",
+      "bonuses.empty": "Пока бонусов нет — победите в «Паузе в подарок», и билет появится здесь 🤎",
+      "bonuses.loadFailed": "Не удалось загрузить бонусы.",
+      "bonuses.notRegistered": "Вы ещё не зарегистрированы. Напишите /start в чате с ботом.",
+
       "messages.title": "Послания",
       "messages.empty": "Пока никаких посланий нет.",
       "messages.loadFailed": "Не удалось загрузить послания — потяните вниз, чтобы попробовать снова.",
@@ -187,7 +220,6 @@
       "profile.myMessagesEmpty": "Посланий пока не было — они появляются после каждого заказа.",
       "profile.myMessagesLoadFailed": "Не удалось загрузить послания.",
       "profile.bonuses": "Бонусы и промокоды", "profile.support": "Поддержка",
-      "profile.bonusesSoon": "Бонусы и промокоды — скоро добавим",
       "profile.logout": "Выйти",
       "favorites.title": "Избранное",
       "favorites.empty": "Пока пусто — добавляйте блюда через ♡ на карточке в Меню.",
@@ -366,6 +398,39 @@
       "feed.type.photo": "Rasm", "feed.type.message": "Xabar", "feed.type.announcement": "E'lon",
       "feed.type.giveaway": "Sovg'a o'yini", "feed.type.news": "Yangilik",
 
+      "club.giveaway.title": "🤎 Sovg'adagi pauza",
+      "club.giveaway.subtitle": "Har kuni tasodif tanlagan bitta odamga PAUSE'dan bir set sovg'a qilamiz.",
+      "club.giveaway.poolTitle": "Bugungi pul",
+      "club.giveaway.poolCount": "Bugun ishtirokchilar: {count}",
+      "club.giveaway.empty": "Hozircha pulda hech kim yo'q — buyurtma bering va birinchi bo'ling 🌿",
+      "club.giveaway.joined": "Siz ishtirok etmoqdasiz 🌿",
+      "club.giveaway.joinedNote": "Omad! Natijalarni har kuni soat {time}da e'lon qilamiz.",
+      "club.giveaway.lockedTitle": "«{emoji} {label}» darajasidan boshlab mavjud",
+      "club.giveaway.lockedNote": "Yana {left} ta buyurtma — va har bir buyurtmangiz avtomatik pulga tushadi.",
+      "club.giveaway.winnerTitle": "🎉 Kunning g'olibi",
+      "club.giveaway.winnerNote": "{name} bizning hisobimizdan bir set oladi. Tabriklaymiz!",
+      "club.giveaway.noWinner": "Bugun pulda hech kim yo'q edi — keyingi safar sizni kutamiz 🌿",
+      "club.giveaway.showAll": "Barchasini ko'rsatish",
+      "club.giveaway.showLess": "Yig'ish",
+      "club.giveaway.loadFailed": "Sovg'a o'yinini yuklab bo'lmadi.",
+
+      "checkout.paymentTicket": "Chipta bilan 🤎",
+      "checkout.paymentTicketHint": "Bir chipta = bir set bepul",
+      "checkout.noTicket": "Hozir sizda mavjud chipta yo'q.",
+      "checkout.ticketSingleSetOnly": "Chipta bilan bir vaqtda faqat bitta set to'lash mumkin.",
+      "checkout.ticketNewPointNotAllowed": "Yangi nuqtaga buyurtmani chipta bilan to'lab bo'lmaydi — ro'yxatdan nuqta tanlang.",
+
+      "bonuses.title": "Bonus va promokodlar",
+      "bonuses.ticketName": "«Sovg'adagi pauza» chiptasi",
+      "bonuses.ticketAvailable": "Mavjud",
+      "bonuses.ticketUsed": "Ishlatilgan",
+      "bonuses.ticketWonOn": "{date} da yutilgan",
+      "bonuses.ticketUsedOn": "{date} da ishlatilgan",
+      "bonuses.ticketHint": "Keyingi buyurtmada chipta bilan istalgan bir setni to'lang — o'zimiz hisoblaymiz.",
+      "bonuses.empty": "Hozircha bonuslar yo'q — «Sovg'adagi pauza»da g'alaba qozonsangiz, chipta shu yerda paydo bo'ladi 🤎",
+      "bonuses.loadFailed": "Bonuslarni yuklab bo'lmadi.",
+      "bonuses.notRegistered": "Siz hali ro'yxatdan o'tmagansiz. Botga /start yozing.",
+
       "messages.title": "Xabarlar",
       "messages.empty": "Hozircha xabarlar yo'q.",
       "messages.loadFailed": "Xabarlarni yuklab bo'lmadi — qayta urinish uchun pastga torting.",
@@ -388,7 +453,6 @@
       "profile.myMessagesEmpty": "Hozircha xabarlar yo'q — ular har bir buyurtmadan keyin paydo bo'ladi.",
       "profile.myMessagesLoadFailed": "Xabarlarni yuklab bo'lmadi.",
       "profile.bonuses": "Bonus va promokodlar", "profile.support": "Yordam",
-      "profile.bonusesSoon": "Bonus va promokodlar — tez orada qo'shamiz",
       "favorites.title": "Sevimlilar",
       "favorites.empty": "Hozircha bo'sh — Menyudagi kartochkada ♡ orqali qo'shing.",
       "favorites.loadFailed": "Sevimlilarni yuklab bo'lmadi.",
@@ -567,6 +631,39 @@
       "feed.type.photo": "Photo", "feed.type.message": "Message", "feed.type.announcement": "Announcement",
       "feed.type.giveaway": "Giveaway", "feed.type.news": "News",
 
+      "club.giveaway.title": "🤎 Pause as a gift",
+      "club.giveaway.subtitle": "Every day we gift one PAUSE set to someone chosen at random.",
+      "club.giveaway.poolTitle": "Today's pool",
+      "club.giveaway.poolCount": "In today's pool: {count}",
+      "club.giveaway.empty": "Nobody's in the pool yet — place an order and be the first 🌿",
+      "club.giveaway.joined": "You're in 🌿",
+      "club.giveaway.joinedNote": "Good luck! We draw the winner every day at {time}.",
+      "club.giveaway.lockedTitle": "Unlocked from «{emoji} {label}»",
+      "club.giveaway.lockedNote": "{left} more orders — and every order after that joins the pool automatically.",
+      "club.giveaway.winnerTitle": "🎉 Today's winner",
+      "club.giveaway.winnerNote": "{name} gets a set on us. Congratulations!",
+      "club.giveaway.noWinner": "Nobody was in the pool today — see you next time 🌿",
+      "club.giveaway.showAll": "Show all",
+      "club.giveaway.showLess": "Show less",
+      "club.giveaway.loadFailed": "Couldn't load the giveaway.",
+
+      "checkout.paymentTicket": "With a ticket 🤎",
+      "checkout.paymentTicketHint": "One ticket = one set, free",
+      "checkout.noTicket": "You don't have an available ticket right now.",
+      "checkout.ticketSingleSetOnly": "A ticket covers exactly one set at a time.",
+      "checkout.ticketNewPointNotAllowed": "A ticket can't pay for an order to a new point — pick a point from the list.",
+
+      "bonuses.title": "Bonuses & promo codes",
+      "bonuses.ticketName": "“Pause as a gift” ticket",
+      "bonuses.ticketAvailable": "Available",
+      "bonuses.ticketUsed": "Used",
+      "bonuses.ticketWonOn": "Won on {date}",
+      "bonuses.ticketUsedOn": "Used on {date}",
+      "bonuses.ticketHint": "Pay with your ticket for any one set next time — we'll apply it ourselves.",
+      "bonuses.empty": "No bonuses yet — win the “Pause as a gift” draw and a ticket will show up here 🤎",
+      "bonuses.loadFailed": "Couldn't load bonuses.",
+      "bonuses.notRegistered": "You're not registered yet. Send /start in the bot chat.",
+
       "messages.title": "Messages",
       "messages.empty": "No messages yet.",
       "messages.loadFailed": "Couldn't load messages — pull down to try again.",
@@ -589,7 +686,6 @@
       "profile.myMessagesEmpty": "No messages yet — they appear after each order.",
       "profile.myMessagesLoadFailed": "Couldn't load your messages.",
       "profile.bonuses": "Bonuses & promo codes", "profile.support": "Support",
-      "profile.bonusesSoon": "Bonuses & promo codes — coming soon",
       "favorites.title": "Favorites",
       "favorites.empty": "Nothing here yet — add dishes with ♡ on the card in Menu.",
       "favorites.loadFailed": "Couldn't load favorites.",
@@ -819,6 +915,12 @@
   // Mini App "Маршрут", с частично похожими, но другими путями), а не в
   // подприложение, из которого реально загружена эта страница.
   var API_BASE = "/pauseapp";
+
+  // Специальное значение оплаты "билетом" "Пауза в подарок" — фиксированный
+  // контракт с сервером (см. config.PAYMENT_TICKET), не строка из
+  // payment_options меню/справочника, поэтому не переводится и не берётся
+  // из state.menu, как обычные "Наличными"/"Картой".
+  var TICKET_PAYMENT_VALUE = "Билетом";
 
   function api(path, options) {
     options = options || {};
@@ -1121,6 +1223,12 @@
     if (name === "menu") { if (state.menu) renderMenuScreen(); loadMenu(); }
     if (name === "club") {
       if (state.feed) renderFeedScreen(); else loadFeed();
+      // Пул розыгрыша — всегда свежий (как home), не "кэш или загрузка":
+      // кто сегодня в пуле и подведён ли итог меняется в реальном
+      // времени, старое показываем сразу, не дожидаясь сети, и тут же
+      // следом грузим свежее.
+      if (state.giveaway) renderClubGiveaway();
+      loadClubGiveaway();
       if (state.leaderboard) renderClubLeaderboard(); else loadClubLeaderboard();
     }
     if (name === "messages") { if (state.feed) renderMessagesFeedScreen(); else loadFeed(); }
@@ -1851,6 +1959,100 @@
   }
 
   // -------------------------------------------------------------------
+  // "Пауза в подарок" — ежедневный розыгрыш, видимый ВСЕМ во вкладке
+  // Pause Club (см. pauseapp.py: api_club_giveaway). Статус "Внутренний
+  // круг" и выше даёт автодобавление в сегодняшний пул сразу после
+  // заказа (см. _refresh_giveaway_state на сервере) — кому статус пока
+  // не позволяет, просто видят, сколько заказов осталось набрать. После
+  // розыгрыша в 12:00 пул закрывается, и вместо него все видят имя
+  // победителя — так до следующей публикации меню (closed/winner_name
+  // приходят с сервера уже готовыми, здесь только отображение).
+  // -------------------------------------------------------------------
+
+  function buildGiveawayParticipants(names) {
+    var wrap = el("div", "giveaway-pool");
+    wrap.appendChild(el("div", "giveaway-pool-title", t("club.giveaway.poolCount", { count: names.length })));
+    if (!names.length) {
+      wrap.appendChild(el("div", "empty-note", t("club.giveaway.empty")));
+      return wrap;
+    }
+    var VISIBLE = 8;
+    var list = el("div", "giveaway-names");
+    var shown = state.giveawayExpanded ? names : names.slice(0, VISIBLE);
+    shown.forEach(function (name) {
+      list.appendChild(el("span", "giveaway-name-pill", escapeHtml(name)));
+    });
+    wrap.appendChild(list);
+    if (names.length > VISIBLE) {
+      var toggle = el("button", "btn-text leaderboard-toggle", state.giveawayExpanded ? t("club.giveaway.showLess") : t("club.giveaway.showAll"));
+      toggle.addEventListener("click", function () {
+        haptic("select");
+        state.giveawayExpanded = !state.giveawayExpanded;
+        renderClubGiveaway();
+      });
+      wrap.appendChild(toggle);
+    }
+    return wrap;
+  }
+
+  function renderClubGiveaway() {
+    var root = document.getElementById("club-giveaway");
+    root.innerHTML = "";
+    var g = state.giveaway;
+    if (!g) return;
+
+    var card = el("div", "giveaway-card" + (g.closed ? " is-closed" : ""));
+    card.appendChild(el("div", "giveaway-card-title", t("club.giveaway.title")));
+    card.appendChild(el("div", "giveaway-card-subtitle", t("club.giveaway.subtitle")));
+
+    if (g.closed) {
+      if (g.winner_name) {
+        var winnerBlock = el("div", "giveaway-winner");
+        winnerBlock.appendChild(el("div", "giveaway-winner-title", t("club.giveaway.winnerTitle")));
+        winnerBlock.appendChild(el("div", "giveaway-winner-name", t("club.giveaway.winnerNote", { name: escapeHtml(g.winner_name) })));
+        card.appendChild(winnerBlock);
+      } else {
+        card.appendChild(el("div", "empty-note", t("club.giveaway.noWinner")));
+      }
+      root.appendChild(card);
+      return;
+    }
+
+    if (g.eligible) {
+      if (g.joined) {
+        var badge = el("div", "giveaway-joined");
+        badge.appendChild(el("span", "giveaway-joined-badge", t("club.giveaway.joined")));
+        badge.appendChild(el("div", "giveaway-joined-note", t("club.giveaway.joinedNote", { time: g.draw_time || "12:00" })));
+        card.appendChild(badge);
+      }
+    } else {
+      var lvl = g.required_level || {};
+      var locked = el("div", "giveaway-locked");
+      locked.appendChild(el("div", "giveaway-locked-title", t("club.giveaway.lockedTitle", {
+        emoji: clubLevelIcon(lvl.key), label: escapeHtml(lvl.label || ""),
+      })));
+      locked.appendChild(el("div", "giveaway-locked-note", t("club.giveaway.lockedNote", { left: lvl.left || 0 })));
+      card.appendChild(locked);
+    }
+
+    card.appendChild(buildGiveawayParticipants(g.participant_names || []));
+    root.appendChild(card);
+  }
+
+  function loadClubGiveaway() {
+    api("/api/club/giveaway").then(function (data) {
+      state.giveaway = data;
+      renderClubGiveaway();
+    }).catch(function () {
+      if (!state.giveaway) {
+        var root = document.getElementById("club-giveaway");
+        root.innerHTML = "";
+        root.appendChild(el("div", "empty-note", t("club.giveaway.loadFailed")));
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------
   // Послания — отдельный экран нижней навигации (на макете это своя
   // вкладка, не фильтр внутри CLUB). Данные те же самые /api/feed, что и
   // у CLUB (см. loadFeed) — просто без типа "photo" (фото — только в
@@ -2159,18 +2361,32 @@
     payField.innerHTML = '<label>' + escapeHtml(t("checkout.paymentTitle")) + '</label>';
     var cashValue = (state.menu.payment_options || []).filter(function (p) { return !/карт/i.test(p); })[0] || t("checkout.cash");
     var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
+    var tileOptions = [{ value: cashValue, label: t("checkout.cash") }, { value: cardValue, label: t("checkout.card") }];
+    // Билетом — только на один сет (ровно 1 позиция×1 шт, см.
+    // pauseapp.py: api_order_submit) и только на уже известную точку (не
+    // на новую, ждущую модерации) — ровно то же условие, что проверяет
+    // сервер, здесь просто чтобы не предлагать клиенту вариант, который
+    // потом всё равно отклонят.
+    var cartIsSingleSet = state.cart.length === 1 && state.cart[0].qty === 1;
+    var ticketAvailable = !!(state.profile && state.profile.has_ticket) && cartIsSingleSet && !checkout.isNewPoint;
+    if (ticketAvailable) tileOptions.push({ value: TICKET_PAYMENT_VALUE, label: t("checkout.paymentTicket") });
     var tilesRow = el("div", "payment-tiles-row");
-    [{ value: cashValue, label: t("checkout.cash") }, { value: cardValue, label: t("checkout.card") }].forEach(function (opt) {
-      var tile = el("button", "payment-tile" + (checkout.payment === opt.value ? " active" : ""), escapeHtml(opt.label));
+    tileOptions.forEach(function (opt) {
+      var isTicketTile = opt.value === TICKET_PAYMENT_VALUE;
+      var tileClass = "payment-tile" + (isTicketTile ? " payment-tile-ticket" : "") + (checkout.payment === opt.value ? " active" : "");
+      var tile = el("button", tileClass, escapeHtml(opt.label));
       tile.addEventListener("click", function () {
         haptic("select");
         checkout.payment = opt.value;
-        if (opt.value === cashValue) checkout.screenshotFileId = null;
+        if (opt.value !== cardValue) checkout.screenshotFileId = null;
         wizardReplace(stepCheckout);
       });
       tilesRow.appendChild(tile);
     });
     payField.appendChild(tilesRow);
+    if (checkout.payment === TICKET_PAYMENT_VALUE) {
+      payField.appendChild(el("div", "checkout-ticket-hint", escapeHtml(t("checkout.paymentTicketHint"))));
+    }
 
     if (checkout.payment && checkout.payment === cardValue) {
       payField.appendChild(el("div", "requisites-box", escapeHtml(state.menu.card_requisites || "")));
@@ -2255,13 +2471,22 @@
       // на новую точку sheets.update_client_point вообще не вызывается,
       // пока модератор не подтвердит) — а сброс здесь обнулил бы точку
       // по умолчанию на экране оформления следующего заказа в этой же
-      // сессии, что и происходило до фикса.
+      // сессии, что и происходило до фикса. has_ticket в нём патчим
+      // точечно, не дожидаясь следующей полной загрузки профиля — иначе
+      // следующий заказ в той же сессии увидел бы уже потраченный билет
+      // как доступный.
+      if (state.profile && data.giveaway) state.profile.has_ticket = data.giveaway.has_ticket;
       wizardStep(function (b) { stepOrderConfirmed(b, pending, care); });
-    }).catch(function () {
+    }).catch(function (err) {
       btn.disabled = false;
       btn.textContent = t("checkout.confirmBtn");
       haptic("error");
-      toast(t("checkout.submitFailed"));
+      var TICKET_ERROR_KEYS = {
+        no_ticket: "checkout.noTicket",
+        ticket_single_set_only: "checkout.ticketSingleSetOnly",
+        ticket_new_point_not_allowed: "checkout.ticketNewPointNotAllowed",
+      };
+      toast(TICKET_ERROR_KEYS[err.code] ? t(TICKET_ERROR_KEYS[err.code]) : t("checkout.submitFailed"));
     });
   }
 
@@ -2680,7 +2905,7 @@
     rows.appendChild(buildProfileRow(ICON_ENVELOPE, t("profile.myMessages"), function () { openProfileSubscreen(t("profile.myMessages"), loadMessages); }));
     rows.appendChild(buildProfileRow(ICON_HEART, t("profile.favorites"), function () { openProfileSubscreen(t("favorites.title"), loadFavorites); }));
     rows.appendChild(buildProfileRow(ICON_BELL, t("profile.notifications"), openNotifySubscreen));
-    rows.appendChild(buildProfileRow(ICON_TAG, t("profile.bonuses"), function () { toast(t("profile.bonusesSoon")); }));
+    rows.appendChild(buildProfileRow(ICON_TAG, t("profile.bonuses"), function () { openProfileSubscreen(t("bonuses.title"), loadBonuses); }));
     rows.appendChild(buildProfileRow(ICON_SUPPORT, t("profile.support"), openSupportSubscreen));
     root.appendChild(rows);
 
@@ -2929,6 +3154,7 @@
   var ICON_OPS_FINANCE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1.4 1.1-2.5 2.5-2.5s2.5 1 2.5 2.2c0 2.8-5 1.6-5 4.4 0 1.2 1.1 2.2 2.5 2.2s2.5-1.1 2.5-2.5"/></svg>';
   var ICON_OPS_DEBTORS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0.9-3.6 3.2-5.4 6-5.4s5.1 1.8 6 5.4"/><path d="M17 4.5c1.6 0.4 2.8 1.8 2.8 3.5s-1.2 3.1-2.8 3.5M21 20c-0.6-2.4-1.8-4-3.5-4.8"/></svg>';
   var ICON_OPS_ADMINS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-2.9 8-7 10-4.1-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>';
+  var ICON_OPS_GIVEAWAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M3 12h18"/><path d="M12 8v12"/><path d="M12 8c-1.8 0-3.2-1.3-3.2-2.8S9.2 3 10.5 3c1.3 0 1.8 1.6 1.5 2.8M12 8c1.8 0 3.2-1.3 3.2-2.8S14.8 3 13.5 3c-1.3 0-1.8 1.6-1.5 2.8"/></svg>';
 
   function opsStepHeader(body, title) {
     body.appendChild(el("h2", "wizard-title", title));
@@ -2948,6 +3174,17 @@
           sub.appendChild(el("div", "skeleton-block"));
           body.appendChild(sub);
           loadOpsFinance(sub);
+        });
+      }));
+    }
+    if (state.isMainAdmin || state.paFinance) {
+      rows.appendChild(buildProfileRow(ICON_OPS_GIVEAWAY, "Розыгрыш «Пауза в подарок»", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "Розыгрыш «Пауза в подарок»");
+          var sub = el("div");
+          sub.appendChild(el("div", "skeleton-block"));
+          body.appendChild(sub);
+          loadOpsGiveaway(sub);
         });
       }));
     }
@@ -2974,6 +3211,38 @@
       }));
     }
     root.appendChild(rows);
+  }
+
+  // Розыгрыш "Пауза в подарок" — полная история победителей (см.
+  // pauseapp.py: api_ops_giveaway -> sheets.get_all_tickets), новые
+  // сверху, с тем же статусом "Доступен"/"Использован", что и в самом
+  // листе "Билеты клиентов" — экран admin-only, без i18n (как остальные
+  // экраны Операционного центра).
+  function loadOpsGiveaway(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/ops/giveaway").then(function (data) {
+      root.innerHTML = "";
+      var tickets = data.tickets || [];
+      if (!tickets.length) {
+        root.appendChild(el("div", "empty-note", "Пока ни одного победителя — розыгрыш подводится каждый день в 12:00."));
+        return;
+      }
+      tickets.forEach(function (tk) {
+        var used = tk.status === "Использован";
+        var card = el("div", "card");
+        card.innerHTML =
+          '<div style="font-weight:600">' + escapeHtml(tk.name || ("ID " + tk.client_id)) + '</div>' +
+          '<div class="option-row-sub">Выигран ' + escapeHtml(tk.date_won) + '</div>' +
+          '<div class="option-row-sub">' + (used
+            ? "Билет использован" + (tk.date_used ? " (" + escapeHtml(tk.date_used) + ")" : "")
+            : "Билет доступен, пока не потрачен") + '</div>';
+        root.appendChild(card);
+      });
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить историю розыгрыша: " + err.message));
+    });
   }
 
   function _opsFmtDate(d) {
@@ -3783,6 +4052,38 @@
     }).catch(function () {
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", t("profile.myMessagesLoadFailed")));
+    });
+  }
+
+  // "Бонусы и промокоды" — пока только билеты "Пауза в подарок",
+  // выигранные в ежедневном розыгрыше (см. pauseapp.py: api_bonuses).
+  // Новые сверху — тот же порядок, что уже отдаёт sheets.get_client_tickets.
+  function loadBonuses(root) {
+    api("/api/bonuses").then(function (data) {
+      root.innerHTML = "";
+      if (!data.registered) {
+        root.appendChild(el("div", "empty-note", t("bonuses.notRegistered")));
+        return;
+      }
+      var tickets = data.tickets || [];
+      if (!tickets.length) {
+        root.appendChild(el("div", "empty-note", t("bonuses.empty")));
+        return;
+      }
+      tickets.forEach(function (ticket) {
+        var card = el("div", "card bonus-ticket-card" + (ticket.available ? " is-available" : " is-used"));
+        card.innerHTML =
+          '<div class="bonus-ticket-name">' + escapeHtml(t("bonuses.ticketName")) + '</div>' +
+          '<div class="bonus-ticket-status">' + escapeHtml(t(ticket.available ? "bonuses.ticketAvailable" : "bonuses.ticketUsed")) + '</div>' +
+          '<div class="bonus-ticket-date">' + escapeHtml(t("bonuses.ticketWonOn", { date: ticket.date_won })) + '</div>' +
+          (ticket.available ? "" : '<div class="bonus-ticket-date">' + escapeHtml(t("bonuses.ticketUsedOn", { date: ticket.date_used })) + '</div>');
+        root.appendChild(card);
+      });
+      var hasAvailable = tickets.some(function (tk) { return tk.available; });
+      if (hasAvailable) root.appendChild(el("div", "empty-note", t("bonuses.ticketHint")));
+    }).catch(function () {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", t("bonuses.loadFailed")));
     });
   }
 

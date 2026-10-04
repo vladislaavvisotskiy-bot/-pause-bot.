@@ -170,6 +170,11 @@ async def main():
     scheduler.add_job(send_warm_broadcast, "cron", hour=wh, minute=wm, args=[bot])
     prh, prm = map(int, config.PAYMENT_REMINDER_TIME.split(":"))
     scheduler.add_job(send_payment_reminders, "cron", hour=prh, minute=prm, args=[bot])
+    # "Пауза в подарок" в PAUSE App (видимый всем пул, см. pauseapp.py) —
+    # отдельная от старой ручной механики бота (club.router, не трогаем)
+    # ежедневная автоматика.
+    gh, gm = map(int, config.GIVEAWAY_DRAW_TIME.split(":"))
+    scheduler.add_job(pauseapp.run_daily_giveaway_draw, "cron", hour=gh, minute=gm, args=[bot])
     scheduler.start()
 
     # PAUSE App (новый клиентский Mini App, пока только для админов) живёт

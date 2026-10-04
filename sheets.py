@@ -4,6 +4,7 @@
 через эти функции — если завтра поменяются столбцы, править нужно только тут.
 """
 import json
+import random
 import re
 import time
 import datetime as dt
@@ -196,9 +197,15 @@ def _load_clients(force=False):
     return clients
 
 
-def find_client_by_tg_id(tg_id: int) -> Optional[dict]:
+def find_client_by_tg_id(tg_id: int, force: bool = False) -> Optional[dict]:
+    """force=True — перечитать "Клиенты" прямо сейчас, в обход
+    _CACHE_TTL (60с). Нужен сразу после своего же заказа: order_count
+    считается формулой в самой таблице (см. config.COL_ORDER_COUNT), и
+    без принудительного обновления проверка статуса для розыгрыша
+    "Пауза в подарок" (см. pauseapp.api_order_submit) почти всегда
+    видела бы ЕЩЁ СТАРОЕ количество заказов."""
     tg_id = str(tg_id)
-    for c in _load_clients():
+    for c in _load_clients(force=force):
         if c["tg_id"] == tg_id:
             return c
     return None
@@ -2053,9 +2060,32 @@ def set_club_info_text(text: str):
 # работает каждый день сам по себе на дату активного меню.
 # ---------------------------------------------------------------------------
 
+# Короткий кэш сырых строк "Пауза в подарок" — тот же приём, что и у
+# остальных часто читаемых листов в этом файле (см. _orders_raw_rows/
+# _cash_raw_rows): PAUSE App теперь показывает живой пул на экране
+# "Pause Club" (см. pauseapp.api_club_giveaway) — каждое открытие
+# вкладки любым клиентом читало бы этот лист заново, без кэша.
+_dg_raw_cache = {"rows": None, "ts": 0}
+_DG_RAW_CACHE_TTL = 10  # секунд — пул почти "живой", короче обычных 15-20с
+
+
+def _invalidate_dg_raw_cache():
+    _dg_raw_cache["rows"] = None
+    _dg_raw_cache["ts"] = 0
+
+
+def _dg_raw_rows() -> list:
+    now = time.time()
+    if _dg_raw_cache["rows"] is not None and now - _dg_raw_cache["ts"] < _DG_RAW_CACHE_TTL:
+        return _dg_raw_cache["rows"]
+    rows = _ws(config.SHEET_DAILY_GIVEAWAY).get_all_values()
+    _dg_raw_cache["rows"] = rows
+    _dg_raw_cache["ts"] = now
+    return rows
+
+
 def is_in_daily_giveaway(date_str: str, tg_id) -> bool:
-    ws = _ws(config.SHEET_DAILY_GIVEAWAY)
-    rows = ws.get_all_values()
+    rows = _dg_raw_rows()
     target = str(tg_id)
     for i, row in enumerate(rows):
         r = i + 1
@@ -2072,7 +2102,9 @@ def join_daily_giveaway(date_str: str, client: dict):
     """Записывает клиента участником сегодняшнего розыгрыша — без
     дубликатов, повторное нажатие "Участвовать" ничего не ломает.
     Билеты считаются заново на момент нажатия (сумма количества всех
-    сетов, заказанных клиентом сегодня)."""
+    сетов, заказанных клиентом сегодня). Старая, ручная механика
+    бота ("🎉 Участвовать" в 🌿 Pause Club) — не тронута ни строкой;
+    для автодобавления из PAUSE App см. auto_join_daily_giveaway ниже."""
     tg_id = client.get("tg_id")
     if not tg_id or is_in_daily_giveaway(date_str, tg_id):
         return
@@ -2082,13 +2114,51 @@ def join_daily_giveaway(date_str: str, client: dict):
         [date_str, _id_value(client.get("id")), str(tg_id), client.get("name", ""), tickets, ""],
         value_input_option="RAW",
     )
+    _invalidate_dg_raw_cache()
+
+
+def is_giveaway_eligible(order_count: int) -> bool:
+    """Доступ к пулу "Пауза в подарок" — со статуса GIVEAWAY_REQUIRED_LEVEL
+    ("Внутренний круг", 10+ заказов) и выше: более высокий статус в
+    CLUB_LEVELS по определению требует больше заказов, то есть порог уже
+    пройден, отдельно его проверять не нужно."""
+    required_threshold = next(th for key, th, _, _ in config.CLUB_LEVELS if key == config.GIVEAWAY_REQUIRED_LEVEL)
+    return order_count >= required_threshold
+
+
+def auto_join_daily_giveaway(date_str: str, client: dict) -> bool:
+    """Автоматически добавляет клиента в сегодняшний пул "Пауза в
+    подарок" сразу после оформления заказа в PAUSE App — ТОЛЬКО если
+    статус уже позволяет (см. is_giveaway_eligible — client["order_count"]
+    должен быть СВЕЖИМ, см. find_client_by_tg_id(force=True)), окно
+    участия ещё не закрыто сегодняшним розыгрышем (см.
+    is_giveaway_window_closed — публикация следующего меню открывает его
+    заново) и клиент ещё не в пуле. Возвращает True, если только что
+    добавлен (для "Вы в сегодняшнем пуле 🎉" на фронте), иначе False —
+    без исключений в любом из "не положено" случаев, вызывающий код сам
+    решает, что показать клиенту."""
+    tg_id = client.get("tg_id")
+    if not tg_id:
+        return False
+    if is_giveaway_window_closed():
+        return False
+    if is_in_daily_giveaway(date_str, tg_id):
+        return False
+    if not is_giveaway_eligible(client.get("order_count", 0)):
+        return False
+    ws = _ws(config.SHEET_DAILY_GIVEAWAY)
+    ws.append_row(
+        [date_str, _id_value(client.get("id")), str(tg_id), client.get("name", ""), 1, ""],
+        value_input_option="RAW",
+    )
+    _invalidate_dg_raw_cache()
+    return True
 
 
 def get_daily_giveaway_participants(date_str: str) -> list:
     """Участники розыгрыша на дату:
     [{"row", "client_id", "tg_id", "name", "tickets", "winner"}]."""
-    ws = _ws(config.SHEET_DAILY_GIVEAWAY)
-    rows = ws.get_all_values()
+    rows = _dg_raw_rows()
     out = []
     for i, row in enumerate(rows):
         r = i + 1
@@ -2121,6 +2191,53 @@ def get_daily_giveaway_participants(date_str: str) -> list:
 def mark_daily_giveaway_winner(row_num: int):
     ws = _ws(config.SHEET_DAILY_GIVEAWAY)
     ws.update_cell(row_num, config.DG_WINNER, "Да")
+    _invalidate_dg_raw_cache()
+
+
+def get_daily_giveaway_winner(date_str: str) -> Optional[dict]:
+    """Победитель уже подведённого сегодняшнего розыгрыша, если есть —
+    для PAUSE App (виден ВСЕМ, не только победителю, пока не
+    опубликовано следующее меню, см. is_giveaway_window_closed) и для
+    админского экрана истории."""
+    for p in get_daily_giveaway_participants(date_str):
+        if p["winner"].strip().lower() == "да":
+            return p
+    return None
+
+
+def pick_daily_giveaway_winner(date_str: str) -> Optional[dict]:
+    """Ежедневный автоматический розыгрыш (см. pauseapp.
+    run_daily_giveaway_draw, запускается по расписанию в
+    config.GIVEAWAY_DRAW_TIME) — выбирает победителя СЛУЧАЙНО,
+    РАВНОВЕРОЯТНО среди участников дня, по людям, а не по билетам
+    (каждый участник уже ровно один раз в списке — см.
+    auto_join_daily_giveaway, билеты в старом бот-смысле тут не при чём,
+    по прямой просьбе "механику сделаем именно по именам"). Закрывает
+    окно участия на сегодня в ЛЮБОМ случае (см. close_giveaway_window —
+    заново откроется только следующей публикацией меню), даже если
+    участников не было — иначе розыгрыш "висел" бы открытым до
+    публикации, и случайный заказ посреди дня внезапно стал бы
+    единственным участником и автоматическим победителем. Если
+    участников нет — возвращает None, без начисления билета.
+
+    ИДЕМПОТЕНТНА: если окно уже закрыто (розыгрыш на эту дату уже
+    подводился — хоть этим же вызовом, хоть более ранним), ничего
+    заново не выбирает и не начисляет второй билет — просто возвращает
+    уже отмеченного победителя (см. get_daily_giveaway_winner), если он
+    был. Без этой проверки повторный тик планировщика (например, при
+    перезапуске процесса около полудня) выбрал бы ВТОРОГО победителя и
+    выдал бы ВТОРОЙ билет за тот же день — поймано и исправлено ещё на
+    этапе тестов."""
+    if is_giveaway_window_closed():
+        return get_daily_giveaway_winner(date_str)
+    participants = get_daily_giveaway_participants(date_str)
+    close_giveaway_window()
+    if not participants:
+        return None
+    winner = random.choice(participants)
+    mark_daily_giveaway_winner(winner["row"])
+    grant_ticket(date_str, winner)
+    return winner
 
 
 def get_client_ticket_counts(date_str: str) -> dict:
@@ -2151,6 +2268,113 @@ def get_client_ticket_counts(date_str: str) -> dict:
             qty = 0
         counts[client_id] = counts.get(client_id, 0) + qty
     return counts
+
+
+# ---------------------------------------------------------------------------
+# Билеты "Пауза в подарок" — приз победителя ежедневного розыгрыша (см.
+# pick_daily_giveaway_winner выше): "оплатить один сет бесплатно" в
+# следующий раз. Отдельный лист от SHEET_DAILY_GIVEAWAY — тот только про
+# один день, билет же живёт сколько угодно дней, пока не потрачен (см.
+# pauseapp.api_order_submit: config.PAYMENT_TICKET).
+# ---------------------------------------------------------------------------
+
+_CT_HEADER = ["date_won", "client_id", "tg_id", "name", "status", "date_used", "order_row"]
+
+
+def grant_ticket(date_str: str, winner: dict):
+    ws = _ws_or_create(config.SHEET_CLIENT_TICKETS, _CT_HEADER)
+    ws.append_row([
+        date_str, winner["client_id"], winner["tg_id"], winner["name"],
+        config.TICKET_STATUS_AVAILABLE, "", "",
+    ], value_input_option="RAW")
+
+
+def get_client_tickets(tg_id) -> list:
+    """[{"row","date_won","status","date_used"}, ...] одного клиента,
+    новые сверху — для "Бонусы и промокоды" в PAUSE App."""
+    ws = _ws_or_create(config.SHEET_CLIENT_TICKETS, _CT_HEADER)
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.CT_DATA_START_ROW:
+            continue
+        if len(row) < config.CT_TG_ID:
+            continue
+        if row[config.CT_TG_ID - 1].strip() != target:
+            continue
+        out.append({
+            "row": r,
+            "date_won": row[config.CT_DATE_WON - 1].strip(),
+            "status": row[config.CT_STATUS - 1].strip() if len(row) >= config.CT_STATUS else "",
+            "date_used": row[config.CT_DATE_USED - 1].strip() if len(row) >= config.CT_DATE_USED else "",
+        })
+    out.sort(key=lambda t: _parse_ru_date_safe(t["date_won"]), reverse=True)
+    return out
+
+
+def has_available_ticket(tg_id) -> bool:
+    return any(t["status"] == config.TICKET_STATUS_AVAILABLE for t in get_client_tickets(tg_id))
+
+
+def use_ticket(tg_id, order_row=None) -> bool:
+    """Списывает САМЫЙ СТАРЫЙ доступный билет клиента (по очереди) —
+    True, если билет найден и списан, False — если доступных не было.
+    Вызывающий код (pauseapp.api_order_submit) обязан проверить
+    has_available_ticket ДО того, как предложить клиенту оплату билетом
+    — это последняя подстраховка на гонку (два заказа билетом почти
+    одновременно), а не основная проверка."""
+    ws = _ws_or_create(config.SHEET_CLIENT_TICKETS, _CT_HEADER)
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    candidates = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.CT_DATA_START_ROW:
+            continue
+        if len(row) < config.CT_STATUS:
+            continue
+        if row[config.CT_TG_ID - 1].strip() != target:
+            continue
+        if row[config.CT_STATUS - 1].strip() != config.TICKET_STATUS_AVAILABLE:
+            continue
+        candidates.append((r, row[config.CT_DATE_WON - 1].strip()))
+    if not candidates:
+        return False
+    candidates.sort(key=lambda c: _parse_ru_date_safe(c[1]))
+    row_num = candidates[0][0]
+    ws.update_cell(row_num, config.CT_STATUS, config.TICKET_STATUS_USED)
+    ws.update_cell(row_num, config.CT_DATE_USED, today_date_str())
+    if order_row:
+        ws.update_cell(row_num, config.CT_ORDER_ROW, str(order_row))
+    return True
+
+
+def get_all_tickets() -> list:
+    """Полная история билетов всех клиентов, новые сверху — для
+    админ-экрана "Розыгрыш" в Операционном центре (кто выиграл, потратил
+    билет или нет)."""
+    ws = _ws_or_create(config.SHEET_CLIENT_TICKETS, _CT_HEADER)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.CT_DATA_START_ROW:
+            continue
+        if len(row) < config.CT_STATUS:
+            continue
+        out.append({
+            "row": r,
+            "date_won": row[config.CT_DATE_WON - 1].strip(),
+            "client_id": row[config.CT_CLIENT_ID - 1].strip(),
+            "tg_id": row[config.CT_TG_ID - 1].strip(),
+            "name": row[config.CT_NAME - 1].strip(),
+            "status": row[config.CT_STATUS - 1].strip(),
+            "date_used": row[config.CT_DATE_USED - 1].strip() if len(row) >= config.CT_DATE_USED else "",
+        })
+    out.sort(key=lambda t: _parse_ru_date_safe(t["date_won"]), reverse=True)
+    return out
 
 
 # ---------------------------------------------------------------------------
