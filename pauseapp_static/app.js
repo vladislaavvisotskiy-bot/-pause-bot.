@@ -144,6 +144,8 @@
       "checkout.donePendingText": "Новая точка — координатор уточнит адрес и подтвердит заказ. Мы напишем, как только всё готово.",
       "checkout.doneBtn": "Готово",
       "care.numberLabel": "Послание № {number} из {total}",
+      "care.thankYou1": "Спасибо, что сделал паузу.",
+      "care.thankYou2": "Ты важен.",
 
       "club.title": "Pause Club", "club.more": "Ещё", "club.moreSoon": "Скоро добавим",
       "club.leaderboardTitle": "Рейтинг",
@@ -391,6 +393,8 @@
       "checkout.donePendingText": "Yangi nuqta — koordinator manzilni aniqlab, buyurtmani tasdiqlaydi. Hammasi tayyor bo'lganda yozamiz.",
       "checkout.doneBtn": "Tayyor",
       "care.numberLabel": "Xabar № {number} / {total}",
+      "care.thankYou1": "Pauza qilganingiz uchun rahmat.",
+      "care.thankYou2": "Siz muhimsiz.",
 
       "club.title": "Pause Club", "club.more": "Yana", "club.moreSoon": "Tez orada qo'shamiz",
       "club.leaderboardTitle": "Reyting",
@@ -638,6 +642,8 @@
       "checkout.donePendingText": "New point — the coordinator will confirm the address and the order. We'll let you know once it's ready.",
       "checkout.doneBtn": "Done",
       "care.numberLabel": "Message № {number} of {total}",
+      "care.thankYou1": "Thank you for taking a pause.",
+      "care.thankYou2": "You matter.",
 
       "club.title": "Pause Club", "club.more": "More", "club.moreSoon": "Coming soon",
       "club.leaderboardTitle": "Leaderboard",
@@ -2745,18 +2751,92 @@
     }
   }
 
+  // Разметка самой карточки послания — общий билдер для (1) показа сразу
+  // после заказа (stepCareMessageCard, одна карточка внутри визарда) и
+  // (2) просмотра из "Мои послания" (openCareViewer, несколько карточек
+  // со свайпом) — дизайн по присланному макету должен быть ОДИН и тот же
+  // в обоих местах, меняются только номер/текст.
+  function careCardHtml(number, total, text) {
+    return (
+      '<div class="care-card">' +
+        '<div class="care-card-top">' +
+          '<span class="care-card-brand">PAUSE</span>' +
+          '<span class="care-card-num">' + escapeHtml(String(number)) + '/' + escapeHtml(String(total)) + '</span>' +
+        '</div>' +
+        '<div class="care-card-body"><div class="care-card-text">' + escapeHtml(text) + '</div></div>' +
+        '<div class="care-card-icon">' + ICON_LEAF + '</div>' +
+        '<div class="care-card-divider"></div>' +
+        '<div class="care-card-footer"><div>' + escapeHtml(t("care.thankYou1")) + '</div><div>' + escapeHtml(t("care.thankYou2")) + '</div></div>' +
+        '<div class="care-card-stub"></div>' +
+      '</div>'
+    );
+  }
+
   function stepCareMessageCard(body, care) {
     wizardPhaseEl.innerHTML = "";
     document.getElementById("wizard-back").style.visibility = "hidden";
-    var card = el("div", "care-message-card");
-    card.innerHTML =
-      '<div class="care-message-number">' + escapeHtml(t("care.numberLabel", { number: care.number, total: care.total })) + '</div>' +
-      '<div class="care-message-text">«' + escapeHtml(care.phrase) + '»</div>';
-    body.appendChild(card);
+    var wrap = el("div", "care-message-wrap");
+    wrap.innerHTML = careCardHtml(care.number, care.total, care.phrase);
+    body.appendChild(wrap);
     var done = el("button", "btn-primary wizard-footer-btn", t("checkout.doneBtn"));
     done.addEventListener("click", function () { closeWizard(); showScreen("menu"); loadMenu(); });
     body.appendChild(done);
   }
+
+  // --- Полноэкранный просмотр карточек-посланий (свайп) ------------------
+  // Открывается кликом по записи в "Мои послания" (см. loadMessages ниже).
+  // Листание между несколькими карточками — нативный горизонтальный
+  // scroll-snap у #care-viewer-track, без ручной обработки touch-жестов.
+
+  var careViewerEl = document.getElementById("care-viewer");
+  var careViewerTrack = document.getElementById("care-viewer-track");
+  var careViewerDots = document.getElementById("care-viewer-dots");
+  var careViewerScrollTimer = null;
+
+  function openCareViewer(messages, total, startIndex) {
+    careViewerTrack.innerHTML = "";
+    messages.forEach(function (m) {
+      var slide = el("div", "care-viewer-slide");
+      slide.innerHTML = careCardHtml(m.number, total, m.text);
+      careViewerTrack.appendChild(slide);
+    });
+    careViewerDots.innerHTML = "";
+    careViewerDots.style.display = messages.length > 1 ? "flex" : "none";
+    messages.forEach(function (_, i) {
+      careViewerDots.appendChild(el("span", "care-viewer-dot" + (i === startIndex ? " active" : "")));
+    });
+    careViewerEl.hidden = false;
+    if (tg && tg.BackButton) {
+      tg.BackButton.show();
+      tg.BackButton.onClick(closeCareViewer);
+    }
+    // scrollLeft по ширине трека доступен только после того, как он
+    // реально отрисован (hidden=false только что снят) — без rAF прыжок
+    // к нужной карточке иногда проскакивал на первом открытии.
+    requestAnimationFrame(function () {
+      careViewerTrack.scrollLeft = careViewerTrack.clientWidth * startIndex;
+    });
+  }
+
+  function closeCareViewer() {
+    careViewerEl.hidden = true;
+    careViewerTrack.innerHTML = "";
+    if (tg && tg.BackButton) {
+      tg.BackButton.offClick(closeCareViewer);
+      tg.BackButton.hide();
+    }
+  }
+
+  document.getElementById("care-viewer-close").addEventListener("click", closeCareViewer);
+
+  careViewerTrack.addEventListener("scroll", function () {
+    if (careViewerScrollTimer) clearTimeout(careViewerScrollTimer);
+    careViewerScrollTimer = setTimeout(function () {
+      var idx = Math.round(careViewerTrack.scrollLeft / careViewerTrack.clientWidth);
+      var dots = careViewerDots.children;
+      for (var i = 0; i < dots.length; i++) dots[i].classList.toggle("active", i === idx);
+    }, 80);
+  });
 
   // -------------------------------------------------------------------
   // ПРОФИЛЬ
@@ -5607,12 +5687,16 @@
         root.appendChild(el("div", "empty-note", t("profile.myMessagesEmpty")));
         return;
       }
-      data.messages.forEach(function (m) {
-        var card = el("div", "card message-card");
+      data.messages.forEach(function (m, idx) {
+        var card = el("div", "card message-card is-clickable");
         card.innerHTML =
           '<div class="message-card-num">' + escapeHtml(t("care.numberLabel", { number: m.number, total: data.total })) + '</div>' +
           '<div class="message-card-text">«' + escapeHtml(m.text) + '»</div>' +
           '<div class="message-card-date">' + m.date + '</div>';
+        card.addEventListener("click", function () {
+          haptic("select");
+          openCareViewer(data.messages, data.total, idx);
+        });
         root.appendChild(card);
       });
     }).catch(function () {

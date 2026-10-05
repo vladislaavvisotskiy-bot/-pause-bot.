@@ -803,17 +803,83 @@ p { margin: 0; color: var(--ink-soft); }
 .order-confirm-icon { color: var(--ink); margin-bottom: 18px; }
 @keyframes order-confirm-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-.care-message-card {
-  background: var(--ink);
-  color: var(--ivory);
+.care-message-wrap { margin: 20px 0 30px; animation: order-confirm-in .4s ease; }
+
+/* Карточка-послание — по присланному макету: тёплая бумага, бренд-шапка
+   с номером в углу, цитата по центру, лист-метка PAUSE, тонкий разделитель
+   и подпись-благодарность снизу, обрезной край "квитанции" в самом низу.
+   Общая для (1) сразу после заказа (.care-message-wrap) и (2) просмотра
+   из "Мои послания" (.care-viewer-slide) — см. app.js: careCardHtml. */
+.care-card {
+  background: var(--ivory);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  padding: 34px 24px;
-  text-align: center;
-  margin: 30px 0;
-  animation: order-confirm-in .4s ease;
+  padding: 28px 24px 22px;
+  box-shadow: 0 16px 36px rgba(43, 40, 35, 0.22);
+  display: flex;
+  flex-direction: column;
 }
-.care-message-number { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; opacity: .7; margin-bottom: 14px; }
-.care-message-text { font-size: 20px; font-weight: 600; line-height: 1.5; }
+.care-card-top { display: flex; align-items: center; justify-content: space-between; }
+.care-card-brand { font-size: 14px; font-weight: 700; letter-spacing: 0.32em; color: var(--ink); }
+.care-card-num { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.care-card-body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 34px 4px; text-align: center; min-height: 140px; }
+.care-card-text { font-family: Georgia, "Times New Roman", serif; font-size: 21px; line-height: 1.55; color: var(--ink); }
+.care-card-icon { display: flex; justify-content: center; color: var(--ink); margin-bottom: 20px; }
+.care-card-divider { border-top: 1px solid var(--line); margin-bottom: 16px; }
+.care-card-footer { text-align: center; font-family: Georgia, "Times New Roman", serif; font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; }
+.care-card-stub { border-top: 1px dashed var(--ink-soft); opacity: .5; margin-top: 20px; }
+
+/* Полноэкранный просмотр карточек из "Мои послания" — свайп между
+   несколькими посланиями через нативный scroll-snap (см. app.js:
+   openCareViewer/closeCareViewer). */
+.care-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 97;
+  background: rgba(43, 40, 35, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 18px) 0 calc(var(--safe-bottom) + 18px);
+}
+.care-viewer-close {
+  position: absolute;
+  top: calc(var(--safe-top) + 14px);
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(242, 235, 220, 0.14);
+  color: var(--ivory);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.care-viewer-close svg { width: 18px; height: 18px; }
+.care-viewer-track {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.care-viewer-track::-webkit-scrollbar { display: none; }
+.care-viewer-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+}
+.care-viewer-slide .care-card { width: 100%; max-width: 360px; }
+.care-viewer-dots { display: flex; justify-content: center; gap: 7px; margin-top: 16px; }
+.care-viewer-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(242, 235, 220, 0.35); transition: background .2s ease, transform .2s ease; }
+.care-viewer-dot.active { background: var(--ivory); transform: scale(1.3); }
 
 /* ------------------------------------------------------------------ */
 /* Профиль                                                             */

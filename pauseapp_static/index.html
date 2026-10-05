@@ -141,6 +141,18 @@
     </div>
   </div>
 
+  <!-- Карточка "Послания" на весь экран — открывается по клику на
+       сообщение в "Мои послания" (см. app.js: openCareViewer/loadMessages).
+       Листание между несколькими карточками — нативный горизонтальный
+       scroll-snap (#care-viewer-track), без ручной обработки свайпа. -->
+  <div id="care-viewer" class="care-viewer" hidden>
+    <button id="care-viewer-close" class="care-viewer-close" aria-label="Закрыть">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div id="care-viewer-track" class="care-viewer-track"></div>
+    <div id="care-viewer-dots" class="care-viewer-dots"></div>
+  </div>
+
 </div>
 
 <script src="/pauseapp/static/vendor/leaflet/leaflet.js"></script>
