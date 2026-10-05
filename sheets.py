@@ -2410,9 +2410,13 @@ def get_club_leaderboard(limit: int = 10) -> list:
     limit записей — для таблицы лидеров в PAUSE App ("Pause Club"). Только
     клиенты с привязанным tg_id (без него нет ни аватарки, ни смысла
     показывать) и хотя бы одним заказом — таблица из одних нулей была бы
-    бессмысленной."""
+    бессмысленной. config.LEADERBOARD_EXCLUDED_TG_IDS — по прямой просьбе,
+    личные тестовые аккаунты владельца, в рейтинг не попадают никогда."""
     clients = _load_clients()
-    ranked = [c for c in clients if c["tg_id"] and c["order_count"] > 0]
+    ranked = [
+        c for c in clients
+        if c["tg_id"] and c["order_count"] > 0 and c["tg_id"] not in config.LEADERBOARD_EXCLUDED_TG_IDS
+    ]
     ranked.sort(key=lambda c: -c["order_count"])
     out = []
     for c in ranked[:limit]:
