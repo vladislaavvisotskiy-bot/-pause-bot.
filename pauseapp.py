@@ -1500,20 +1500,21 @@ async def api_ops_debtor_detail(request: web.Request):
         }
         for l in lines
     ]
-    # "Написать" — по tg_id (настоящий Telegram ID клиента), когда он
-    # известен: tg://user?id=... открывает диалог даже без публичного
-    # @username, и надёжнее вписанного вручную текста. У клиента, который
-    # ни разу не писал боту (старая карточка, заведена вручную — tg_id
-    # нет, см. config.COL_TG_ID), используем вписанный вручную юзернейм
-    # из Sheet1 (config.COL_TELEGRAM — "Instagram/Telegram username") как
-    # запасной вариант: https://t.me/<юзернейм>, с "@" впереди (если он
-    # есть) срезаем. Ни того ни другого нет — кнопка неактивна на фронте.
+    # "Написать" — ЮЗЕРНЕЙМ в приоритете: https://t.me/<юзернейм> открывается
+    # через WebApp.openTelegramLink (см. app.js: openTelegramChat) —
+    # надёжно работает из Mini App на всех платформах. tg://user?id=... —
+    # запасной вариант только если юзернейма нет вообще: это НЕ надёжная
+    # ссылка (резолвится только если Telegram-клиент уже знает этот ID из
+    # прошлого контакта/группы), раньше стояла первым приоритетом и из-за
+    # этого "Написать" у клиентов с известным юзернеймом молча ничего не
+    # делала — воспроизведено и подтверждено. Ни юзернейма, ни tg_id нет —
+    # кнопка неактивна на фронте.
     tg_id = (client or {}).get("tg_id", "")
     telegram_username = ((client or {}).get("telegram") or "").strip().lstrip("@")
-    if tg_id:
-        tg_link = f"tg://user?id={tg_id}"
-    elif telegram_username:
+    if telegram_username:
         tg_link = f"https://t.me/{telegram_username}"
+    elif tg_id:
+        tg_link = f"tg://user?id={tg_id}"
     else:
         tg_link = ""
     return web.json_response({

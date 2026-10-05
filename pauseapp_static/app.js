@@ -4441,6 +4441,23 @@
     var digits = (phone || "").replace(/[^\d+]/g, "");
     return digits ? "tel:" + digits : "";
   }
+  // "Написать" (Должники/CRM) — обычная window.location.href на
+  // "tg://user?id=..." внутри Mini App WebView молча ничего не делала:
+  // кастомные URL-схемы там не резолвятся как во внешнем браузере,
+  // воспроизведено и подтверждено. Для https://t.me/<юзернейм>
+  // официальный способ открыть чат из Mini App — WebApp.openTelegramLink,
+  // он единственный надёжно работает на всех платформах; tg://user?id=
+  // (когда юзернейма нет вообще) этот метод не принимает (нужен именно
+  // https://t.me/ домен), поэтому для него оставляем обычную навигацию
+  // как единственный доступный вариант — хуже, но хоть что-то.
+  function openTelegramChat(link) {
+    if (!link) return;
+    if (link.indexOf("https://t.me/") === 0 && tg && tg.openTelegramLink) {
+      tg.openTelegramLink(link);
+    } else {
+      window.location.href = link;
+    }
+  }
   var ICON_OPS_MESSAGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>';
   var ICON_OPS_CALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4c0 1.1-0.9 2-2 2C9.6 21 3 14.4 3 6c0-1.1 0.9-2 2-2z"/></svg>';
 
@@ -4815,7 +4832,7 @@
       var writeBtn = el("button", "ops-contact-btn ops-contact-btn-primary");
       writeBtn.innerHTML = ICON_OPS_MESSAGE + '<span>Написать</span>';
       if (data.tg_link) {
-        writeBtn.addEventListener("click", function () { window.location.href = data.tg_link; });
+        writeBtn.addEventListener("click", function () { openTelegramChat(data.tg_link); });
       } else {
         writeBtn.disabled = true;
         writeBtn.title = "Телеграм не привязан — юзер скрыт";
@@ -5229,9 +5246,10 @@
       var actionsRow = el("div", "ops-contact-actions");
       var writeBtn = el("button", "ops-contact-btn ops-contact-btn-primary");
       writeBtn.innerHTML = ICON_OPS_MESSAGE + '<span>Написать</span>';
-      var tgLink = data.tg_id ? "tg://user?id=" + data.tg_id : (data.telegram ? "https://t.me/" + data.telegram.replace(/^@/, "") : "");
+      // Юзернейм в приоритете — см. openTelegramChat выше про tg://user?id=.
+      var tgLink = data.telegram ? "https://t.me/" + data.telegram.replace(/^@/, "") : (data.tg_id ? "tg://user?id=" + data.tg_id : "");
       if (tgLink) {
-        writeBtn.addEventListener("click", function () { window.location.href = tgLink; });
+        writeBtn.addEventListener("click", function () { openTelegramChat(tgLink); });
       } else {
         writeBtn.disabled = true;
         writeBtn.title = "Телеграм не привязан";
