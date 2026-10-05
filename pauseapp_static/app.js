@@ -187,6 +187,7 @@
       "club.giveaway.showLess": "Свернуть",
       "club.giveaway.loadFailed": "Не удалось загрузить розыгрыш.",
 
+      "checkout.deliveryFeeLabel": "Доставка",
       "checkout.paymentTicket": "Билетом 🤎",
       "checkout.paymentTicketHint": "Один билет = один сет бесплатно",
       "checkout.ticketRemainingTotal": "Итого к оплате",
@@ -430,6 +431,7 @@
       "club.giveaway.showLess": "Yig'ish",
       "club.giveaway.loadFailed": "Sovg'a o'yinini yuklab bo'lmadi.",
 
+      "checkout.deliveryFeeLabel": "Yetkazib berish",
       "checkout.paymentTicket": "Chipta bilan 🤎",
       "checkout.paymentTicketHint": "Bir chipta = bir set bepul",
       "checkout.ticketRemainingTotal": "To'lash uchun jami",
@@ -673,6 +675,7 @@
       "club.giveaway.showLess": "Show less",
       "club.giveaway.loadFailed": "Couldn't load the giveaway.",
 
+      "checkout.deliveryFeeLabel": "Delivery",
       "checkout.paymentTicket": "With a ticket 🤎",
       "checkout.paymentTicketHint": "One ticket = one set, free",
       "checkout.ticketRemainingTotal": "Total to pay",
@@ -2458,7 +2461,20 @@
     }
     var ticketItemPrice = (checkout.useTicket && checkout.ticketItemIndex != null && state.cart[checkout.ticketItemIndex])
       ? state.cart[checkout.ticketItemIndex].price : 0;
-    var remainingTotal = cartTotal() - ticketItemPrice;
+    // Доставка по статусу Pause Club — пока приходит только для
+    // тестового аккаунта (см. pauseapp.api_profile), у всех остальных
+    // state.profile.delivery_fee будет 0/отсутствовать, билет её не
+    // покрывает (см. комментарий выше про has_remaining на сервере).
+    var deliveryFee = (state.profile && state.profile.delivery_fee) || 0;
+    var remainingTotal = cartTotal() - ticketItemPrice + deliveryFee;
+
+    if (deliveryFee > 0) {
+      var deliveryRow = el("div", "card checkout-summary-row checkout-delivery-row");
+      deliveryRow.innerHTML =
+        '<span class="checkout-summary-name">' + escapeHtml(t("checkout.deliveryFeeLabel")) + '</span>' +
+        '<span class="checkout-summary-price">' + fmtSum(deliveryFee) + '</span>';
+      payField.appendChild(deliveryRow);
+    }
 
     if (ticketAvailable) {
       var ticketToggle = el("div", "card option-row ticket-toggle-row" + (checkout.useTicket ? " selected" : ""));
@@ -2609,7 +2625,8 @@
   function submitCheckoutOrder(btn) {
     if (!checkout.zone || !checkout.point) { toast(t("checkout.needPoint")); return; }
     var ticketItem = checkout.useTicket ? state.cart[checkout.ticketItemIndex] : null;
-    var remaining = cartTotal() - (ticketItem ? ticketItem.price : 0);
+    var deliveryFee = (state.profile && state.profile.delivery_fee) || 0;
+    var remaining = cartTotal() - (ticketItem ? ticketItem.price : 0) + deliveryFee;
     if (remaining > 0 && !checkout.payment) { toast(t("checkout.needPayment")); return; }
     var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
     // Скрин оплаты картой — обязательный шаг: либо прикреплён, либо явно

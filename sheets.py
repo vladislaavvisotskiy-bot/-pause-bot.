@@ -293,21 +293,28 @@ def _id_value(client_id):
 
 def _row_amount(row: list, prices: dict) -> int:
     """Сумма по строке заказа — считаем сами по цене сета, а не полагаемся на
-    формулу в таблице (она может быть не протянута на новые строки)."""
+    формулу в таблице (она может быть не протянута на новые строки). Плюс
+    стоимость доставки (O_DELIVERY_FEE), если она записана на эту строку —
+    на обычных заказах через бота столбец всегда пуст (0), так что для
+    них поведение не меняется; видимо только там, где PAUSE App реально
+    её пишет (см. append_orders_batch/api_order_submit)."""
     set_name = row[config.O_SET - 1].strip() if len(row) >= config.O_SET else ""
     try:
         qty = int(row[config.O_QTY - 1].strip() or 0) if len(row) >= config.O_QTY else 0
     except ValueError:
         qty = 0
     amount = qty * prices.get(set_name, 0)
-    if amount:
-        return amount
-    if len(row) >= config.O_SUM:
+    if not amount and len(row) >= config.O_SUM:
         try:
-            return int(row[config.O_SUM - 1].replace(" ", "").replace(",", "") or 0)
+            amount = int(row[config.O_SUM - 1].replace(" ", "").replace(",", "") or 0)
         except (ValueError, IndexError):
+            amount = 0
+    if len(row) >= config.O_DELIVERY_FEE:
+        try:
+            amount += int(row[config.O_DELIVERY_FEE - 1].strip() or 0)
+        except ValueError:
             pass
-    return 0
+    return amount
 
 
 def create_client(tg_id: int, name: str, phone: str, telegram_username: str = "") -> int:
@@ -996,7 +1003,8 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
 
 
 def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: list,
-                         payment, comment: str = "", screenshot: str = "", batch_id: str = "") -> list:
+                         payment, comment: str = "", screenshot: str = "", batch_id: str = "",
+                         delivery_fee: int = 0) -> list:
     """Как append_order, но для ВСЕЙ корзины ОДНИМ запросом к Sheets, а не
     по одному на каждую позицию. items — [{"set","qty","garnish"}, ...].
 
@@ -1022,6 +1030,8 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
     с обычным способом оплаты остатка)."""
     payments = payment if isinstance(payment, list) else [payment] * len(items)
     ws = _ws(config.SHEET_ORDERS)
+    if delivery_fee:
+        _ensure_sheet_columns(ws, config.O_DELIVERY_FEE)
     start_row = _next_empty_order_row()
     cells = []
     row_nums = []
@@ -1043,6 +1053,10 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
             updates.append((config.O_SCREENSHOT, screenshot))
         if batch_id:
             updates.append((config.O_ORDER_BATCH, batch_id))
+        # Доставка — одной суммой на ПЕРВУЮ строку батча, не размазана по
+        # позициям (один заказ = одна доставка, см. api_order_submit).
+        if delivery_fee and i == 0:
+            updates.append((config.O_DELIVERY_FEE, str(delivery_fee)))
         cells.extend(gspread.Cell(row_num, col, value) for col, value in updates)
     if cells:
         ws.update_cells(cells)
@@ -2044,6 +2058,14 @@ def get_active_menu_date() -> str:
 # ---------------------------------------------------------------------------
 # Pause Club
 # ---------------------------------------------------------------------------
+
+def get_client_delivery_fee(order_count: int) -> int:
+    """Стоимость доставки по статусу клиента (config.CLUB_DELIVERY_FEES) —
+    чистая функция, таблицу не трогает. Вызывающий код (pauseapp.
+    api_order_submit) сам решает, кому её вообще применять (пока только
+    config.PAUSEAPP_TEST_CLIENT_IDS) — здесь просто число по уровню."""
+    return config.CLUB_DELIVERY_FEES.get(get_club_level(order_count)["key"], 0)
+
 
 def get_club_level(order_count: int) -> dict:
     """Уровень клуба по количеству заказов — чистая функция, таблицу не трогает."""

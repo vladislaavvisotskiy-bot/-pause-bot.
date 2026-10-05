@@ -475,6 +475,18 @@ async def api_order_submit(request: web.Request):
     if not zone or not point:
         return web.json_response({"error": "point_required"}, status=400)
 
+    # Платная доставка по статусу — считаем здесь САМИ по order_count
+    # клиента, не доверяя тому, что могла прислать корзина (сервер —
+    # источник истины для суммы). Пока только для PAUSEAPP_TEST_CLIENT_IDS
+    # (см. config.CLUB_DELIVERY_FEES) и только на уже известную точку —
+    # на новую (is_new_point) заказ уходит на модерацию через отдельный,
+    # ещё не тронутый этой логикой путь (create_pending_order), доставку
+    # туда пока не добавляем.
+    delivery_fee = (
+        sheets.get_client_delivery_fee(client.get("order_count", 0))
+        if tg_id in config.PAUSEAPP_TEST_CLIENT_IDS and not is_new_point else 0
+    )
+
     # Билет "Пауза в подарок" — ровно ОДНА ШТУКА из выбранной позиции
     # корзины, выбираемый отдельно от способа оплаты остального — корзина
     # может содержать и другие сеты (или бОльшее количество той же
@@ -498,10 +510,12 @@ async def api_order_submit(request: web.Request):
 
     # Способ оплаты (наличные/карта) обязателен только для той части
     # заказа, что не покрыта билетом — если билет закрывает всю корзину
-    # целиком (один сет, ровно 1 шт.), remaining пуст и платить вообще
-    # нечем.
+    # целиком (один сет, ровно 1 шт.) И доставка для этого клиента
+    # бесплатна, remaining пуст и платить вообще нечем. Билет на саму
+    # доставку не распространяется — она либо есть, либо нет, отдельно от
+    # того, какой сет покрыт билетом.
     total_qty = sum(int(item.get("qty", 0)) for item in cart)
-    has_remaining = not is_ticket_payment or total_qty > 1
+    has_remaining = not is_ticket_payment or total_qty > 1 or delivery_fee > 0
     if has_remaining and not payment:
         return web.json_response({"error": "payment_required"}, status=400)
 
@@ -582,7 +596,7 @@ async def api_order_submit(request: web.Request):
         sheets.append_orders_batch,
         date_str=date_str, zone=zone, point=point, client_id=client["id"], items=items,
         payment=payment_values if is_ticket_payment else payment_value,
-        comment=comment, screenshot=screenshot, batch_id=batch_id,
+        comment=comment, screenshot=screenshot, batch_id=batch_id, delivery_fee=delivery_fee,
     )
 
     try:
@@ -604,6 +618,7 @@ async def api_order_submit(request: web.Request):
                 # Скрин — на остаток ПОСЛЕ вычета 1 шт., закрытой билетом,
                 # иначе админ сверял бы скрин с полной суммой корзины.
                 total -= prices.get(cart[ticket_item_index]["set"], 0)
+            total += delivery_fee
             items_text = ", ".join(
                 f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
                 for i in cart
@@ -648,6 +663,10 @@ async def api_profile(request: web.Request):
     # запрос только для этого; state.profile и так уже грузится первым
     # (см. loadHome) и переживает между экранами внутри сессии.
     has_ticket = await _retry_sheets(sheets.has_available_ticket, tg_id)
+    # Платная доставка по статусу — ПОКА только для тестового аккаунта
+    # (config.PAUSEAPP_TEST_CLIENT_IDS), остальные (включая других
+    # админов) видят 0, как и раньше. См. config.CLUB_DELIVERY_FEES.
+    delivery_fee = sheets.get_client_delivery_fee(order_count) if tg_id in config.PAUSEAPP_TEST_CLIENT_IDS else 0
     return web.json_response({
         "registered": True,
         "name": client.get("name", ""),
@@ -657,6 +676,7 @@ async def api_profile(request: web.Request):
         "order_count": order_count,
         "reg_date": client.get("reg_date", ""),
         "has_ticket": has_ticket,
+        "delivery_fee": delivery_fee,
         "club": {
             "key": level.get("key"),
             "emoji": level["emoji"],
