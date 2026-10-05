@@ -1209,7 +1209,7 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
         (config.O_POINT, point),
         (config.O_CLIENT_ID, _id_value(client_id)),
         (config.O_SET, set_name),
-        (config.O_QTY, str(qty)),
+        (config.O_QTY, int(qty)),  # числом — см. append_orders_batch выше
         (config.O_GARNISH, garnish or ""),
         (config.O_PAYMENT, payment),
         (config.O_COMMENT, comment or ""),
@@ -1265,7 +1265,16 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
             (config.O_POINT, point),
             (config.O_CLIENT_ID, _id_value(client_id)),
             (config.O_SET, item["set"]),
-            (config.O_QTY, str(item["qty"])),
+            # ЧИСЛОМ, не строкой — "Кол-во Заказов" в Sheet1 (столбец O)
+            # считается формулой SUMIF по этому столбцу (см.
+            # config.COL_ORDER_COUNT), а SUMIF игнорирует текстовые ячейки
+            # при суммировании, даже если они выглядят как число. Текстовое
+            # "2" там просто не попадает в сумму — отсюда "заказы есть, а
+            # счётчик 0", воспроизведено и подтверждено на реальном
+            # клиенте. Итоговая сумма (O_SUM, столбец J) при этом считалась
+            # верно — та формула умножает, а умножение в Таблицах текстовое
+            # "2" само приводит к числу, в отличие от SUMIF.
+            (config.O_QTY, int(item["qty"])),
             (config.O_GARNISH, item.get("garnish", "") or ""),
             (config.O_PAYMENT, payments[i]),
             (config.O_COMMENT, comment or ""),
