@@ -161,6 +161,7 @@ SHEET_CLUB_CARDS = "Pause Club Карточки"
 # ISO с часовым поясом Ташкента. Удаление мягкое (status "удалён").
 SHEET_MOMENTS = "Моменты"
 SHEET_MOMENT_COMMENTS = "Моменты комментарии"
+SHEET_MOMENT_LIKES = "Моменты лайки"
 MOMENT_MAX_PHOTOS = 4
 MOMENT_MAX_TEXT = 2000
 MOMENT_MAX_COMMENT = 600

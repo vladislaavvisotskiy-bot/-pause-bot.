@@ -5472,6 +5472,7 @@ def set_club_card_photo(card_id: str, file_id: str):
 
 _MOM_HEADER = ["id", "ts", "tg_id", "name", "text", "file_ids", "status"]
 _MOMC_HEADER = ["id", "post_id", "ts", "tg_id", "name", "text", "status"]
+_MOML_HEADER = ["post_id", "tg_id", "ts", "status"]  # status "" — лайк стоит, "снят" — убран
 
 
 def _moment_now() -> str:
@@ -5501,8 +5502,49 @@ def _live_comment_counts() -> dict:
     return counts
 
 
-def get_moments(limit: int = 50) -> list:
-    """Живые посты, новые сверху, с числом комментариев."""
+def _live_likes():
+    """({post_id: число лайков}, {(post_id, tg_id)} — кто что лайкнул)."""
+    ws = _ws_or_create(config.SHEET_MOMENT_LIKES, _MOML_HEADER)
+    counts, pairs = {}, set()
+    for row in ws.get_all_values()[1:]:
+        row = _moment_row(row, len(_MOML_HEADER))
+        if row[0].strip() and row[3].strip() != "снят":
+            counts[row[0]] = counts.get(row[0], 0) + 1
+            pairs.add((row[0], row[1]))
+    return counts, pairs
+
+
+def toggle_moment_like(post_id: str, tg_id) -> tuple:
+    """Ставит/снимает лайк, возвращает (liked, like_count)."""
+    ws = _ws_or_create(config.SHEET_MOMENT_LIKES, _MOML_HEADER)
+    target = str(tg_id)
+    liked = None
+    for i, row in enumerate(ws.get_all_values()):
+        row = _moment_row(row, len(_MOML_HEADER))
+        if i and row[0] == post_id and row[1] == target:
+            liked = row[3].strip() == "снят"  # был снят — теперь ставим
+            ws.update_cell(i + 1, 4, "" if liked else "снят")
+            break
+    if liked is None:
+        ws.append_row([post_id, target, _moment_now(), ""], value_input_option="RAW")
+        liked = True
+    counts, _pairs = _live_likes()
+    return liked, counts.get(post_id, 0)
+
+
+def get_moment_author(post_id: str) -> str:
+    """tg_id автора живого поста либо ""."""
+    ws = _ws_or_create(config.SHEET_MOMENTS, _MOM_HEADER)
+    for row in ws.get_all_values()[1:]:
+        row = _moment_row(row, len(_MOM_HEADER))
+        if row[0] == post_id and row[6].strip() != config.FEED_STATUS_DELETED:
+            return row[2]
+    return ""
+
+
+def get_moments(limit: int = 50, viewer_tg_id=None) -> list:
+    """Живые посты, новые сверху, с числом комментариев/лайков и liked —
+    поставил ли лайк смотрящий."""
     ws = _ws_or_create(config.SHEET_MOMENTS, _MOM_HEADER)
     out = []
     for row in ws.get_all_values()[1:]:
@@ -5514,8 +5556,12 @@ def get_moments(limit: int = 50) -> list:
     out.reverse()
     out = out[:limit]
     counts = _live_comment_counts()
+    like_counts, pairs = _live_likes()
+    viewer = str(viewer_tg_id) if viewer_tg_id is not None else None
     for p in out:
         p["comment_count"] = counts.get(p["id"], 0)
+        p["like_count"] = like_counts.get(p["id"], 0)
+        p["liked"] = viewer is not None and (p["id"], viewer) in pairs
     return out
 
 

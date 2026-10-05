@@ -1948,3 +1948,7 @@ p { margin: 0; color: var(--ink-soft); }
 .wizard-white .club-serif-h { font-size: 19px; margin: 18px 0 8px; }
 .wizard-white .mom-comment-input { padding: 9px 14px; font-size: 14px; }
 .wizard-white .mom-comment-send { width: 38px; height: 38px; }
+
+.mom-like { border: none; background: none; padding: 0; color: inherit; font-family: inherit; cursor: pointer; }
+.mom-like.liked { color: var(--accent-warm); }
+.mom-like.liked svg { fill: currentColor; }

@@ -1300,11 +1300,12 @@ def _moment_out(p: dict) -> dict:
         "id": p["id"], "ts": p["ts"], "tg_id": p["tg_id"], "name": p["name"], "text": p["text"],
         "image_urls": ["/pauseapp/api/feed/image/" + fid for fid in p.get("file_ids", [])],
         "comment_count": p.get("comment_count", 0),
+        "like_count": p.get("like_count", 0), "liked": bool(p.get("liked")),
     }
 
 
 async def api_moments_list(request: web.Request):
-    posts = await _retry_sheets(sheets.get_moments, 50)
+    posts = await _retry_sheets(sheets.get_moments, 50, request["tg_id"])
     return web.json_response({"posts": [_moment_out(p) for p in posts]})
 
 
@@ -1372,8 +1373,26 @@ async def api_moment_comment_add(request: web.Request):
     text = (body.get("text") or "").strip()[:config.MOMENT_MAX_COMMENT]
     if not text:
         return web.json_response({"error": "empty"}, status=400)
-    c = await _retry_sheets(sheets.add_moment_comment, request.match_info["post_id"], request["tg_id"], client.get("name", ""), text)
+    post_id = request.match_info["post_id"]
+    c = await _retry_sheets(sheets.add_moment_comment, post_id, request["tg_id"], client.get("name", ""), text)
+    # Уведомление автору поста в колокольчик приложения (не себе самому).
+    try:
+        author = await _retry_sheets(sheets.get_moment_author, post_id)
+        if author and author != str(request["tg_id"]):
+            snippet = text if len(text) <= 80 else text[:77] + "…"
+            await _retry_sheets(
+                sheets.create_app_notification, author,
+                f"{client.get('name') or 'Кто-то'} прокомментировал(а) ваш момент: «{snippet}»",
+                f"moment_comment:{post_id}",
+            )
+    except Exception:
+        logger.exception("PAUSE App: не удалось записать уведомление о комментарии (post=%s)", post_id)
     return web.json_response({"ok": True, "comment": _comment_out(c)})
+
+
+async def api_moment_like(request: web.Request):
+    liked, count = await _retry_sheets(sheets.toggle_moment_like, request.match_info["post_id"], request["tg_id"])
+    return web.json_response({"liked": liked, "like_count": count})
 
 
 async def api_moment_comment_delete(request: web.Request):
@@ -2368,6 +2387,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/moments", api_moments_publish)
     app.router.add_post("/api/moments/delete", api_moments_delete)
     app.router.add_post("/api/moments/comments/delete", api_moment_comment_delete)
+    app.router.add_post("/api/moments/{post_id}/like", api_moment_like)
     app.router.add_get("/api/moments/{post_id}/comments", api_moment_comments_list)
     app.router.add_post("/api/moments/{post_id}/comments", api_moment_comment_add)
     app.router.add_get("/api/ops/summary", api_ops_summary)

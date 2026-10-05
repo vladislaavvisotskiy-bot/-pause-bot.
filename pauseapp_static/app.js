@@ -2108,6 +2108,7 @@
   // -------------------------------------------------------------------
 
   var ICON_MOM_COMMENT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="19" height="19" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 20.5l1.5-5A8.5 8.5 0 1 1 21 11.5z"/></svg>';
+  var ICON_MOM_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="19" height="19" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 5.6a5 5 0 0 0-7.1 0L12 7.3l-1.7-1.7a5 5 0 0 0-7.1 7.1l1.7 1.7L12 21.5l7.1-7.1 1.7-1.7a5 5 0 0 0 0-7.1z"/></svg>';
   var ICON_MOM_IMAGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></svg>';
   var ICON_MOM_SEND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
   var MOM_MAX_PHOTOS = 4;
@@ -2218,7 +2219,30 @@
     if (post.text) main.appendChild(el("div", "mom-text", escapeHtml(post.text)));
     if ((post.image_urls || []).length) main.appendChild(buildMomPhotos(post.image_urls));
     var acts = el("div", "mom-actions");
-    acts.innerHTML = '<span class="mom-act">' + ICON_MOM_COMMENT + (post.comment_count ? '<b>' + post.comment_count + '</b>' : "") + '</span>';
+    var likeBtn = el("button", "mom-act mom-like" + (post.liked ? " liked" : ""));
+    function drawLike() {
+      likeBtn.classList.toggle("liked", !!post.liked);
+      likeBtn.innerHTML = ICON_MOM_HEART + (post.like_count ? '<b>' + post.like_count + '</b>' : "");
+    }
+    drawLike();
+    likeBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      haptic("select");
+      // сразу меняем на экране, сервер подтвердит точным числом
+      post.liked = !post.liked;
+      post.like_count = Math.max(0, (post.like_count || 0) + (post.liked ? 1 : -1));
+      drawLike();
+      api("/api/moments/" + encodeURIComponent(post.id) + "/like", { method: "POST", body: {} }).then(function (res) {
+        post.liked = res.liked; post.like_count = res.like_count; drawLike();
+      }).catch(function (err) {
+        post.liked = !post.liked;
+        post.like_count = Math.max(0, (post.like_count || 0) + (post.liked ? 1 : -1));
+        drawLike();
+        toast(momErrText(err));
+      });
+    });
+    acts.appendChild(likeBtn);
+    acts.appendChild(el("span", "mom-act", ICON_MOM_COMMENT + (post.comment_count ? '<b>' + post.comment_count + '</b>' : "")));
     main.appendChild(acts);
     row.appendChild(main);
     if (onOpen) row.addEventListener("click", function () { haptic("select"); onOpen(post); });
@@ -6626,6 +6650,14 @@
           // Клик ведёт в "Бонусы и промокоды" только для выигрыша билета —
           // остальные виды уведомлений (объявления и т.п.) пока просто
           // читаются, им некуда вести.
+          if (n.kind && n.kind.indexOf("moment_comment:") === 0) {
+            var momId = n.kind.slice("moment_comment:".length);
+            card.classList.add("is-clickable");
+            card.addEventListener("click", function () {
+              haptic("select");
+              loadMoments(function () { openWizard(function (b) { renderMomentDetail(b, momId); }); });
+            });
+          }
           if (n.kind === "giveaway_win") {
             card.classList.add("is-clickable");
             card.addEventListener("click", function () {
