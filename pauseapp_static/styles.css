@@ -1918,11 +1918,11 @@ p { margin: 0; color: var(--ink-soft); }
 .mom-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
 /* PAUSE MOMENTS — белая заливка страницы (стена, публикация, пост) */
-.wizard.wizard-white { --mom-bg: #eceee3; background: var(--mom-bg); }
+.wizard.wizard-white { --mom-bg: #f6f2e8; background: var(--mom-bg); }
 .wizard-white .mom-composer { background: #fff; border-color: rgba(43, 40, 35, 0.14); }
-.wizard-white .mom-comment-bar, .wizard-white .mom-compose-bar { background: linear-gradient(180deg, rgba(236, 238, 227, 0), var(--mom-bg) 30%); }
+.wizard-white .mom-comment-bar, .wizard-white .mom-compose-bar { background: linear-gradient(180deg, rgba(246, 242, 232, 0), var(--mom-bg) 30%); }
 .wizard-white .mom-comment-input, .wizard-white .mom-add-photo { background: #fff; }
-.wizard-white .mom-photos img { background: #dcdfd0; }
+.wizard-white .mom-photos img { background: #e9e3d4; }
 .wizard-white .mom-post, .wizard-white .mom-comment { border-bottom-color: rgba(43, 40, 35, 0.09); }
 
 /* PAUSE MOMENTS — компактнее и выше: всё чуть мельче, заголовок и строка
@@ -1953,3 +1953,15 @@ p { margin: 0; color: var(--ink-soft); }
 .mom-like { border: none; background: none; padding: 0; color: inherit; font-family: inherit; cursor: pointer; }
 .mom-like.liked { color: var(--accent-warm); }
 .mom-like.liked svg { fill: currentColor; }
+
+/* PAUSE MOMENTS — каждый пост в своей еле заметной рамке (ясно, где пост
+   начинается и заканчивается), фон страницы — светлый тёплый айвори */
+.wizard-white .mom-list .mom-post, .wizard-white .mom-post {
+  background: #fdfbf6;
+  border: 1px solid rgba(43, 40, 35, 0.07);
+  border-radius: 18px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.wizard-white .mom-comments .mom-comment { border-bottom-color: rgba(43, 40, 35, 0.07); }
+.wizard-white .mom-composer, .wizard-white .mom-comment-input, .wizard-white .mom-add-photo { background: #fdfbf6; border-color: rgba(43, 40, 35, 0.09); }
