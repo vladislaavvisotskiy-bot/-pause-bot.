@@ -1923,3 +1923,28 @@ p { margin: 0; color: var(--ink-soft); }
 .wizard-white .mom-comment-bar, .wizard-white .mom-compose-bar { background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff 30%); }
 .wizard-white .mom-comment-input, .wizard-white .mom-add-photo { background: #fff; }
 .wizard-white .mom-photos img { background: #eee9de; }
+
+/* PAUSE MOMENTS — компактнее и выше: всё чуть мельче, заголовок и строка
+   "Что нового?" ближе к верху экрана */
+.wizard-white .wizard-body { padding-top: calc(var(--safe-top) + 44px); }
+.wizard-white .club-serif { font-size: 25px; margin-bottom: 2px; }
+.wizard-white .mom-av .leaderboard-avatar { width: 38px; height: 38px; font-size: 13px; }
+.wizard-white .mom-av.sm .leaderboard-avatar { width: 30px; height: 30px; font-size: 11px; }
+.wizard-white .mom-composer { gap: 10px; padding: 7px 12px 7px 8px; margin-bottom: 2px; }
+.wizard-white .mom-composer-ph { font-size: 13.5px; }
+.wizard-white .mom-composer-ic svg { width: 19px; height: 19px; }
+.wizard-white .mom-post, .wizard-white .mom-comment { gap: 10px; padding: 12px 0; }
+.wizard-white .mom-name { font-size: 13.5px; }
+.wizard-white .mom-time { font-size: 11.5px; }
+.wizard-white .mom-text { font-size: 14px; line-height: 1.45; }
+.wizard-white .mom-comment .mom-text { font-size: 13.5px; }
+.wizard-white .mom-photos { margin-top: 8px; border-radius: 14px; }
+.wizard-white .mom-photos.n1 img { max-height: 300px; }
+.wizard-white .mom-actions { margin-top: 8px; }
+.wizard-white .mom-act { font-size: 12px; }
+.wizard-white .mom-act svg { width: 17px; height: 17px; }
+.wizard-white .mom-compose-text { font-size: 15.5px; }
+.wizard-white .mom-thumb { width: 78px; height: 78px; }
+.wizard-white .club-serif-h { font-size: 19px; margin: 18px 0 8px; }
+.wizard-white .mom-comment-input { padding: 9px 14px; font-size: 14px; }
+.wizard-white .mom-comment-send { width: 38px; height: 38px; }
