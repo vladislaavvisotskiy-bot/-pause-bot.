@@ -1292,6 +1292,50 @@ p { margin: 0; color: var(--ink-soft); }
 .crm-search-field { margin-top: 10px; margin-bottom: 10px; }
 .crm-alpha-label { font-size: 12px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 2px 6px; }
 .crm-alpha-label:first-child { margin-top: 2px; }
+
+.crm-filter-label { font-size: 12px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 2px 8px; }
+.crm-filter-label-pool { margin-top: 14px; }
+
+/* Сегментированный переключатель периода (Сегодня/Вчера/7 дней) — один
+   прижатый блок с внутренней заливкой активного сегмента, вместо
+   отдельных пилюль с зазорами (см. loadCrmLeads). */
+.crm-day-segment {
+  display: flex;
+  background: var(--ink-soft-bg);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+}
+.crm-day-segment-btn {
+  flex: 1;
+  padding: 9px 4px;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: center;
+}
+.crm-day-segment-btn.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(43, 40, 35, 0.12); }
+
+/* "Показать всех" — намеренно НЕ ещё один сегмент периода, а отдельное,
+   явное действие "забыть про дату вообще" (видно тех, с кем не было ни
+   заказа, ни контакта, за всё время). */
+.crm-day-all-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.crm-day-all-btn.active { border-style: solid; border-color: var(--accent-warm); color: var(--accent-warm); background: var(--accent-warm-soft); }
+
+.crm-lead-orders { font-weight: 600; }
+.crm-lead-orders-zero { color: var(--ink-soft); font-weight: 400; }
 .crm-client-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; cursor: pointer; }
 .crm-client-row:active { background: var(--ink-soft-bg); }
 .crm-client-row-name { font-size: 15px; font-weight: 600; color: var(--ink); }

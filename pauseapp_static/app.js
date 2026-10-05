@@ -5263,12 +5263,16 @@
       var row = el("div", "card crm-lead-row");
       var commentLine = l.last_comment ? '<div class="crm-lead-comment">💬 ' + escapeHtml(l.last_comment.text) + '</div>' : "";
       var reminderLine = l.reminder ? '<div class="crm-lead-reminder">⏰ ' + escapeHtml(l.reminder.date) + (l.reminder.note ? ' — ' + escapeHtml(l.reminder.note) : '') + '</div>' : "";
+      // Явно показываем "0 заказов" (не просто пропускаем) — чтобы было
+      // видно, что это реально тот, с кем вообще не было взаимодействия,
+      // а не пропавшая строка.
+      var ordersBadge = '<span class="crm-lead-orders' + (l.order_count > 0 ? '' : ' crm-lead-orders-zero') + '">' + l.order_count + ' зак.</span>';
       row.innerHTML =
         '<div class="crm-lead-row-top">' +
           '<div class="crm-lead-name">' + escapeHtml(l.name) + '</div>' +
           '<div class="crm-lead-date">' + escapeHtml(l.reg_date) + '</div>' +
         '</div>' +
-        '<div class="crm-lead-sub">' + escapeHtml(l.zone || "") + (l.contact ? " · " + escapeHtml(_opsFmtPhone(l.contact)) : "") + '</div>' +
+        '<div class="crm-lead-sub">' + escapeHtml(l.zone || "") + (l.contact ? " · " + escapeHtml(_opsFmtPhone(l.contact)) : "") + ' · ' + ordersBadge + '</div>' +
         commentLine + reminderLine;
       row.addEventListener("click", function () {
         haptic("select");
@@ -5318,23 +5322,39 @@
       // — отдельные фильтры, применяются вместе.
       var filterBox = el("div", "card crm-filter-box");
       var dayFilter = "today";
-      var dayPills = el("div", "crm-pill-row");
+      filterBox.appendChild(el("div", "crm-filter-label", "Период"));
+      // Сегодня/Вчера/7 дней — равные сегменты одного переключателя (как
+      // в iOS/Android), "Все" — отдельная, визуально другая кнопка под
+      // ним: это не "ещё один период", а явный "показать вообще всех"
+      // (включая тех, у кого 0 заказов и не было ни одного
+      // взаимодействия — они и так уже в "Холодных", просто раньше не
+      // было понятно, что "Все" их тоже покажет).
+      var daySegment = el("div", "crm-day-segment");
       [
         { key: "today", label: "Сегодня" },
         { key: "yesterday", label: "Вчера" },
         { key: "week", label: "7 дней" },
-        { key: "all", label: "Все" },
       ].forEach(function (opt) {
-        var pill = el("button", "date-pill" + (opt.key === dayFilter ? " active" : ""), opt.label);
-        pill.addEventListener("click", function () {
+        var seg = el("button", "crm-day-segment-btn" + (opt.key === dayFilter ? " active" : ""), opt.label);
+        seg.addEventListener("click", function () {
           dayFilter = opt.key;
-          Array.prototype.forEach.call(dayPills.children, function (p) { p.classList.remove("active"); });
-          pill.classList.add("active");
+          Array.prototype.forEach.call(daySegment.children, function (p) { p.classList.remove("active"); });
+          seg.classList.add("active");
+          allBtn.classList.remove("active");
           applyFilters();
         });
-        dayPills.appendChild(pill);
+        daySegment.appendChild(seg);
       });
-      filterBox.appendChild(dayPills);
+      filterBox.appendChild(daySegment);
+
+      var allBtn = el("button", "crm-day-all-btn", "Показать всех лидов за всё время");
+      allBtn.addEventListener("click", function () {
+        dayFilter = "all";
+        Array.prototype.forEach.call(daySegment.children, function (p) { p.classList.remove("active"); });
+        allBtn.classList.add("active");
+        applyFilters();
+      });
+      filterBox.appendChild(allBtn);
 
       var poolFilter = "";
       var poolDefs = [
@@ -5342,6 +5362,7 @@
         { key: "warm", label: "Тёплые" },
         { key: "dozhim", label: "Дожим" },
       ];
+      filterBox.appendChild(el("div", "crm-filter-label crm-filter-label-pool", "Статус"));
       var poolPills = el("div", "crm-pill-row");
       [{ key: "", label: "Все статусы" }].concat(poolDefs).forEach(function (opt) {
         var pill = el("button", "date-pill" + (opt.key === "" ? " active" : ""), opt.label);
