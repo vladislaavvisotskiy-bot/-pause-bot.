@@ -228,8 +228,8 @@
       "profile.clubOrders": "{range} заказов",
       "profile.clubDelivery": "Доставка",
       "profile.clubGiveaways": "Розыгрыши",
-      "club.level.guest": "Гость PAUSE", "club.level.regular": "Своя пауза",
-      "club.level.circle": "Внутренний круг", "club.level.ambassador": "VIP Pause Club",
+      "club.level.guest": "PAUSE Guest.", "club.level.regular": "PAUSE Member.",
+      "club.level.circle": "PAUSE Insider.", "club.level.ambassador": "Vip Pause Club.",
       "profile.statOrders": "заказов", "profile.statPromo": "акции", "profile.statPosts": "постов",
       "profile.myOrders": "Мои заказы", "profile.favorites": "Избранное", "profile.notifications": "Уведомления",
       "profile.myMessages": "Мои послания",
@@ -477,8 +477,8 @@
       "profile.clubOrders": "{range} ta buyurtma",
       "profile.clubDelivery": "Yetkazib berish",
       "profile.clubGiveaways": "Yutuqlar",
-      "club.level.guest": "PAUSE mehmoni", "club.level.regular": "Shaxsiy pauza",
-      "club.level.circle": "Ichki doira", "club.level.ambassador": "VIP Pause Club",
+      "club.level.guest": "PAUSE Guest.", "club.level.regular": "PAUSE Member.",
+      "club.level.circle": "PAUSE Insider.", "club.level.ambassador": "Vip Pause Club.",
       "profile.statOrders": "buyurtma", "profile.statPromo": "aksiya", "profile.statPosts": "post",
       "profile.myOrders": "Buyurtmalarim", "profile.favorites": "Sevimlilar", "profile.notifications": "Bildirishnomalar",
       "profile.myMessages": "Xabarlarim",
@@ -721,8 +721,8 @@
       "profile.notRegistered": "You're not registered yet. Send /start in the bot chat to create a profile.",
       "profile.noName": "No name",
       "profile.toNextLevel": "{left} orders left to «{emoji} {label}»",
-      "club.level.guest": "PAUSE guest", "club.level.regular": "My Pause",
-      "club.level.circle": "Inner Circle", "club.level.ambassador": "VIP Pause Club",
+      "club.level.guest": "PAUSE Guest.", "club.level.regular": "PAUSE Member.",
+      "club.level.circle": "PAUSE Insider.", "club.level.ambassador": "Vip Pause Club.",
       "profile.topLevel": "You're already at the top PAUSE Club level 🎉",
       "profile.clubTitle": "Pause Club",
       "profile.clubOrders": "{range} orders",
@@ -838,7 +838,10 @@
   // стили внутри одного набора.
   var CLUB_LEVEL_ICONS = {
     guest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><rect x="6" y="3" width="12" height="18" rx="1.5"/><path d="M14.3 12h.01"/></svg>',
-    regular: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><path d="M12 4c4 2 6 6 6 10a6 6 0 0 1-12 0c0-4 2-8 6-10z"/><path d="M12 7v13"/></svg>',
+    // Был неразборчивый "капля/пламя" силуэт — по прямой просьбе заменён
+    // на чёткий росток (стебель + два листа), метафора "рост" понятнее
+    // считывается и не путается с другими тремя значками.
+    regular: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 5 3c0 4 3 7 7 7z"/><path d="M12 13c0-3.5 2.5-6 6-6c0 3.5-2.5 6-6 6z"/></svg>',
     circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><circle cx="7" cy="12" r="3.3"/><path d="M10.1 12H20"/><path d="M17 12v3M20 12v3"/></svg>',
     ambassador: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><path d="M4 18L6 8L9 13L12 6L15 13L18 8L20 18Z"/></svg>',
   };
@@ -3207,7 +3210,7 @@
     head.appendChild(el("div", "profile-name", p.name || t("profile.noName")));
     head.appendChild(el("div", "profile-contact", formatPhone(p.phone)));
 
-    // Статус клуба виден сразу, с первого заказа (даже на "Гость PAUSE",
+    // Статус клуба виден сразу, с первого заказа (даже на "PAUSE Guest.",
     // 0 заказов) — не прячем, пока не наберётся хоть один, как было
     // раньше. По тапу — полный экран со всеми статусами (см.
     // renderClubLevelsScreen), а не короткая подсказка.
