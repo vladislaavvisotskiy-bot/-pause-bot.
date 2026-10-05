@@ -423,10 +423,10 @@ p { margin: 0; color: var(--ink-soft); }
 
 .club-hero { padding: calc(var(--safe-top) + 8px) 0 10px; }
 #club-header { padding: 0 6px; }
-.club-hero-leaf { color: var(--ink-soft); margin-bottom: 8px; }
-.club-hero-leaf svg { width: 26px; height: 26px; }
-.club-hero-title { font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-size: 30px; font-weight: 500; letter-spacing: 0.07em; line-height: 1.1; color: var(--ink); }
-.club-hero-subtitle { margin-top: 10px; font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); }
+.club-hero-leaf { color: var(--ink); margin-bottom: 8px; }
+.club-hero-leaf svg { width: 32px; height: 32px; stroke: currentColor; stroke-width: 0.9; stroke-linejoin: round; }
+.club-hero-title { font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-size: 36px; font-weight: 600; letter-spacing: 0.07em; line-height: 1.1; color: var(--ink); }
+.club-hero-subtitle { margin-top: 10px; font-size: 15.5px; line-height: 1.55; color: var(--ink-soft); }
 
 /* Тёмная "акцентная" карточка — единственная такая на экране, отличает
    статус от обычных белых карточек ниже, по образцу "PAUSE Select" на
