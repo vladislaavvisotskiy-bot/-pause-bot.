@@ -1852,19 +1852,27 @@
       body.appendChild(head);
 
       if (s.description && s.description.length) {
-        var list = el("ul", "menu-set-card-desc");
-        s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
-        body.appendChild(list);
+        if (expanded) {
+          var list = el("ul", "menu-set-card-desc");
+          s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
+          body.appendChild(list);
+        } else {
+          // Свёрнутая карточка: состав одной строкой через "·", не больше двух
+          // строк — высота карточки и фото не зависят от длины описания.
+          body.appendChild(el("div", "menu-set-card-summary", escapeHtml(s.description.join(" · "))));
+        }
       }
 
       if (!expanded) {
+        var foot = el("div", "menu-set-card-foot");
         if (s.is_variant_group) {
           var minP = Math.min.apply(null, s.variants.map(function (v) { return v.price; }));
-          body.appendChild(el("div", "menu-set-card-price", t("menu.from", { sum: fmtSum(minP) })));
+          foot.appendChild(el("div", "menu-set-card-price", t("menu.from", { sum: fmtSum(minP) })));
         } else {
-          body.appendChild(el("div", "menu-set-card-price", fmtSum(s.price)));
-          if (s.has_garnish) body.appendChild(el("div", "menu-set-card-note", t("menu.withGarnish")));
+          foot.appendChild(el("div", "menu-set-card-price", fmtSum(s.price)));
+          if (s.has_garnish) foot.appendChild(el("span", "menu-set-card-pill", escapeHtml(t("menu.withGarnish"))));
         }
+        body.appendChild(foot);
         card.appendChild(body);
         card.onclick = function () { haptic("select"); expanded = true; render(); };
         return;
