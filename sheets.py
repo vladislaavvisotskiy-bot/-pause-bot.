@@ -5,6 +5,8 @@
 """
 import json
 import random
+import threading
+import uuid
 import re
 import time
 import datetime as dt
@@ -5286,3 +5288,155 @@ def remove_pause_admin(tg_id):
             ws.delete_rows(r)
             _cache["pause_admins"] = None
             return
+
+
+# ---------------------------------------------------------------------------
+# PAUSE App → "Pause Club": карточки "Сейчас в клубе" (config.SHEET_CLUB_CARDS).
+# Админ ("Операционный центр" → "Управление Pause Club") добавляет/удаляет/
+# переставляет карточки и правит весь их текст и фото. Лист маленький, поэтому
+# каждая правка = прочитать все строки, изменить список, переписать лист целиком
+# (под замком, чтобы две правки подряд не затёрли друг друга).
+#
+# Текстовое поле у встроенной карточки (kind != "custom") пустое = "показывать
+# стандартный текст из i18n" — так смена языка продолжает работать, пока админ
+# сам ничего не переписал. У kind == "custom" пустое поле = элемент не рисуется.
+# Пустой СПИСОК хранится строкой-маркером "_empty" — иначе удаление всех
+# карточек выглядело бы как "ничего не настроено" и возвращало стандартные.
+# ---------------------------------------------------------------------------
+
+_CC_HEADER = ["id", "kind", "eyebrow", "heading", "desc", "cta", "stat1", "stat2", "photo", "color", "carousel"]
+CLUB_CARD_TEXT_FIELDS = ("eyebrow", "heading", "desc", "cta", "stat1", "stat2")
+CLUB_CARD_COLORS = ("green", "gold", "terracotta", "caramel")
+CLUB_BUILTIN_KINDS = ("pday", "biggift", "top", "moments")
+_CC_BUILTIN_COLOR = {"pday": "green", "biggift": "gold", "top": "terracotta", "moments": "caramel"}
+_club_cards_lock = threading.Lock()
+
+
+def _club_card_new(kind: str) -> dict:
+    custom = kind not in CLUB_BUILTIN_KINDS
+    card = {f: "" for f in CLUB_CARD_TEXT_FIELDS}
+    card.update({
+        "id": ("c" + uuid.uuid4().hex[:8]) if custom else kind,
+        "kind": "custom" if custom else kind,
+        "photo": "",
+        "color": "green" if custom else _CC_BUILTIN_COLOR[kind],
+        # Исходная раскладка: "PAUSE DAY" и "Большой приз" — одна карусель.
+        "carousel": kind in ("pday", "biggift"),
+    })
+    if custom:
+        card["heading"] = "Новая карточка"
+    return card
+
+
+def _club_cards_default() -> list:
+    return [_club_card_new(k) for k in CLUB_BUILTIN_KINDS]
+
+
+def _read_club_cards_raw():
+    """None — лист пуст (ещё не настраивали), иначе список карточек."""
+    ws = _ws_or_create(config.SHEET_CLUB_CARDS, _CC_HEADER)
+    rows = ws.get_all_values()[1:]
+    rows = [r for r in rows if r and r[0].strip()]
+    if not rows:
+        return None
+    out = []
+    for r in rows:
+        r = list(r) + [""] * (len(_CC_HEADER) - len(r))
+        d = dict(zip(_CC_HEADER, [c.strip() if i not in (2, 3, 4, 5, 6, 7) else c for i, c in enumerate(r)]))
+        if d["id"] == "_empty":
+            continue
+        d["carousel"] = d["carousel"].lower() == "да"
+        if d["color"] not in CLUB_CARD_COLORS:
+            d["color"] = "green"
+        out.append(d)
+    return out
+
+
+def get_club_cards() -> list:
+    now = time.time()
+    if _cache.get("club_cards") is not None and now - _cache.get("club_cards_ts", 0) < _CACHE_TTL:
+        return _cache["club_cards"]
+    cards = _read_club_cards_raw()
+    if cards is None:
+        cards = _club_cards_default()
+    _cache["club_cards"] = cards
+    _cache["club_cards_ts"] = now
+    return cards
+
+
+def _write_club_cards(cards: list):
+    ws = _ws_or_create(config.SHEET_CLUB_CARDS, _CC_HEADER)
+    if cards:
+        values = [[c.get(h, "") if h != "carousel" else ("да" if c.get("carousel") else "") for h in _CC_HEADER] for c in cards]
+    else:
+        values = [["_empty"] + [""] * (len(_CC_HEADER) - 1)]
+    ws.clear()
+    ws.update([_CC_HEADER] + values, "A1", value_input_option="RAW")
+    _cache["club_cards"] = [dict(c) for c in cards]
+    _cache["club_cards_ts"] = time.time()
+
+
+def _mutate_club_cards(fn):
+    """fn(cards) меняет список на месте и может вернуть значение; читаем
+    свежее из таблицы (не из кэша), чтобы не затереть чужую правку."""
+    with _club_cards_lock:
+        cards = _read_club_cards_raw()
+        if cards is None:
+            cards = _club_cards_default()
+        result = fn(cards)
+        _write_club_cards(cards)
+        return result if result is not None else cards
+
+
+def add_club_card(kind: str = "custom"):
+    """Новая пустая карточка в конец; встроенную (kind из CLUB_BUILTIN_KINDS)
+    можно "вернуть" после удаления — дубль не создаём."""
+    def fn(cards):
+        if kind in CLUB_BUILTIN_KINDS and any(c["id"] == kind for c in cards):
+            return None
+        card = _club_card_new(kind)
+        cards.append(card)
+    return _mutate_club_cards(fn)
+
+
+def update_club_card(card_id: str, fields: dict):
+    def fn(cards):
+        for c in cards:
+            if c["id"] != card_id:
+                continue
+            for f in CLUB_CARD_TEXT_FIELDS:
+                if f in fields:
+                    c[f] = str(fields[f] or "").strip()[:600]
+            if fields.get("color") in CLUB_CARD_COLORS:
+                c["color"] = fields["color"]
+            if "carousel" in fields:
+                c["carousel"] = bool(fields["carousel"])
+            return None
+    return _mutate_club_cards(fn)
+
+
+def delete_club_card(card_id: str):
+    def fn(cards):
+        cards[:] = [c for c in cards if c["id"] != card_id]
+    return _mutate_club_cards(fn)
+
+
+def move_club_card(card_id: str, delta: int):
+    def fn(cards):
+        for i, c in enumerate(cards):
+            if c["id"] == card_id:
+                j = i + (1 if delta > 0 else -1)
+                if 0 <= j < len(cards):
+                    cards[i], cards[j] = cards[j], cards[i]
+                return None
+    return _mutate_club_cards(fn)
+
+
+def set_club_card_photo(card_id: str, file_id: str):
+    """file_id == "" — убрать фото."""
+    def fn(cards):
+        for c in cards:
+            if c["id"] == card_id:
+                c["photo"] = file_id
+                return None
+    return _mutate_club_cards(fn)

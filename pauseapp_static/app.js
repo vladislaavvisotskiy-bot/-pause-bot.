@@ -1372,6 +1372,7 @@
       // карточке и данные наготове, если по карточке тапнут.
       if (state.leaderboard) renderClubNowCards();
       loadClubLeaderboard();
+      loadClubCards();
     }
     if (name === "messages") { if (state.feed) renderMessagesFeedScreen(); else loadFeed(); }
   }
@@ -2256,143 +2257,159 @@
   var ICON_PDAY_PEOPLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c0.8-3.2 2.9-4.8 6-4.8s5.2 1.6 6 4.8"/><circle cx="17.5" cy="8.5" r="2.3"/><path d="M15.8 14.4c2.4 0.3 3.9 1.8 4.6 4.6"/></svg>';
   var ICON_PDAY_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5l3.2 2"/></svg>';
 
-  function renderClubNowCards() {
-    var root = document.getElementById("club-now-cards");
-    if (!root) return;
-    root.innerHTML = "";
-    // Первая "карточка" на самом деле две — ежедневный "PAUSE GIFT"
-    // (Дарим эмоции) и рядом, свайпом вправо, ежемесячный большой приз
-    // (тоже "PAUSE GIFT", см. config.CLUB_BENEFITS.ambassador: "Алиса,
-    // телефоны") — по прямой просьбе, отдельная карточка не ПОД
-    // остальными, а в этом же месте через горизонтальный свайп (тот же
-    // приём, что care-viewer в "Мои послания" — нативный scroll-snap, без
-    // ручной обработки touch), с точками-индикатором снизу.
-    var names = (state.giveaway && state.giveaway.participant_names) || [];
-    var carousel = el("div", "pday-carousel");
-    var track = el("div", "pday-carousel-track");
+  // Карточки приходят с сервера (/api/club/cards, правятся в "Операционный
+  // центр" → "Управление Pause Club"). Пока не загрузились — показываем
+  // стандартный набор, чтобы экран не мигал пустым. У встроенных карточек
+  // (kind != "custom") пустое текстовое поле = стандартный i18n-текст.
+  var DEFAULT_CLUB_CARDS = [
+    { id: "pday", kind: "pday", color: "green", carousel: true },
+    { id: "biggift", kind: "biggift", color: "gold", carousel: true },
+    { id: "top", kind: "top", color: "terracotta", carousel: false },
+    { id: "moments", kind: "moments", color: "caramel", carousel: false },
+  ];
+  var CLUB_COLOR_LABELS = { green: "Зелёный", gold: "Золотой", terracotta: "Терракот", caramel: "Карамель" };
+  var CLUB_COLOR_CLASS = { green: "", gold: " pday-card-biggift", terracotta: " pday-card-top", caramel: " pday-card-moments" };
+  var CLUB_KIND_LABELS = { pday: "PAUSE DAY", biggift: "Большой приз месяца", top: "PAUSE TOP", moments: "PAUSE MOMENTS", custom: "Своя карточка" };
 
-    var dailySlide = el("div", "pday-carousel-slide");
-    var card = el("div", "pday-card");
-    card.innerHTML =
-      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
-      '<div class="pday-card-content">' +
-        '<div class="pday-card-eyebrow">' + escapeHtml(t("feed.type.giveaway")) + '</div>' +
-        '<div class="pday-card-heading">' + escapeHtml(t("club.pday.heading")) + '</div>' +
-        '<div class="pday-card-desc">' + escapeHtml(t("club.pday.desc")) + '</div>' +
-        '<div class="pday-card-btn">' + escapeHtml(t("club.pday.cta")) + '</div>' +
-        '<div class="pday-card-stats">' +
-          '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.pday.participants", { count: names.length })) + '</span>' +
-          '<span>' + ICON_PDAY_CLOCK + escapeHtml(t("club.pday.countdownStub")) + '</span>' +
-        '</div>' +
-      '</div>';
-    card.addEventListener("click", function () {
-      haptic("select");
-      openProfileSubscreen(t("feed.type.giveaway"), function (sub) {
+  function clubCardDefaultTexts(kind) {
+    var names = (state.giveaway && state.giveaway.participant_names) || [];
+    if (kind === "pday") return {
+      eyebrow: t("feed.type.giveaway"), heading: t("club.pday.heading"), desc: t("club.pday.desc"), cta: t("club.pday.cta"),
+      stat1: t("club.pday.participants", { count: names.length }), stat2: t("club.pday.countdownStub") };
+    if (kind === "biggift") return {
+      eyebrow: t("feed.type.giveaway"), heading: t("club.pdayBig.heading"), desc: t("club.pdayBig.desc"), cta: t("club.pday.cta"),
+      stat1: t("club.pday.participants", { count: 0 }), stat2: t("club.pdayBig.daysStub", { days: 30 }) };
+    if (kind === "top") return {
+      eyebrow: t("club.top.eyebrow"), heading: t("club.top.heading"), desc: t("club.top.desc"), cta: t("club.top.cta"),
+      stat1: t("club.top.peopleCount", { count: state.totalClients || 0 }), stat2: "" };
+    if (kind === "moments") return {
+      eyebrow: t("club.moments.eyebrow"), heading: t("club.moments.heading"), desc: t("club.moments.desc"), cta: t("club.moments.cta"),
+      stat1: t("club.moments.count", { count: (state.feed || []).length }), stat2: "" };
+    return { eyebrow: "", heading: "", desc: "", cta: "", stat1: "", stat2: "" };
+  }
+
+  // Что реально видно на карточке: свой текст админа, иначе стандартный.
+  function clubCardTexts(c) {
+    var d = clubCardDefaultTexts(c.kind);
+    var out = {};
+    ["eyebrow", "heading", "desc", "cta", "stat1", "stat2"].forEach(function (f) { out[f] = c[f] || d[f]; });
+    return out;
+  }
+
+  function clubCardTapHandler(c, tx) {
+    if (c.kind === "pday") return function () {
+      openProfileSubscreen(tx.eyebrow, function (sub) {
         sub.innerHTML = "";
         sub.appendChild(buildGiveawayParticipants((state.giveaway && state.giveaway.participant_names) || []));
       });
-    });
-    dailySlide.appendChild(card);
-    track.appendChild(dailySlide);
-
-    // Ежемесячный большой приз — функции пока нет вовсе (ни пула, ни
-    // даты розыгрыша), поэтому оба счётчика ("30 дней" и "0 участников")
-    // намеренно статичные заглушки, по тапу — страница "Скоро".
-    var bigSlide = el("div", "pday-carousel-slide");
-    var bigCard = el("div", "pday-card pday-card-biggift");
-    bigCard.innerHTML =
-      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
-      '<div class="pday-card-content">' +
-        '<div class="pday-card-eyebrow">' + escapeHtml(t("feed.type.giveaway")) + '</div>' +
-        '<div class="pday-card-heading">' + escapeHtml(t("club.pdayBig.heading")) + '</div>' +
-        '<div class="pday-card-desc">' + escapeHtml(t("club.pdayBig.desc")) + '</div>' +
-        '<div class="pday-card-btn">' + escapeHtml(t("club.pday.cta")) + '</div>' +
-        '<div class="pday-card-stats">' +
-          '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.pday.participants", { count: 0 })) + '</span>' +
-          '<span>' + ICON_PDAY_CLOCK + escapeHtml(t("club.pdayBig.daysStub", { days: 30 })) + '</span>' +
-        '</div>' +
-      '</div>';
-    bigCard.addEventListener("click", function () {
-      haptic("select");
-      openProfileSubscreen(t("feed.type.giveaway"), function (sub) {
+    };
+    if (c.kind === "biggift") return function () {
+      openProfileSubscreen(tx.eyebrow, function (sub) {
         sub.innerHTML = "";
         sub.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + t("club.pdayBig.comingSoon") + "</p>"));
       });
-    });
-    bigSlide.appendChild(bigCard);
-    track.appendChild(bigSlide);
-
-    carousel.appendChild(track);
-
-    var dots = el("div", "pday-carousel-dots");
-    var dot0 = el("span", "pday-carousel-dot active");
-    var dot1 = el("span", "pday-carousel-dot");
-    dots.appendChild(dot0);
-    dots.appendChild(dot1);
-    carousel.appendChild(dots);
-
-    var carouselScrollTimer = null;
-    track.addEventListener("scroll", function () {
-      if (carouselScrollTimer) clearTimeout(carouselScrollTimer);
-      carouselScrollTimer = setTimeout(function () {
-        var idx = Math.round(track.scrollLeft / track.clientWidth);
-        dot0.classList.toggle("active", idx === 0);
-        dot1.classList.toggle("active", idx === 1);
-      }, 80);
-    });
-
-    root.appendChild(carousel);
-
-    // Вторая карточка — "Рейтинг" (см. макет: тот же стиль карточки, но
-    // другой цвет вместо фото, т.к. своей фотографии пока нет — по
-    // прямой просьбе взят единственный цветной акцент бренда
-    // (--accent-warm), чтобы не заводить случайный новый цвет мимо
-    // палитры). "N человек" — общее число клиентов из Sheet1
-    // (state.totalClients, см. loadClubLeaderboard), а не размер топа.
-    var totalClients = state.totalClients || 0;
-    var topCard = el("div", "pday-card pday-card-top");
-    topCard.innerHTML =
-      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
-      '<div class="pday-card-content">' +
-        '<div class="pday-card-eyebrow">' + escapeHtml(t("club.top.eyebrow")) + '</div>' +
-        '<div class="pday-card-heading">' + escapeHtml(t("club.top.heading")) + '</div>' +
-        '<div class="pday-card-desc">' + escapeHtml(t("club.top.desc")) + '</div>' +
-        '<div class="pday-card-btn">' + escapeHtml(t("club.top.cta")) + '</div>' +
-        '<div class="pday-card-stats">' +
-          '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.top.peopleCount", { count: totalClients })) + '</span>' +
-        '</div>' +
-      '</div>';
-    topCard.addEventListener("click", function () {
-      haptic("select");
+    };
+    if (c.kind === "top") return function () {
       openProfileSubscreen(t("club.leaderboardTitle"), function (sub) {
         sub.innerHTML = "";
         renderClubLeaderboard(sub);
       });
-    });
-    root.appendChild(topCard);
+    };
+    if (c.kind === "moments") return openClubMoments;
+    // Своя карточка — простая страница: фото, заголовок, описание.
+    return function () {
+      openProfileSubscreen(tx.heading || tx.eyebrow || "PAUSE CLUB", function (sub) {
+        sub.innerHTML = "";
+        var page = el("div", "card");
+        if (c.photo_url) {
+          var img = el("img", "club-card-page-photo");
+          img.alt = "";
+          setPhotoSrc(img, c.photo_url);
+          page.appendChild(img);
+        }
+        if (tx.heading) page.appendChild(el("h3", "club-card-page-title", escapeHtml(tx.heading)));
+        if (tx.desc) page.appendChild(el("div", "club-card-page-desc", escapeHtml(tx.desc).replace(/\n/g, "<br>")));
+        sub.appendChild(page);
+      });
+    };
+  }
 
-    // Третья карточка — "PAUSE MOMENTS": сюда переехала механика
-    // "Опубликовать" (раньше кнопка+лента стояли всегда на виду прямо на
-    // экране, см. git history — #feed-compose-btn/#feed-root). Цвет —
-    // тёплый золотисто-карамельный (третий, ни с одной из первых двух
-    // карточек не совпадает, но всё ещё в пределах тёплой палитры
-    // бренда, не случайный новый оттенок), сама механика открывается по
-    // тапу, см. openClubMoments/renderClubMomentsContent.
-    var momentsCount = (state.feed || []).length;
-    var momentsCard = el("div", "pday-card pday-card-moments");
-    momentsCard.innerHTML =
-      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
-      '<div class="pday-card-content">' +
-        '<div class="pday-card-eyebrow">' + escapeHtml(t("club.moments.eyebrow")) + '</div>' +
-        '<div class="pday-card-heading">' + escapeHtml(t("club.moments.heading")) + '</div>' +
-        '<div class="pday-card-desc">' + escapeHtml(t("club.moments.desc")) + '</div>' +
-        '<div class="pday-card-btn">' + escapeHtml(t("club.moments.cta")) + '</div>' +
-        '<div class="pday-card-stats">' +
-          '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.moments.count", { count: momentsCount })) + '</span>' +
-        '</div>' +
-      '</div>';
-    momentsCard.addEventListener("click", openClubMoments);
-    root.appendChild(momentsCard);
+  function buildClubCard(c) {
+    var tx = clubCardTexts(c);
+    var builtin = c.kind !== "custom";
+    var card = el("div", "pday-card" + (CLUB_COLOR_CLASS[c.color] || ""));
+    var html = "";
+    if (c.photo_url) html += '<img class="pday-card-photo" alt=""><div class="pday-card-shade"></div>';
+    else html += '<div class="pday-card-bg">' + ICON_LEAF + '</div>';
+    html += '<div class="pday-card-content">';
+    if (tx.eyebrow) html += '<div class="pday-card-eyebrow">' + escapeHtml(tx.eyebrow) + '</div>';
+    if (tx.heading) html += '<div class="pday-card-heading">' + escapeHtml(tx.heading) + '</div>';
+    if (tx.desc) html += '<div class="pday-card-desc">' + escapeHtml(tx.desc).replace(/\n/g, "<br>") + '</div>';
+    if (tx.cta) html += '<div class="pday-card-btn">' + escapeHtml(tx.cta) + '</div>';
+    if (tx.stat1 || tx.stat2) {
+      html += '<div class="pday-card-stats">';
+      if (tx.stat1) html += '<span>' + (builtin ? ICON_PDAY_PEOPLE : "") + escapeHtml(tx.stat1) + '</span>';
+      if (tx.stat2) html += '<span>' + (builtin ? ICON_PDAY_CLOCK : "") + escapeHtml(tx.stat2) + '</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+    card.innerHTML = html;
+    if (c.photo_url) setPhotoSrc(card.querySelector(".pday-card-photo"), c.photo_url);
+    var onTap = clubCardTapHandler(c, tx);
+    card.addEventListener("click", function () { haptic("select"); onTap(); });
+    return card;
+  }
+
+  // Соседние карточки с carousel=true собираются в одну карусель (нативный
+  // scroll-snap, как "Мои послания"), остальные идут отдельными карточками.
+  function buildClubCarousel(group) {
+    var carousel = el("div", "pday-carousel");
+    var track = el("div", "pday-carousel-track");
+    var dots = el("div", "pday-carousel-dots");
+    var dotEls = [];
+    group.forEach(function (c, i) {
+      var slide = el("div", "pday-carousel-slide");
+      slide.appendChild(buildClubCard(c));
+      track.appendChild(slide);
+      var d = el("span", "pday-carousel-dot" + (i === 0 ? " active" : ""));
+      dotEls.push(d);
+      dots.appendChild(d);
+    });
+    carousel.appendChild(track);
+    carousel.appendChild(dots);
+    var timer = null;
+    track.addEventListener("scroll", function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        var idx = Math.round(track.scrollLeft / track.clientWidth);
+        dotEls.forEach(function (d, i) { d.classList.toggle("active", i === idx); });
+      }, 80);
+    });
+    return carousel;
+  }
+
+  function renderClubNowCards() {
+    var root = document.getElementById("club-now-cards");
+    if (!root) return;
+    root.innerHTML = "";
+    var cards = state.clubCards || DEFAULT_CLUB_CARDS;
+    var i = 0;
+    while (i < cards.length) {
+      if (cards[i].carousel) {
+        var group = [];
+        while (i < cards.length && cards[i].carousel) group.push(cards[i++]);
+        root.appendChild(group.length > 1 ? buildClubCarousel(group) : buildClubCard(group[0]));
+      } else {
+        root.appendChild(buildClubCard(cards[i++]));
+      }
+    }
+  }
+
+  function loadClubCards() {
+    api("/api/club/cards").then(function (data) {
+      state.clubCards = data.cards || [];
+      renderClubNowCards();
+    }).catch(function () {});
   }
 
   // -------------------------------------------------------------------
@@ -3922,6 +3939,11 @@
       }));
     }
     if (state.isMainAdmin) {
+      rows.appendChild(buildProfileRow(ICON_EDIT, "Управление Pause Club", function () {
+        wizardStep(function (body) { renderClubAdminList(body); });
+      }));
+    }
+    if (state.isMainAdmin) {
       rows.appendChild(buildProfileRow(ICON_OPS_CRM, "CRM", function () {
         wizardStep(function (body) {
           opsStepHeader(body, "CRM");
@@ -4692,6 +4714,214 @@
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", "Не удалось загрузить список: " + err.message));
     });
+  }
+
+  // --- "Управление Pause Club" — список карточек вкладки Club: порядок,
+  // добавление/удаление, правка текста и фото (см. sheets.get_club_cards).
+  // Каждое действие сразу уходит на сервер, ответ — актуальный список. ---
+
+  function _clubCardsUrl(id, suffix) {
+    return "/api/ops/club/cards" + (id ? "/" + encodeURIComponent(id) : "") + (suffix ? "/" + suffix : "");
+  }
+
+  function _clubCardsApply(data) {
+    state.clubCards = data.cards || [];
+    renderClubNowCards();
+    return state.clubCards;
+  }
+
+  function renderClubAdminList(body) {
+    opsStepHeader(body, "Управление Pause Club");
+    body.appendChild(el("p", "center-note", "Карточки блока «Сейчас в клубе» в том порядке, как их видят клиенты."));
+    var listRoot = el("div");
+    body.appendChild(listRoot);
+
+    function act(promise, after) {
+      promise.then(function (data) {
+        _clubCardsApply(data);
+        if (after) after(); else draw();
+      }).catch(function (err) { toast("Не удалось: " + err.message); });
+    }
+
+    function draw() {
+      listRoot.innerHTML = "";
+      var cards = state.clubCards || DEFAULT_CLUB_CARDS;
+      if (!cards.length) listRoot.appendChild(el("div", "empty-note", "Карточек нет. Добавьте первую."));
+      cards.forEach(function (c, idx) {
+        var tx = clubCardTexts(c);
+        var row = el("div", "card club-admin-row");
+        row.appendChild(el("div", "club-admin-kind", escapeHtml(CLUB_KIND_LABELS[c.kind] || c.kind) + (c.carousel ? " · карусель" : "")));
+        row.appendChild(el("div", "club-admin-title", escapeHtml(tx.heading || tx.eyebrow || "Без заголовка")));
+        var actions = el("div", "club-admin-actions");
+        var up = el("button", "btn-ghost", "↑");
+        up.disabled = idx === 0;
+        up.addEventListener("click", function () { act(api(_clubCardsUrl(c.id, "move"), { method: "POST", body: { delta: -1 } })); });
+        var down = el("button", "btn-ghost", "↓");
+        down.disabled = idx === cards.length - 1;
+        down.addEventListener("click", function () { act(api(_clubCardsUrl(c.id, "move"), { method: "POST", body: { delta: 1 } })); });
+        var edit = el("button", "btn-ghost", "Изменить");
+        edit.addEventListener("click", function () { wizardStep(function (b) { renderClubCardEditor(b, c.id); }); });
+        var del = el("button", "btn-text", "Удалить");
+        del.addEventListener("click", function () {
+          showConfirm("Удалить карточку «" + (tx.heading || tx.eyebrow || "без заголовка") + "»?", "Удалить", function () {
+            act(api(_clubCardsUrl(c.id, "delete"), { method: "POST", body: {} }));
+          });
+        });
+        [up, down, edit, del].forEach(function (b) { actions.appendChild(b); });
+        row.appendChild(actions);
+        listRoot.appendChild(row);
+      });
+
+      var addBtn = el("button", "btn-primary", "Добавить карточку");
+      addBtn.addEventListener("click", function () {
+        addBtn.disabled = true;
+        api(_clubCardsUrl(""), { method: "POST", body: { kind: "custom" } }).then(function (data) {
+          var list = _clubCardsApply(data);
+          wizardStep(function (b) { renderClubCardEditor(b, list[list.length - 1].id); });
+        }).catch(function (err) { addBtn.disabled = false; toast("Не удалось: " + err.message); });
+      });
+      listRoot.appendChild(addBtn);
+
+      // Удалённые стандартные карточки можно вернуть.
+      var present = {};
+      cards.forEach(function (c) { present[c.id] = true; });
+      ["pday", "biggift", "top", "moments"].forEach(function (k) {
+        if (present[k]) return;
+        var restore = el("button", "btn-text", "Вернуть стандартную: " + CLUB_KIND_LABELS[k]);
+        restore.addEventListener("click", function () { act(api(_clubCardsUrl(""), { method: "POST", body: { kind: k } })); });
+        listRoot.appendChild(restore);
+      });
+    }
+    draw();
+  }
+
+  function renderClubCardEditor(body, cardId) {
+    var c = (state.clubCards || []).filter(function (x) { return x.id === cardId; })[0];
+    if (!c) { body.appendChild(el("div", "empty-note", "Карточка не найдена")); return; }
+    var builtin = c.kind !== "custom";
+    var defaults = clubCardDefaultTexts(c.kind);
+    opsStepHeader(body, CLUB_KIND_LABELS[c.kind] || "Карточка");
+    if (builtin) body.appendChild(el("p", "center-note", "Пустое поле — вернётся стандартный текст. Счётчики (участники, дни) можно заменить своим текстом."));
+    else body.appendChild(el("p", "center-note", "Пустое поле — этот элемент на карточке не показывается."));
+
+    // Фото — сразу на сервер, отдельно от кнопки «Сохранить».
+    var photoWrap = el("div", "menu-draft-photo-row");
+    var photoBtns = el("div", "club-admin-actions");
+    var attachBtn = el("button", "btn-ghost", "Выбрать фото");
+    var removeBtn = el("button", "btn-text", "Удалить фото");
+    var fileInput = el("input");
+    fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none";
+    function drawPhoto() {
+      photoWrap.innerHTML = "";
+      if (c.photo_url) {
+        var img = el("img", "menu-draft-photo-thumb");
+        img.alt = "";
+        setPhotoSrc(img, c.photo_url);
+        photoWrap.appendChild(img);
+      } else {
+        photoWrap.appendChild(el("div", "empty-note", "Фото нет — сейчас фон-градиент"));
+      }
+      removeBtn.hidden = !c.photo_url;
+    }
+    function syncCard(data) {
+      var list = _clubCardsApply(data);
+      c = list.filter(function (x) { return x.id === cardId; })[0] || c;
+      drawPhoto();
+    }
+    attachBtn.addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function () {
+      if (!fileInput.files || !fileInput.files[0]) return;
+      var f = fileInput.files[0];
+      attachBtn.disabled = true;
+      attachBtn.textContent = "Загружаю…";
+      apiUpload(_clubCardsUrl(cardId, "photo"), f, f.name).then(function (data) {
+        haptic("success");
+        syncCard(data);
+      }).catch(function (err) {
+        toast("Не удалось загрузить фото: " + err.message);
+      }).then(function () {
+        attachBtn.disabled = false;
+        attachBtn.textContent = "Выбрать фото";
+        fileInput.value = "";
+      });
+    });
+    removeBtn.addEventListener("click", function () {
+      api(_clubCardsUrl(cardId, "photo/delete"), { method: "POST", body: {} }).then(syncCard).catch(function (err) { toast("Не удалось: " + err.message); });
+    });
+    body.appendChild(photoWrap);
+    body.appendChild(el("div", "field-hint", "Фото: альбомное, примерно 4:3 (от 1600 px по длинной стороне), JPEG до 500 КБ, главное — по центру. Лучше тёмное: текст на карточке светлый (поверх фото добавляется затемнение)."));
+    photoBtns.appendChild(attachBtn);
+    photoBtns.appendChild(removeBtn);
+    body.appendChild(photoBtns);
+    body.appendChild(fileInput);
+    drawPhoto();
+
+    var FIELDS = [
+      ["eyebrow", "Надпись над заголовком", "input"],
+      ["heading", "Заголовок", "input"],
+      ["desc", "Описание", "textarea"],
+      ["cta", "Текст кнопки", "input"],
+      ["stat1", "Строка внизу — 1", "input"],
+      ["stat2", "Строка внизу — 2", "input"],
+    ];
+    var inputs = {};
+    FIELDS.forEach(function (f) {
+      var wrap = el("div", "field");
+      wrap.appendChild(el("label", null, f[1]));
+      var inp = el(f[2]);
+      if (f[2] === "input") inp.type = "text"; else inp.rows = 4;
+      inp.value = c[f[0]] || (builtin ? defaults[f[0]] : "");
+      inp.placeholder = builtin ? defaults[f[0]] : "";
+      wrap.appendChild(inp);
+      body.appendChild(wrap);
+      inputs[f[0]] = inp;
+    });
+
+    // Цвет фона (пока нет фото) — те же четыре оттенка палитры бренда.
+    var colorWrap = el("div", "field");
+    colorWrap.appendChild(el("label", null, "Цвет карточки"));
+    var colorRow = el("div", "club-admin-actions");
+    var color = c.color || "green";
+    var colorBtns = {};
+    Object.keys(CLUB_COLOR_LABELS).forEach(function (k) {
+      var b = el("button", "btn-ghost" + (k === color ? " active" : ""), CLUB_COLOR_LABELS[k]);
+      b.addEventListener("click", function () {
+        color = k;
+        Object.keys(colorBtns).forEach(function (kk) { colorBtns[kk].classList.toggle("active", kk === k); });
+      });
+      colorBtns[k] = b;
+      colorRow.appendChild(b);
+    });
+    colorWrap.appendChild(colorRow);
+    body.appendChild(colorWrap);
+
+    var carousel = !!c.carousel;
+    var carCard = el("div", "card");
+    carCard.appendChild(buildToggleRow("Слайд карусели", "Соседние карточки с этой галочкой листаются свайпом в одном месте", carousel, function (next) { carousel = next; }));
+    body.appendChild(carCard);
+
+    var saveBtn = el("button", "btn-primary", "Сохранить");
+    saveBtn.addEventListener("click", function () {
+      // Встроенной карточке уходит только то, что админ реально изменил, —
+      // иначе стандартный текст "прилип" бы к одному языку навсегда.
+      var payload = { color: color, carousel: carousel };
+      FIELDS.forEach(function (f) {
+        var v = inputs[f[0]].value.trim();
+        payload[f[0]] = (builtin && v === defaults[f[0]]) ? "" : v;
+      });
+      saveBtn.disabled = true;
+      api(_clubCardsUrl(cardId), { method: "POST", body: payload }).then(function (data) {
+        haptic("success");
+        _clubCardsApply(data);
+        saveBtn.disabled = false;
+        toast("Сохранено");
+        wizardBack();
+      }).catch(function (err) {
+        saveBtn.disabled = false;
+        toast("Не удалось сохранить: " + err.message);
+      });
+    });
+    body.appendChild(saveBtn);
   }
 
   // Розыгрыш "Пауза в подарок" — полная история победителей (см.

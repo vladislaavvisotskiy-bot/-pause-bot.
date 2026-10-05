@@ -22,6 +22,7 @@ handlers/club.py в самом боте. Где сравнить с оригин
 """
 import asyncio
 import datetime as dt
+import json
 import logging
 import os
 import random
@@ -2120,6 +2121,91 @@ async def api_crm_reminder_done(request: web.Request):
 
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Pause Club: карточки "Сейчас в клубе" (sheets.get_club_cards). Читать их
+# может любой пользователь приложения, править — только главный админ
+# ("Операционный центр" → "Управление Pause Club").
+# ---------------------------------------------------------------------------
+
+def _club_cards_payload(cards: list) -> dict:
+    out = []
+    for c in cards:
+        d = dict(c)
+        d["photo_url"] = _resolve_photo_url(d.pop("photo", ""))
+        out.append(d)
+    return {"cards": out}
+
+
+async def api_club_cards(request: web.Request):
+    cards = await _retry_sheets(sheets.get_club_cards)
+    return web.json_response(_club_cards_payload(cards))
+
+
+def _require_main_admin(request: web.Request):
+    if not request["is_main_admin"]:
+        raise web.HTTPForbidden(text=json.dumps({"error": "forbidden"}), content_type="application/json")
+
+
+async def api_ops_club_cards_add(request: web.Request):
+    _require_main_admin(request)
+    body = await request.json() if request.can_read_body else {}
+    cards = await _retry_sheets(sheets.add_club_card, (body.get("kind") or "custom"))
+    return web.json_response(_club_cards_payload(cards))
+
+
+async def api_ops_club_card_update(request: web.Request):
+    _require_main_admin(request)
+    body = await request.json()
+    cards = await _retry_sheets(sheets.update_club_card, request.match_info["card_id"], body)
+    return web.json_response(_club_cards_payload(cards))
+
+
+async def api_ops_club_card_delete(request: web.Request):
+    _require_main_admin(request)
+    cards = await _retry_sheets(sheets.delete_club_card, request.match_info["card_id"])
+    return web.json_response(_club_cards_payload(cards))
+
+
+async def api_ops_club_card_move(request: web.Request):
+    _require_main_admin(request)
+    body = await request.json()
+    cards = await _retry_sheets(sheets.move_club_card, request.match_info["card_id"], int(body.get("delta") or 0))
+    return web.json_response(_club_cards_payload(cards))
+
+
+async def api_ops_club_card_photo(request: web.Request):
+    """multipart: photo — тот же приём, что у фото сета (api_ops_menu_set_photo):
+    перезаливаем в MEDIA_CHAT_ID и храним устойчивый file_id."""
+    _require_main_admin(request)
+    if not config.MEDIA_CHAT_ID:
+        return web.json_response({"error": "media_chat_not_configured"}, status=503)
+    bot = request.app.get("bot")
+    if not bot:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "photo":
+        return web.json_response({"error": "photo_required"}, status=400)
+    data = await field.read(decode=False)
+    if not data:
+        return web.json_response({"error": "photo_required"}, status=400)
+    if len(data) > MAX_SCREENSHOT_BYTES:
+        return web.json_response({"error": "too_large"}, status=400)
+    try:
+        msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=field.filename or "club.jpg"))
+    except Exception:
+        logger.exception("PAUSE App: не удалось загрузить фото карточки клуба в канал")
+        return web.json_response({"error": "upload_failed"}, status=502)
+    cards = await _retry_sheets(sheets.set_club_card_photo, request.match_info["card_id"], msg.photo[-1].file_id)
+    return web.json_response(_club_cards_payload(cards))
+
+
+async def api_ops_club_card_photo_delete(request: web.Request):
+    _require_main_admin(request)
+    cards = await _retry_sheets(sheets.set_club_card_photo, request.match_info["card_id"], "")
+    return web.json_response(_club_cards_payload(cards))
+
+
 def create_app(bot=None) -> web.Application:
     app = web.Application(middlewares=[error_middleware, admin_auth_middleware])
     app["bot"] = bot
@@ -2147,6 +2233,13 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/messages", api_messages)
     app.router.add_get("/api/club/leaderboard", api_club_leaderboard)
     app.router.add_get("/api/club/giveaway", api_club_giveaway)
+    app.router.add_get("/api/club/cards", api_club_cards)
+    app.router.add_post("/api/ops/club/cards", api_ops_club_cards_add)
+    app.router.add_post("/api/ops/club/cards/{card_id}", api_ops_club_card_update)
+    app.router.add_post("/api/ops/club/cards/{card_id}/delete", api_ops_club_card_delete)
+    app.router.add_post("/api/ops/club/cards/{card_id}/move", api_ops_club_card_move)
+    app.router.add_post("/api/ops/club/cards/{card_id}/photo", api_ops_club_card_photo)
+    app.router.add_post("/api/ops/club/cards/{card_id}/photo/delete", api_ops_club_card_photo_delete)
     app.router.add_get("/api/bonuses", api_bonuses)
     app.router.add_get("/api/notifications", api_notifications)
     app.router.add_post("/api/notifications/read", api_notifications_read)

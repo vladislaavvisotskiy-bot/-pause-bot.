@@ -149,6 +149,12 @@ CR_DATE = 3
 CR_NOTE = 4
 CR_DONE = 5          # E — "Да", когда напоминание обработано/закрыто
 
+# PAUSE App → вкладка "Pause Club": карточки "Сейчас в клубе", которые
+# главный админ правит сам ("Операционный центр" → "Управление Pause Club").
+# Новый лист, создаётся ботом сам (sheets._ws_or_create). Порядок строк =
+# порядок карточек на экране.
+SHEET_CLUB_CARDS = "Pause Club Карточки"
+
 CRM_STAGE_COLD = "cold"      # виртуальная — нет строки в SHEET_CRM_LEADS
 CRM_STAGE_WARM = "warm"
 CRM_STAGE_DOZHIM = "dozhim"
