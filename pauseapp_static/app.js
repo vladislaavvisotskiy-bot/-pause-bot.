@@ -201,6 +201,11 @@
       "club.pday.participants": "{count} участников",
       "club.pday.countdownStub": "Розыгрыш в 12:00",
 
+      "club.pdayBig.heading": "Большой приз месяца",
+      "club.pdayBig.desc": "Раз в месяц разыгрываем что-то по-настоящему ценное — умную колонку, телефон и другие большие подарки. Участвуйте каждым своим заказом.",
+      "club.pdayBig.daysStub": "{days} дней",
+      "club.pdayBig.comingSoon": "Скоро запустим — следите за обновлениями 🌿",
+
       "club.top.eyebrow": "PAUSE TOP",
       "club.top.heading": "Герои паузы",
       "club.top.desc": "Рейтинг тех, кто чаще всех выбирает PAUSE — каждый заказ поднимает вас выше. Посмотрите, кто сейчас впереди.",
@@ -473,6 +478,11 @@
       "club.pday.participants": "{count} ishtirokchi",
       "club.pday.countdownStub": "Qur'a 12:00 da",
 
+      "club.pdayBig.heading": "Oyning katta sovg'asi",
+      "club.pdayBig.desc": "Oyiga bir marta haqiqatan ham qimmatli narsa — aqlli kolonka, telefon va boshqa katta sovg'alarni o'ynatamiz. Har bir buyurtmangiz bilan ishtirok eting.",
+      "club.pdayBig.daysStub": "{days} kun",
+      "club.pdayBig.comingSoon": "Tez orada ishga tushamiz — yangiliklarni kuzatib boring 🌿",
+
       "club.top.eyebrow": "PAUSE TOP",
       "club.top.heading": "Pauza qahramonlari",
       "club.top.desc": "PAUSE'ni eng ko'p tanlaganlar reytingi — har bir buyurtma sizni yuqoriga ko'taradi. Kim yetakchi ekanini ko'ring.",
@@ -744,6 +754,11 @@
       "club.pday.cta": "Learn more",
       "club.pday.participants": "{count} participants",
       "club.pday.countdownStub": "Draw at 12:00",
+
+      "club.pdayBig.heading": "This month's big prize",
+      "club.pdayBig.desc": "Once a month we raffle off something really valuable — a smart speaker, a phone, and other big gifts. Every order of yours counts as an entry.",
+      "club.pdayBig.daysStub": "{days} days",
+      "club.pdayBig.comingSoon": "Coming soon — stay tuned 🌿",
 
       "club.top.eyebrow": "PAUSE TOP",
       "club.top.heading": "Pause heroes",
@@ -2245,7 +2260,18 @@
     var root = document.getElementById("club-now-cards");
     if (!root) return;
     root.innerHTML = "";
+    // Первая "карточка" на самом деле две — ежедневный "PAUSE GIFT"
+    // (Дарим эмоции) и рядом, свайпом вправо, ежемесячный большой приз
+    // (тоже "PAUSE GIFT", см. config.CLUB_BENEFITS.ambassador: "Алиса,
+    // телефоны") — по прямой просьбе, отдельная карточка не ПОД
+    // остальными, а в этом же месте через горизонтальный свайп (тот же
+    // приём, что care-viewer в "Мои послания" — нативный scroll-snap, без
+    // ручной обработки touch), с точками-индикатором снизу.
     var names = (state.giveaway && state.giveaway.participant_names) || [];
+    var carousel = el("div", "pday-carousel");
+    var track = el("div", "pday-carousel-track");
+
+    var dailySlide = el("div", "pday-carousel-slide");
     var card = el("div", "pday-card");
     card.innerHTML =
       '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
@@ -2266,7 +2292,56 @@
         sub.appendChild(buildGiveawayParticipants((state.giveaway && state.giveaway.participant_names) || []));
       });
     });
-    root.appendChild(card);
+    dailySlide.appendChild(card);
+    track.appendChild(dailySlide);
+
+    // Ежемесячный большой приз — функции пока нет вовсе (ни пула, ни
+    // даты розыгрыша), поэтому оба счётчика ("30 дней" и "0 участников")
+    // намеренно статичные заглушки, по тапу — страница "Скоро".
+    var bigSlide = el("div", "pday-carousel-slide");
+    var bigCard = el("div", "pday-card pday-card-biggift");
+    bigCard.innerHTML =
+      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
+      '<div class="pday-card-content">' +
+        '<div class="pday-card-eyebrow">' + escapeHtml(t("feed.type.giveaway")) + '</div>' +
+        '<div class="pday-card-heading">' + escapeHtml(t("club.pdayBig.heading")) + '</div>' +
+        '<div class="pday-card-desc">' + escapeHtml(t("club.pdayBig.desc")) + '</div>' +
+        '<div class="pday-card-btn">' + escapeHtml(t("club.pday.cta")) + '</div>' +
+        '<div class="pday-card-stats">' +
+          '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.pday.participants", { count: 0 })) + '</span>' +
+          '<span>' + ICON_PDAY_CLOCK + escapeHtml(t("club.pdayBig.daysStub", { days: 30 })) + '</span>' +
+        '</div>' +
+      '</div>';
+    bigCard.addEventListener("click", function () {
+      haptic("select");
+      openProfileSubscreen(t("feed.type.giveaway"), function (sub) {
+        sub.innerHTML = "";
+        sub.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + t("club.pdayBig.comingSoon") + "</p>"));
+      });
+    });
+    bigSlide.appendChild(bigCard);
+    track.appendChild(bigSlide);
+
+    carousel.appendChild(track);
+
+    var dots = el("div", "pday-carousel-dots");
+    var dot0 = el("span", "pday-carousel-dot active");
+    var dot1 = el("span", "pday-carousel-dot");
+    dots.appendChild(dot0);
+    dots.appendChild(dot1);
+    carousel.appendChild(dots);
+
+    var carouselScrollTimer = null;
+    track.addEventListener("scroll", function () {
+      if (carouselScrollTimer) clearTimeout(carouselScrollTimer);
+      carouselScrollTimer = setTimeout(function () {
+        var idx = Math.round(track.scrollLeft / track.clientWidth);
+        dot0.classList.toggle("active", idx === 0);
+        dot1.classList.toggle("active", idx === 1);
+      }, 80);
+    });
+
+    root.appendChild(carousel);
 
     // Вторая карточка — "Рейтинг" (см. макет: тот же стиль карточки, но
     // другой цвет вместо фото, т.к. своей фотографии пока нет — по

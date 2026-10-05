@@ -525,6 +525,32 @@ p { margin: 0; color: var(--ink-soft); }
 .pday-card-stats span { display: flex; align-items: center; gap: 6px; }
 .pday-card + .pday-card { margin-top: 12px; }
 
+/* Карусель первой карточки (ежедневный приз + ежемесячный, свайп вправо)
+   — тот же приём, что care-viewer в "Мои послания": нативный
+   горизонтальный scroll-snap, без ручной обработки touch, точки снизу
+   отражают текущий слайд (см. app.js: renderClubNowCards). */
+.pday-carousel { margin-bottom: 12px; }
+.pday-carousel-track {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.pday-carousel-track::-webkit-scrollbar { display: none; }
+.pday-carousel-slide { flex: 0 0 100%; scroll-snap-align: center; min-width: 0; }
+.pday-carousel-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+.pday-carousel-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-soft-bg); transition: background .2s ease, transform .2s ease; }
+.pday-carousel-dot.active { background: var(--ink); transform: scale(1.3); }
+
+/* Карточка "Большой приз месяца" — второй слайд карусели, тёплое золото
+   (отличается и от зелёного PAUSE DAY, и от терракота/карамели ниже —
+   premium-ощущение для более ценного приза), всё в той же тёплой
+   палитре бренда. */
+.pday-card-biggift {
+  background: radial-gradient(130% 110% at 85% 0%, #b8923a 0%, #8a641f 50%, #3d2a08 100%);
+}
+
 /* Карточка "Рейтинг" — тот же стиль карточки, другой цвет вместо фото:
    единственный цветной акцент бренда (--accent-warm), чтобы не заводить
    случайный новый цвет мимо палитры (см. :root). */
