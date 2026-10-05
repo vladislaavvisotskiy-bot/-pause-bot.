@@ -207,6 +207,12 @@
       "club.top.cta": "Смотреть рейтинг",
       "club.top.peopleCount": "{count} человек",
 
+      "club.moments.eyebrow": "PAUSE MOMENTS",
+      "club.moments.heading": "Твоя пауза. Твой момент.",
+      "club.moments.desc": "Место, где люди делятся моментами, впечатлениями и мыслями. Делись тем, что хочется сохранить.",
+      "club.moments.cta": "Поделиться моментом",
+      "club.moments.count": "{count} моментов",
+
       "checkout.summaryTitle": "Сверка заказа",
       "checkout.deliveryFeeLabel": "Доставка",
       "checkout.deliveryInfoTitle": "Как считается доставка",
@@ -473,6 +479,12 @@
       "club.top.cta": "Reytingni ko'rish",
       "club.top.peopleCount": "{count} kishi",
 
+      "club.moments.eyebrow": "PAUSE MOMENTS",
+      "club.moments.heading": "Sizning pauzangiz. Sizning lahzangiz.",
+      "club.moments.desc": "Odamlar bu yerda lahzalar, taassurotlar va fikrlar bilan bo'lishadi. Saqlab qolgingiz kelgan narsani ulashing.",
+      "club.moments.cta": "Lahza ulashish",
+      "club.moments.count": "{count} lahza",
+
       "checkout.summaryTitle": "Buyurtma tekshiruvi",
       "checkout.deliveryFeeLabel": "Yetkazib berish",
       "checkout.deliveryInfoTitle": "Yetkazib berish qanday hisoblanadi",
@@ -738,6 +750,12 @@
       "club.top.desc": "A ranking of who chooses PAUSE most often — every order moves you up. See who's leading right now.",
       "club.top.cta": "View ranking",
       "club.top.peopleCount": "{count} people",
+
+      "club.moments.eyebrow": "PAUSE MOMENTS",
+      "club.moments.heading": "Your pause. Your moment.",
+      "club.moments.desc": "A place where people share moments, impressions and thoughts. Share what's worth keeping.",
+      "club.moments.cta": "Share a moment",
+      "club.moments.count": "{count} moments",
 
       "checkout.summaryTitle": "Order summary",
       "checkout.deliveryFeeLabel": "Delivery",
@@ -1326,7 +1344,8 @@
       // заказа в этой же сессии).
       if (state.profile) renderClubHero();
       api("/api/profile").then(function (p) { if (p && p.registered) { state.profile = p; renderClubHero(); } }).catch(function () {});
-      if (state.feed) renderFeedScreen(); else loadFeed();
+      if (state.feed) renderClubNowCards();
+      loadFeed();
       // Пул розыгрыша — всегда свежий (как home), не "кэш или загрузка":
       // кто сегодня в пуле и подведён ли итог меняется в реальном
       // времени, старое показываем сразу, не дожидаясь сети, и тут же
@@ -1935,38 +1954,35 @@
   }
 
   function loadFeed() {
-    var root = document.getElementById("feed-root");
     api("/api/feed").then(function (data) {
       state.feed = data.posts;
-      // Один и тот же /api/feed кормит два экрана — CLUB (все типы) и
-      // Послания (см. renderMessagesFeedScreen, без типа "photo") — оба
-      // просто перерисовываются сразу, независимо от того, какой сейчас
-      // виден; невидимый экран просто перерисуется молча, это дёшево.
-      renderFeedScreen();
+      // Один и тот же /api/feed кормит два места — Послания (всегда
+      // видимый экран, renderMessagesFeedScreen) и карточку "PAUSE
+      // MOMENTS" в CLUB (только число постов на самой карточке, см.
+      // renderClubNowCards — полный список строится заново только когда
+      // карточку открывают, см. renderClubMomentsContent).
+      renderClubNowCards();
       renderMessagesFeedScreen();
     }).catch(function () {
-      root.innerHTML = "";
-      root.appendChild(el("div", "feed-empty", t("club.loadFailed")));
       var msgRoot = document.getElementById("messages-feed-root");
       msgRoot.innerHTML = "";
       msgRoot.appendChild(el("div", "feed-empty", t("messages.loadFailed")));
     });
   }
 
-  function renderFeedFilters() {
-    var root = document.getElementById("feed-filters");
+  function renderFeedFilters(root) {
     root.innerHTML = "";
     var counts = {};
     (state.feed || []).forEach(function (p) { counts[p.type] = (counts[p.type] || 0) + 1; });
 
     var allChip = el("button", "filter-chip" + (state.feedFilter === "all" ? " active" : ""), t("menu.all"));
-    allChip.addEventListener("click", function () { state.feedFilter = "all"; renderFeedScreen(); });
+    allChip.addEventListener("click", function () { state.feedFilter = "all"; renderClubMomentsContent(); });
     root.appendChild(allChip);
 
     FEED_TYPES_ORDER.forEach(function (ft) {
       if (!counts[ft]) return;
       var chip = el("button", "filter-chip" + (state.feedFilter === ft ? " active" : ""), feedTypeLabel(ft));
-      chip.addEventListener("click", function () { state.feedFilter = ft; renderFeedScreen(); });
+      chip.addEventListener("click", function () { state.feedFilter = ft; renderClubMomentsContent(); });
       root.appendChild(chip);
     });
   }
@@ -2057,11 +2073,25 @@
     root.appendChild(el("h3", "club-now-heading", t("club.nowHeading")));
   }
 
-  function renderFeedScreen() {
-    renderClubHero();
-    renderFeedFilters();
-    var root = document.getElementById("feed-root");
+  // Контейнер открытого по тапу на карточку "PAUSE MOMENTS" окна (см.
+  // openClubMoments) — раньше лента/фильтры/"Опубликовать" рисовались
+  // прямо на экране CLUB (#feed-root и т.п.), теперь только здесь, по
+  // той же причине, что розыгрыш и рейтинг: не дублировать карточку.
+  var clubMomentsRoot = null;
+
+  function renderClubMomentsContent() {
+    if (!clubMomentsRoot) return;
+    var root = clubMomentsRoot;
     root.innerHTML = "";
+
+    var composeBtn = el("button", "btn-primary feed-compose-btn", t("club.compose"));
+    composeBtn.addEventListener("click", openComposeFeed);
+    root.appendChild(composeBtn);
+
+    var filtersEl = el("div", "feed-filters");
+    root.appendChild(filtersEl);
+    renderFeedFilters(filtersEl);
+
     var posts = (state.feed || []).filter(function (p) { return state.feedFilter === "all" || p.type === state.feedFilter; });
 
     if (!posts.length) {
@@ -2090,6 +2120,14 @@
     }
 
     posts.forEach(function (post) { root.appendChild(buildFeedPostCard(post)); });
+  }
+
+  function openClubMoments() {
+    haptic("select");
+    openProfileSubscreen(t("club.moments.eyebrow"), function (sub) {
+      clubMomentsRoot = sub;
+      renderClubMomentsContent();
+    });
   }
 
   // Открывает один пост ленты крупно (из сетки миниатюр) — переиспользует
@@ -2257,6 +2295,29 @@
       });
     });
     root.appendChild(topCard);
+
+    // Третья карточка — "PAUSE MOMENTS": сюда переехала механика
+    // "Опубликовать" (раньше кнопка+лента стояли всегда на виду прямо на
+    // экране, см. git history — #feed-compose-btn/#feed-root). Цвет —
+    // тёплый золотисто-карамельный (третий, ни с одной из первых двух
+    // карточек не совпадает, но всё ещё в пределах тёплой палитры
+    // бренда, не случайный новый оттенок), сама механика открывается по
+    // тапу, см. openClubMoments/renderClubMomentsContent.
+    var momentsCount = (state.feed || []).length;
+    var momentsCard = el("div", "pday-card pday-card-moments");
+    momentsCard.innerHTML =
+      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
+      '<div class="pday-card-content">' +
+        '<div class="pday-card-eyebrow">' + escapeHtml(t("club.moments.eyebrow")) + '</div>' +
+        '<div class="pday-card-heading">' + escapeHtml(t("club.moments.heading")) + '</div>' +
+        '<div class="pday-card-desc">' + escapeHtml(t("club.moments.desc")) + '</div>' +
+        '<div class="pday-card-btn">' + escapeHtml(t("club.moments.cta")) + '</div>' +
+        '<div class="pday-card-stats">' +
+          '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.moments.count", { count: momentsCount })) + '</span>' +
+        '</div>' +
+      '</div>';
+    momentsCard.addEventListener("click", openClubMoments);
+    root.appendChild(momentsCard);
   }
 
   // -------------------------------------------------------------------
@@ -2403,11 +2464,10 @@
       haptic("success");
       toast(t("club.deleted"));
       state.feed = (state.feed || []).filter(function (p) { return p.id !== id; });
-      renderFeedScreen();
+      renderClubMomentsContent();
+      renderClubNowCards();
     }).catch(function (err) { toast(t("club.deleteFailed", { msg: err.message })); });
   }
-
-  document.getElementById("feed-compose-btn").addEventListener("click", openComposeFeed);
 
   function openComposeFeed() {
     var compose = { type: "photo", caption: "", files: [] };
@@ -6238,8 +6298,6 @@
       if (span && key) span.textContent = t(key);
       if (key) b.setAttribute("aria-label", t(key));
     });
-    var composeBtn = document.getElementById("feed-compose-btn");
-    if (composeBtn) composeBtn.textContent = t("club.publish");
   }
 
   // Перерисовывает то, что уже видно на экране, сразу после смены языка
@@ -6254,8 +6312,8 @@
     // следующей полной перезагрузки данных на них.
     if (state.home) renderHomeScreen();
     if (state.menu) renderMenuScreen();
-    if (state.feed) { renderFeedScreen(); renderMessagesFeedScreen(); }
-    if (state.leaderboard || state.giveaway) renderClubNowCards();
+    if (state.feed) { renderMessagesFeedScreen(); renderClubMomentsContent(); }
+    if (state.leaderboard || state.giveaway || state.feed) renderClubNowCards();
     if (state.profile) renderProfileScreen();
   }
 
