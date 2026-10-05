@@ -148,6 +148,11 @@
       "care.thankYou2": "Ты важен.",
 
       "club.title": "Pause Club", "club.more": "Ещё", "club.moreSoon": "Скоро добавим",
+      "club.hero.subtitle1": "Люди. События. Забота.", "club.hero.subtitle2": "Больше, чем просто еда.",
+      "club.hero.toNextLevel": "{left} заказов до следующего уровня",
+      "club.hero.topLevel": "Высший статус PAUSE Club",
+      "club.tile.events": "Ближайшие события", "club.tile.care": "PAUSE Care",
+      "club.nowHeading": "Сейчас в клубе",
       "club.leaderboardTitle": "Рейтинг",
       "club.leaderboardShowMore": "Показать ещё",
       "club.leaderboardShowLess": "Свернуть",
@@ -397,6 +402,11 @@
       "care.thankYou2": "Siz muhimsiz.",
 
       "club.title": "Pause Club", "club.more": "Yana", "club.moreSoon": "Tez orada qo'shamiz",
+      "club.hero.subtitle1": "Odamlar. Tadbirlar. G'amxo'rlik.", "club.hero.subtitle2": "Shunchaki ovqatdan ko'proq.",
+      "club.hero.toNextLevel": "Keyingi darajagacha {left} ta buyurtma",
+      "club.hero.topLevel": "PAUSE Club'ning eng yuqori darajasi",
+      "club.tile.events": "Yaqin tadbirlar", "club.tile.care": "PAUSE Care",
+      "club.nowHeading": "Hozir klubda",
       "club.leaderboardTitle": "Reyting",
       "club.leaderboardShowMore": "Yana ko'rsatish",
       "club.leaderboardShowLess": "Yig'ish",
@@ -646,6 +656,11 @@
       "care.thankYou2": "You matter.",
 
       "club.title": "Pause Club", "club.more": "More", "club.moreSoon": "Coming soon",
+      "club.hero.subtitle1": "People. Events. Care.", "club.hero.subtitle2": "More than just food.",
+      "club.hero.toNextLevel": "{left} orders to the next level",
+      "club.hero.topLevel": "Top PAUSE Club status",
+      "club.tile.events": "Upcoming events", "club.tile.care": "PAUSE Care",
+      "club.nowHeading": "In the club right now",
       "club.leaderboardTitle": "Leaderboard",
       "club.leaderboardShowMore": "Show more",
       "club.leaderboardShowLess": "Show less",
@@ -1268,6 +1283,12 @@
     if (name === "profile") { if (state.profile) renderProfileScreen(); else loadProfile(); }
     if (name === "menu") { if (state.menu) renderMenuScreen(); loadMenu(); }
     if (name === "club") {
+      // Карточка статуса в шапке (renderClubHero) читает state.profile —
+      // тем же приёмом, что и розыгрыш ниже: старое (если есть) сразу,
+      // следом фоном подтягиваем свежее (статус мог измениться после
+      // заказа в этой же сессии).
+      if (state.profile) renderClubHero();
+      api("/api/profile").then(function (p) { if (p && p.registered) { state.profile = p; renderClubHero(); } }).catch(function () {});
       if (state.feed) renderFeedScreen(); else loadFeed();
       // Пул розыгрыша — всегда свежий (как home), не "кэш или загрузка":
       // кто сегодня в пуле и подведён ли итог меняется в реальном
@@ -1909,11 +1930,94 @@
     });
   }
 
-  function renderFeedScreen() {
-    screenHeader("club-header", {
-      title: t("club.title"),
-      right: { icon: ICON_KEBAB, label: t("club.more"), onClick: function () { toast(t("club.moreSoon")); } },
+  // "Шапка" экрана PAUSE Club — большой заголовок + подзаголовок, карточка
+  // статуса (как "PAUSE Select" на присланном макете, только с нашими
+  // реальными статусами из профиля) и ряд из 3 плашек-ссылок. По прямой
+  // просьбе: тот же шрифт/вид, что на макете, но без листика над
+  // заголовком. Старую простую шапку (screenHeader с "Ещё") заменяет
+  // целиком — "Ещё" там всё равно вела только в toast-заглушку.
+  var ICON_CLUB_CALENDAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>';
+
+  function renderClubSelectCard(p) {
+    var c = p.club;
+    var orderCount = p.order_count || 0;
+    var left = c.left || 0;
+    var total = orderCount + left;
+    var pct = left > 0 && total > 0 ? Math.min(100, Math.round((orderCount / total) * 100)) : 100;
+    var subText = left > 0 ? t("club.hero.toNextLevel", { left: left }) : t("club.hero.topLevel");
+    var card = el("div", "card club-select-card");
+    card.innerHTML =
+      '<div class="club-select-head">' +
+        '<span class="club-select-icon">' + clubLevelIcon(c.key) + '</span>' +
+        '<div class="club-select-info">' +
+          '<div class="club-select-name">' + escapeHtml(clubLevelLabel(c.key, c.label)) + '</div>' +
+          '<div class="club-select-sub">' + escapeHtml(subText) + '</div>' +
+        '</div>' +
+        '<span class="club-select-chevron">' + ICON_CHEVRON + '</span>' +
+      '</div>' +
+      '<div class="club-select-progress">' +
+        '<div class="club-select-progress-track"><div class="club-select-progress-fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="club-select-progress-num">' + orderCount + (left > 0 ? "/" + total : "") + '</span>' +
+      '</div>';
+    card.addEventListener("click", function () {
+      haptic("select");
+      openProfileSubscreen(t("profile.clubTitle"), function (sub) { renderClubLevelsScreen(sub, p); });
     });
+    return card;
+  }
+
+  function renderClubTileRow() {
+    var row = el("div", "club-tile-row");
+
+    // "Розыгрыш" — своего отдельного экрана пока нет, виджет уже и так
+    // рисуется ниже на этом же экране (см. #club-giveaway) — тап просто
+    // прокручивает к нему, ничего нового строить не пришлось.
+    var giveawayTile = el("button", "club-tile");
+    giveawayTile.innerHTML = ICON_OPS_GIVEAWAY + "<span>" + escapeHtml(t("feed.type.giveaway")) + "</span>";
+    giveawayTile.addEventListener("click", function () {
+      haptic("select");
+      var target = document.getElementById("club-giveaway");
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    row.appendChild(giveawayTile);
+
+    // "Ближайшие события" и "PAUSE Care" — по макету, самих этих разделов
+    // ещё нет (отдельная задача позже) — пока просто заглушка, тем же
+    // способом, что и остальные "скоро" в приложении.
+    var eventsTile = el("button", "club-tile");
+    eventsTile.innerHTML = ICON_CLUB_CALENDAR + "<span>" + escapeHtml(t("club.tile.events")) + "</span>";
+    eventsTile.addEventListener("click", function () { haptic("select"); toast(t("club.moreSoon")); });
+    row.appendChild(eventsTile);
+
+    var careTile = el("button", "club-tile");
+    careTile.innerHTML = ICON_HEART + "<span>" + escapeHtml(t("club.tile.care")) + "</span>";
+    careTile.addEventListener("click", function () { haptic("select"); toast(t("club.moreSoon")); });
+    row.appendChild(careTile);
+
+    return row;
+  }
+
+  function renderClubHero() {
+    var root = document.getElementById("club-header");
+    root.innerHTML = "";
+    var hero = el("div", "club-hero");
+    hero.innerHTML =
+      '<div class="club-hero-title">' + escapeHtml(t("club.title")).toUpperCase() + '</div>' +
+      '<div class="club-hero-subtitle">' + escapeHtml(t("club.hero.subtitle1")) + '<br>' + escapeHtml(t("club.hero.subtitle2")) + '</div>';
+    root.appendChild(hero);
+
+    if (state.profile && state.profile.club) {
+      root.appendChild(renderClubSelectCard(state.profile));
+    }
+    root.appendChild(renderClubTileRow());
+    // "Сейчас в клубе" — дальше по прежнему идёт то, что уже было
+    // (розыгрыш/рейтинг/лента), карточки-карусель с макета сюда ещё не
+    // делаем (прямая просьба — "дойди до этого момента").
+    root.appendChild(el("h3", "club-now-heading", t("club.nowHeading")));
+  }
+
+  function renderFeedScreen() {
+    renderClubHero();
     renderFeedFilters();
     var root = document.getElementById("feed-root");
     root.innerHTML = "";

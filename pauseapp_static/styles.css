@@ -416,6 +416,47 @@ p { margin: 0; color: var(--ink-soft); }
 .giveaway-winner-name { font-size: 14.5px; color: var(--ink); line-height: 1.5; }
 
 /* ------------------------------------------------------------------ */
+/* PAUSE Club — "шапка" (см. app.js: renderClubHero/renderClubSelectCard/ */
+/* renderClubTileRow) — большой заголовок по присланному макету, карточка */
+/* реального статуса в том же стиле, что "PAUSE Select", и ряд плашек.   */
+/* ------------------------------------------------------------------ */
+
+.club-hero { padding: calc(var(--safe-top) + 14px) 0 16px; }
+.club-hero-title { font-size: 27px; font-weight: 800; letter-spacing: 0.05em; color: var(--ink); }
+.club-hero-subtitle { margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
+
+.club-select-card { cursor: pointer; }
+.club-select-head { display: flex; align-items: center; gap: 12px; }
+.club-select-icon { flex: 0 0 auto; color: var(--ink); display: flex; }
+.club-select-info { flex: 1; min-width: 0; }
+.club-select-name { font-size: 16px; font-weight: 700; color: var(--ink); }
+.club-select-sub { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+.club-select-chevron { flex: 0 0 auto; color: var(--ink-soft); display: flex; }
+.club-select-progress { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.club-select-progress-track { flex: 1; height: 6px; border-radius: 999px; background: var(--ivory-deep); overflow: hidden; }
+.club-select-progress-fill { height: 100%; border-radius: 999px; background: var(--ink); }
+.club-select-progress-num { flex: 0 0 auto; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+.club-tile-row { display: flex; gap: 10px; margin: 14px 0 4px; }
+.club-tile {
+  flex: 1;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  color: var(--ink);
+}
+.club-tile span { font-size: 11.5px; font-weight: 600; line-height: 1.3; }
+.club-tile:active { background: var(--ink-soft-bg); }
+
+.club-now-heading { font-size: 17px; font-weight: 700; color: var(--ink); margin: 20px 0 10px; }
+
+/* ------------------------------------------------------------------ */
 /* PAUSE Club / Послания — лента                                       */
 /* ------------------------------------------------------------------ */
 
