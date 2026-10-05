@@ -1293,6 +1293,54 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
     return row_nums
 
 
+def migrate_order_qty_to_numbers() -> dict:
+    """Одноразовая миграция существующих строк «Заказы»: перезаписывает
+    столбец O_QTY ("Кол-во") настоящим числом везде, где это возможно.
+
+    До фикса в append_order/append_orders_batch количество писалось
+    str()'ом — Google Таблицы хранили его как ТЕКСТ. "Кол-во Заказов" в
+    Sheet1 (config.COL_ORDER_COUNT) — формула SUMIF по этому же столбцу,
+    а SUMIF текстовые ячейки при суммировании молча пропускает, даже если
+    они выглядят как число. Поэтому у клиентов с реальными заказами счётчик
+    оставался 0 (воспроизведено и подтверждено). get_all_values() отдаёт
+    ЛЮБУЮ ячейку строкой независимо от её настоящего типа в Таблице, так
+    что отличить "уже число" от "текст, похожий на число" на чтении
+    нельзя — поэтому просто перезаписываем все похожие на число ячейки
+    настоящим int: если ячейка уже была числом, ничего не меняется, если
+    текстом — чинится. Идемпотентна, безопасно запускать повторно.
+
+    НЕ запускать в этой песочнице — здесь нет реальных Google Sheets
+    credentials (см. CLAUDE.md). Запустить один раз там, где у бота есть
+    реальный доступ к таблице (см. scripts/fix_order_qty.py)."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    cells = []
+    fixed = 0
+    skipped_blank = 0
+    skipped_not_numeric = 0
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        raw = (row[config.O_QTY - 1] if len(row) >= config.O_QTY else "").strip()
+        if not raw:
+            skipped_blank += 1
+            continue
+        if not raw.lstrip("-").isdigit():
+            skipped_not_numeric += 1
+            continue
+        cells.append(gspread.Cell(r, config.O_QTY, int(raw)))
+        fixed += 1
+    if cells:
+        ws.update_cells(cells)
+    return {
+        "fixed": fixed,
+        "skipped_blank": skipped_blank,
+        "skipped_not_numeric": skipped_not_numeric,
+        "rows_scanned": len(rows) - (config.ORDERS_DATA_START_ROW - 1),
+    }
+
+
 def set_order_screenshot(row_nums: list, file_id: str):
     """Сохраняет file_id скрина оплаты в скрытый столбец «Заказы» задним
     числом — для уже существующих строк заказа (например, когда клиент
