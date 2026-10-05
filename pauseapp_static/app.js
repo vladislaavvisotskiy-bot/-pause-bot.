@@ -1674,7 +1674,7 @@
         if (Date.now() < pausedUntil || !document.getElementById("wizard").hidden) return;
         var next = (currentIdx() + 1) % slidesData.length;
         track.scrollTo({ left: next * track.clientWidth, behavior: "smooth" });
-      }, 5000);
+      }, 10000);
     }
     return carousel;
   }
