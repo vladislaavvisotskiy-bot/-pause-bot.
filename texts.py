@@ -90,10 +90,10 @@ PROFILE_BTN = "👤 Профиль"
 MENU_BTN = "💌 Меню"
 CLUB_BTN = "🌿 Pause Club"
 SUPPORT_BTN = "🤍 Поддержка"
-COURIER_ROUTE_BTN = "🚚 Мой маршрут"
-ADMIN_ROUTE_BTN = "🗺 Маршрут (админ)"
+COURIER_ROUTE_BTN = "🚚 PAUSE route"
+ADMIN_ROUTE_BTN = "🚚 PAUSE route"
 ADMIN_PANEL_BTN = "⚙️ Администратор"
-ADMIN_PAUSEAPP_BTN = "🌿 PAUSE App (превью)"
+ADMIN_PAUSEAPP_BTN = "🌿 PAUSE App"
 
 REQUISITES_TEXT = "5614 6829 1627 0798\nVladislav Visotskiy"
 
@@ -682,7 +682,7 @@ MENU_BROADCAST_BTN = "💌 Посмотреть меню"
 
 # --- Маршрут курьера: пуш о готовности (Mini App) ---
 ROUTE_READY_PUSH = "🚚 Маршрут на {date} готов — можно выезжать"
-ROUTE_READY_BTN = "Открыть маршрут"
+ROUTE_READY_BTN = "🚚 PAUSE route"
 
 # ВРЕМЕННО (убрать по просьбе админа через недельку-две, когда все привыкнут
 # к новым реквизитам) — короткая пометка перед показом реквизитов оплаты.
