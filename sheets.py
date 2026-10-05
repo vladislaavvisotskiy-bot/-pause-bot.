@@ -996,7 +996,7 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
 
 
 def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: list,
-                         payment: str, comment: str = "", screenshot: str = "", batch_id: str = "") -> list:
+                         payment, comment: str = "", screenshot: str = "", batch_id: str = "") -> list:
     """Как append_order, но для ВСЕЙ корзины ОДНИМ запросом к Sheets, а не
     по одному на каждую позицию. items — [{"set","qty","garnish"}, ...].
 
@@ -1013,7 +1013,14 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
     пределах одного оформления это безопасно, строки ещё никем не заняты,
     т.к. только что найдены этим же вызовом), и все ячейки всех позиций
     пишутся одним update_cells. Возвращает список номеров строк, по одному
-    на каждый item, в том же порядке."""
+    на каждый item, в том же порядке.
+
+    payment — либо одна строка на весь батч (как раньше), либо список той
+    же длины, что items, — по одному значению на строку (см. pauseapp.py:
+    api_order_submit — заказ с билетом "Пауза в подарок" на ОДИН сет из
+    нескольких: эта позиция пишется с payment=PAYMENT_TICKET, остальные —
+    с обычным способом оплаты остатка)."""
+    payments = payment if isinstance(payment, list) else [payment] * len(items)
     ws = _ws(config.SHEET_ORDERS)
     start_row = _next_empty_order_row()
     cells = []
@@ -1029,7 +1036,7 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
             (config.O_SET, item["set"]),
             (config.O_QTY, str(item["qty"])),
             (config.O_GARNISH, item.get("garnish", "") or ""),
-            (config.O_PAYMENT, payment),
+            (config.O_PAYMENT, payments[i]),
             (config.O_COMMENT, comment or ""),
         ]
         if screenshot:

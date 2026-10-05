@@ -471,24 +471,38 @@ async def api_order_submit(request: web.Request):
     comment = (body.get("comment") or "").strip()
     payment = (body.get("payment") or "").strip()
     screenshot = (body.get("screenshot_file_id") or "").strip()
+    ticket_item_index = body.get("ticket_item_index")
     if not zone or not point:
         return web.json_response({"error": "point_required"}, status=400)
-    if not payment:
-        return web.json_response({"error": "payment_required"}, status=400)
 
-    is_ticket_payment = payment.strip() == config.PAYMENT_TICKET
+    # Билет "Пауза в подарок" — ровно один сет (ровно 1 шт.) из корзины,
+    # выбираемый отдельно от способа оплаты остального — корзина может
+    # содержать и другие сеты, оплачиваемые как обычно (см. app.js:
+    # stepCheckout — переключатель "билетом" поверх наличных/карты, не
+    # вместо них). Без скрина и модерации на саму билетную позицию (билет
+    # сам по себе уже подтверждение, см. sheets.use_ticket). На новую (ещё
+    # не в каталоге) точку билетом не принимаем — такой заказ и так уходит
+    # на модерацию админу, а билет должен списаться сразу и один раз, без
+    # гонки с решением админа по заявке.
+    is_ticket_payment = ticket_item_index is not None
     if is_ticket_payment:
-        # Билет "Пауза в подарок" — ровно один сет, без скрина и модерации
-        # (билет сам по себе уже подтверждение, см. sheets.use_ticket). На
-        # новую (ещё не в каталоге) точку билетом не принимаем — такой
-        # заказ и так уходит на модерацию админу, а билет должен списаться
-        # сразу и один раз, без гонки с решением админа по заявке.
         if is_new_point:
             return web.json_response({"error": "ticket_new_point_not_allowed"}, status=400)
-        if len(cart) != 1 or int(cart[0].get("qty", 0)) != 1:
+        if (
+            not isinstance(ticket_item_index, int)
+            or not 0 <= ticket_item_index < len(cart)
+            or int(cart[ticket_item_index].get("qty", 0)) != 1
+        ):
             return web.json_response({"error": "ticket_single_set_only"}, status=400)
         if not await _retry_sheets(sheets.has_available_ticket, tg_id):
             return web.json_response({"error": "no_ticket"}, status=400)
+
+    # Способ оплаты (наличные/карта) обязателен только для той части
+    # заказа, что не покрыта билетом — если билет закрывает всю корзину
+    # целиком (один сет), remaining пуст и платить вообще нечем.
+    has_remaining = not is_ticket_payment or len(cart) > 1
+    if has_remaining and not payment:
+        return web.json_response({"error": "payment_required"}, status=400)
 
     date_str = await _retry_sheets(sheets.get_active_menu_date)
     payment_value = _payment_value(payment, bool(screenshot))
@@ -541,10 +555,16 @@ async def api_order_submit(request: web.Request):
 
     batch_id = uuid.uuid4().hex
     items = [{"set": item["set"], "qty": int(item["qty"]), "garnish": item.get("garnish", "")} for item in cart]
+    # Билетная позиция пишется с PAYMENT_TICKET, остальные — обычным
+    # payment_value (наличные/карта) для оплаты остатка корзины.
+    payment_values = (
+        [config.PAYMENT_TICKET if i == ticket_item_index else payment_value for i in range(len(items))]
+        if is_ticket_payment else payment_value
+    )
     row_nums = await _retry_sheets(
         sheets.append_orders_batch,
         date_str=date_str, zone=zone, point=point, client_id=client["id"], items=items,
-        payment=payment_value, comment=comment, screenshot=screenshot, batch_id=batch_id,
+        payment=payment_values, comment=comment, screenshot=screenshot, batch_id=batch_id,
     )
 
     try:
@@ -554,7 +574,7 @@ async def api_order_submit(request: web.Request):
 
     if is_ticket_payment:
         try:
-            await _retry_sheets(sheets.use_ticket, tg_id, order_row=row_nums[0])
+            await _retry_sheets(sheets.use_ticket, tg_id, order_row=row_nums[ticket_item_index])
         except Exception:
             logger.exception("PAUSE App: не удалось списать билет 'Пауза в подарок' (tg_id=%s)", tg_id)
 

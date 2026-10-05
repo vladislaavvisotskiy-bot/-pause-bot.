@@ -186,6 +186,7 @@
 
       "checkout.paymentTicket": "Билетом 🤎",
       "checkout.paymentTicketHint": "Один билет = один сет бесплатно",
+      "checkout.ticketRemainingTotal": "Итого к оплате",
       "checkout.noTicket": "У вас сейчас нет доступного билета.",
       "checkout.ticketSingleSetOnly": "Билетом можно оплатить только один сет за раз.",
       "checkout.ticketNewPointNotAllowed": "Билетом нельзя оплатить заказ на новую точку — выберите точку из списка.",
@@ -425,6 +426,7 @@
 
       "checkout.paymentTicket": "Chipta bilan 🤎",
       "checkout.paymentTicketHint": "Bir chipta = bir set bepul",
+      "checkout.ticketRemainingTotal": "To'lash uchun jami",
       "checkout.noTicket": "Hozir sizda mavjud chipta yo'q.",
       "checkout.ticketSingleSetOnly": "Chipta bilan bir vaqtda faqat bitta set to'lash mumkin.",
       "checkout.ticketNewPointNotAllowed": "Yangi nuqtaga buyurtmani chipta bilan to'lab bo'lmaydi — ro'yxatdan nuqta tanlang.",
@@ -664,6 +666,7 @@
 
       "checkout.paymentTicket": "With a ticket 🤎",
       "checkout.paymentTicketHint": "One ticket = one set, free",
+      "checkout.ticketRemainingTotal": "Total to pay",
       "checkout.noTicket": "You don't have an available ticket right now.",
       "checkout.ticketSingleSetOnly": "A ticket covers exactly one set at a time.",
       "checkout.ticketNewPointNotAllowed": "A ticket can't pay for an order to a new point — pick a point from the list.",
@@ -935,11 +938,6 @@
   // подприложение, из которого реально загружена эта страница.
   var API_BASE = "/pauseapp";
 
-  // Специальное значение оплаты "билетом" "Пауза в подарок" — фиксированный
-  // контракт с сервером (см. config.PAYMENT_TICKET), не строка из
-  // payment_options меню/справочника, поэтому не переводится и не берётся
-  // из state.menu, как обычные "Наличными"/"Картой".
-  var TICKET_PAYMENT_VALUE = "Билетом";
 
   function api(path, options) {
     options = options || {};
@@ -2273,7 +2271,7 @@
 
   var checkout = {};
   function resetCheckout() {
-    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", payment: "", screenshotFileId: null };
+    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", payment: "", screenshotFileId: null, useTicket: false, ticketItemIndex: null };
   }
   resetCheckout();
 
@@ -2432,31 +2430,90 @@
     payField.innerHTML = '<label>' + escapeHtml(t("checkout.paymentTitle")) + '</label>';
     var cashValue = (state.menu.payment_options || []).filter(function (p) { return !/карт/i.test(p); })[0] || t("checkout.cash");
     var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
-    var tileOptions = [{ value: cashValue, label: t("checkout.cash") }, { value: cardValue, label: t("checkout.card") }];
-    // Билетом — только на один сет (ровно 1 позиция×1 шт, см.
-    // pauseapp.py: api_order_submit) и только на уже известную точку (не
-    // на новую, ждущую модерации) — ровно то же условие, что проверяет
-    // сервер, здесь просто чтобы не предлагать клиенту вариант, который
-    // потом всё равно отклонят.
-    var cartIsSingleSet = state.cart.length === 1 && state.cart[0].qty === 1;
-    var ticketAvailable = !!(state.profile && state.profile.has_ticket) && cartIsSingleSet && !checkout.isNewPoint;
-    if (ticketAvailable) tileOptions.push({ value: TICKET_PAYMENT_VALUE, label: t("checkout.paymentTicket") });
-    var tilesRow = el("div", "payment-tiles-row");
-    tileOptions.forEach(function (opt) {
-      var isTicketTile = opt.value === TICKET_PAYMENT_VALUE;
-      var tileClass = "payment-tile" + (isTicketTile ? " payment-tile-ticket" : "") + (checkout.payment === opt.value ? " active" : "");
-      var tile = el("button", tileClass, escapeHtml(opt.label));
-      tile.addEventListener("click", function () {
+
+    // Билетом — ровно один сет (1 шт.) из корзины, выбираемый отдельно от
+    // способа оплаты остального (см. pauseapp.py: api_order_submit), а не
+    // как раньше — отдельная взаимоисключающая плитка "Билетом" вместо
+    // наличных/карты. Теперь это переключатель: он покрывает ОДИН сет,
+    // остальные сеты в корзине (если есть) всё равно нужно оплатить
+    // наличными/картой как обычно. Только на уже известную точку (не на
+    // новую, ждущую модерации) — то же условие, что проверяет сервер.
+    var eligibleTicketIdxs = [];
+    state.cart.forEach(function (item, idx) { if (item.qty === 1) eligibleTicketIdxs.push(idx); });
+    var ticketAvailable = !!(state.profile && state.profile.has_ticket) && !checkout.isNewPoint && eligibleTicketIdxs.length > 0;
+    if (!ticketAvailable) { checkout.useTicket = false; checkout.ticketItemIndex = null; }
+    if (checkout.useTicket && eligibleTicketIdxs.indexOf(checkout.ticketItemIndex) === -1) {
+      checkout.ticketItemIndex = eligibleTicketIdxs[0];
+    }
+    var ticketItemPrice = (checkout.useTicket && checkout.ticketItemIndex != null && state.cart[checkout.ticketItemIndex])
+      ? state.cart[checkout.ticketItemIndex].price : 0;
+    var remainingTotal = cartTotal() - ticketItemPrice;
+
+    if (ticketAvailable) {
+      var ticketToggle = el("div", "card option-row ticket-toggle-row" + (checkout.useTicket ? " selected" : ""));
+      ticketToggle.innerHTML =
+        '<div><div class="option-row-label">' + escapeHtml(t("checkout.paymentTicket")) + '</div>' +
+        '<div class="option-row-sub">' + escapeHtml(t("checkout.paymentTicketHint")) + '</div></div>';
+      ticketToggle.addEventListener("click", function () {
         haptic("select");
-        checkout.payment = opt.value;
-        if (opt.value !== cardValue) checkout.screenshotFileId = null;
+        checkout.useTicket = !checkout.useTicket;
         wizardReplace(stepCheckout);
       });
-      tilesRow.appendChild(tile);
-    });
-    payField.appendChild(tilesRow);
-    if (checkout.payment === TICKET_PAYMENT_VALUE) {
-      payField.appendChild(el("div", "checkout-ticket-hint", escapeHtml(t("checkout.paymentTicketHint"))));
+      payField.appendChild(ticketToggle);
+    }
+
+    if (checkout.useTicket && eligibleTicketIdxs.length > 1) {
+      var pickerBox = el("div", "card ticket-set-picker");
+      eligibleTicketIdxs.forEach(function (idx) {
+        var item = state.cart[idx];
+        var pickRow = el("div", "option-row ticket-set-option" + (idx === checkout.ticketItemIndex ? " selected" : ""));
+        pickRow.innerHTML = '<div class="option-row-label">' + escapeHtml(item.display) + '</div><div class="option-row-sub">' + fmtSum(item.price) + '</div>';
+        pickRow.addEventListener("click", function () {
+          haptic("select");
+          checkout.ticketItemIndex = idx;
+          wizardReplace(stepCheckout);
+        });
+        pickerBox.appendChild(pickRow);
+      });
+      payField.appendChild(pickerBox);
+    }
+
+    if (checkout.useTicket) {
+      var summaryBox = el("div", "card checkout-ticket-summary");
+      state.cart.forEach(function (item, idx) {
+        var isTicketItem = idx === checkout.ticketItemIndex;
+        var line = el("div", "checkout-summary-row" + (isTicketItem ? " is-ticket-item" : ""));
+        line.innerHTML =
+          '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " ×" + item.qty : "") + '</span>' +
+          '<span class="checkout-summary-price' + (isTicketItem ? " is-struck" : "") + '">' + fmtSum(item.price * item.qty) + '</span>';
+        summaryBox.appendChild(line);
+      });
+      var remRow = el("div", "summary-total");
+      remRow.innerHTML = '<span class="summary-total-label">' + escapeHtml(t("checkout.ticketRemainingTotal")) + '</span><span class="summary-total-value">' + fmtSum(remainingTotal) + '</span>';
+      summaryBox.appendChild(remRow);
+      payField.appendChild(summaryBox);
+    }
+
+    // Наличные/карта нужны только на ту часть заказа, что не покрыта
+    // билетом — если билет целиком закрывает всю корзину (один сет,
+    // remainingTotal === 0), способ оплаты вообще не нужен, как и раньше.
+    if (remainingTotal > 0) {
+      var tileOptions = [{ value: cashValue, label: t("checkout.cash") }, { value: cardValue, label: t("checkout.card") }];
+      var tilesRow = el("div", "payment-tiles-row");
+      tileOptions.forEach(function (opt) {
+        var tileClass = "payment-tile" + (checkout.payment === opt.value ? " active" : "");
+        var tile = el("button", tileClass, escapeHtml(opt.label));
+        tile.addEventListener("click", function () {
+          haptic("select");
+          checkout.payment = opt.value;
+          if (opt.value !== cardValue) checkout.screenshotFileId = null;
+          wizardReplace(stepCheckout);
+        });
+        tilesRow.appendChild(tile);
+      });
+      payField.appendChild(tilesRow);
+    } else {
+      checkout.payment = "";
     }
 
     if (checkout.payment && checkout.payment === cardValue) {
@@ -2516,7 +2573,9 @@
 
   function submitCheckoutOrder(btn) {
     if (!checkout.zone || !checkout.point) { toast(t("checkout.needPoint")); return; }
-    if (!checkout.payment) { toast(t("checkout.needPayment")); return; }
+    var ticketItem = checkout.useTicket ? state.cart[checkout.ticketItemIndex] : null;
+    var remaining = cartTotal() - (ticketItem ? ticketItem.price : 0);
+    if (remaining > 0 && !checkout.payment) { toast(t("checkout.needPayment")); return; }
     btn.disabled = true;
     btn.textContent = t("checkout.sending");
     api("/api/order", {
@@ -2526,6 +2585,7 @@
         zone: checkout.zone, point: checkout.point, is_new_point: checkout.isNewPoint,
         lat: checkout.lat, lon: checkout.lon,
         comment: checkout.comment, payment: checkout.payment, screenshot_file_id: checkout.screenshotFileId,
+        ticket_item_index: checkout.useTicket ? checkout.ticketItemIndex : null,
       },
     }).then(function (data) {
       haptic("success");
@@ -4943,6 +5003,16 @@
           card.innerHTML =
             '<div class="notification-text">' + escapeHtml(n.text) + '</div>' +
             '<div class="notification-date">' + escapeHtml(n.created) + '</div>';
+          // Клик ведёт в "Бонусы и промокоды" только для выигрыша билета —
+          // остальные виды уведомлений (объявления и т.п.) пока просто
+          // читаются, им некуда вести.
+          if (n.kind === "giveaway_win") {
+            card.classList.add("is-clickable");
+            card.addEventListener("click", function () {
+              haptic("select");
+              openProfileSubscreen(t("bonuses.title"), loadBonuses);
+            });
+          }
           root.appendChild(card);
         });
       }
@@ -4980,6 +5050,17 @@
           '<div class="bonus-ticket-status">' + escapeHtml(t(ticket.available ? "bonuses.ticketAvailable" : "bonuses.ticketUsed")) + '</div>' +
           '<div class="bonus-ticket-date">' + escapeHtml(t("bonuses.ticketWonOn", { date: ticket.date_won })) + '</div>' +
           (ticket.available ? "" : '<div class="bonus-ticket-date">' + escapeHtml(t("bonuses.ticketUsedOn", { date: ticket.date_used })) + '</div>');
+        // Доступный билет ведёт к оформлению заказа — закрываем визард
+        // (он модальный поверх вкладок) и открываем "Меню", откуда
+        // начинается выбор сетов; использованный билет никуда не ведёт.
+        if (ticket.available) {
+          card.classList.add("is-clickable");
+          card.addEventListener("click", function () {
+            haptic("select");
+            closeWizard();
+            showScreen("menu");
+          });
+        }
         root.appendChild(card);
       });
       var hasAvailable = tickets.some(function (tk) { return tk.available; });

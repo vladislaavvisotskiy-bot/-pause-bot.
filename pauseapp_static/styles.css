@@ -752,6 +752,24 @@ p { margin: 0; color: var(--ink-soft); }
 .payment-tile-ticket { border-color: var(--accent-warm); color: var(--accent-warm); background: var(--accent-warm-soft); }
 .payment-tile-ticket.active { background: var(--accent-warm); color: var(--ivory); border-color: var(--accent-warm); }
 .checkout-ticket-hint { font-size: 12.5px; color: var(--accent-warm); margin-top: 10px; text-align: center; }
+
+/* Переключатель "оплатить один сет билетом" — та же акцентная подача,
+   что раньше была у отдельной плитки "Билетом" (см. .payment-tile-ticket
+   выше), но теперь это не взаимоисключающий вариант оплаты, а
+   дополнительный флажок поверх наличных/карты. */
+.ticket-toggle-row { border-color: var(--accent-warm); margin-bottom: 10px; }
+.ticket-toggle-row .option-row-label { color: var(--accent-warm); font-weight: 600; }
+.ticket-toggle-row.selected { background: var(--accent-warm); border-color: var(--accent-warm); }
+.ticket-toggle-row.selected .option-row-label,
+.ticket-toggle-row.selected .option-row-sub { color: var(--ivory); }
+.ticket-set-picker { margin-bottom: 10px; }
+.ticket-set-option { margin-bottom: 6px; }
+.ticket-set-option:last-child { margin-bottom: 0; }
+.checkout-ticket-summary { margin-bottom: 10px; }
+.checkout-summary-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; font-size: 14px; color: var(--ink); }
+.checkout-summary-row + .checkout-summary-row { border-top: 1px solid var(--line); }
+.checkout-summary-row.is-ticket-item .checkout-summary-name { color: var(--accent-warm); }
+.checkout-summary-price.is-struck { text-decoration: line-through; opacity: 0.5; }
 .checkout-attach-row { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .checkout-screenshot-ok { color: var(--success); font-weight: 600; font-size: 13.5px; margin-top: 10px; }
 
@@ -903,6 +921,10 @@ p { margin: 0; color: var(--ink-soft); }
 .notification-card.is-unread { border-left-color: var(--accent-warm); }
 .notification-text { font-size: 14px; color: var(--ink); line-height: 1.45; white-space: pre-line; }
 .notification-date { font-size: 12px; color: var(--ink-soft); margin-top: 8px; }
+/* Карточки, ведущие куда-то по тапу (выигрыш билета -> Бонусы, доступный
+   билет -> оформление заказа) — курсор как подсказка на вебе, на мобильном
+   Telegram WebView роли не играет, но не мешает. */
+.is-clickable { cursor: pointer; }
 
 .empty-note { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
 
