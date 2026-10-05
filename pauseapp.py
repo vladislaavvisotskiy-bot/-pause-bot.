@@ -666,7 +666,14 @@ async def api_profile(request: web.Request):
     # Платная доставка по статусу — ПОКА только для тестового аккаунта
     # (config.PAUSEAPP_TEST_CLIENT_IDS), остальные (включая других
     # админов) видят 0, как и раньше. См. config.CLUB_DELIVERY_FEES.
-    delivery_fee = sheets.get_client_delivery_fee(order_count) if tg_id in config.PAUSEAPP_TEST_CLIENT_IDS else 0
+    # delivery_enabled — отдельно от суммы: у статуса "Гость" (первый
+    # заказ) сумма легитимно 0, но строку "Доставка" в сверке всё равно
+    # нужно показать (с прочерком, см. app.js: stepCheckout) — фронту
+    # нужно различать "доставка для этого клиента вообще считается,
+    # просто сейчас бесплатно" от "доставка для этого клиента не
+    # включена вовсе" (обычные клиенты, не из тестового списка).
+    delivery_enabled = tg_id in config.PAUSEAPP_TEST_CLIENT_IDS
+    delivery_fee = sheets.get_client_delivery_fee(order_count) if delivery_enabled else 0
     return web.json_response({
         "registered": True,
         "name": client.get("name", ""),
@@ -677,6 +684,7 @@ async def api_profile(request: web.Request):
         "reg_date": client.get("reg_date", ""),
         "has_ticket": has_ticket,
         "delivery_fee": delivery_fee,
+        "delivery_enabled": delivery_enabled,
         "club": {
             "key": level.get("key"),
             "emoji": level["emoji"],

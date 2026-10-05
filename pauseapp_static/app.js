@@ -2470,8 +2470,12 @@
       ? state.cart[checkout.ticketItemIndex].price : 0;
     // Доставка по статусу Pause Club — пока приходит только для
     // тестового аккаунта (см. pauseapp.api_profile), у всех остальных
-    // state.profile.delivery_fee будет 0/отсутствовать, билет её не
-    // покрывает (см. комментарий выше про has_remaining на сервере).
+    // state.profile.delivery_enabled будет false, билет её не покрывает
+    // (см. комментарий выше про has_remaining на сервере). enabled и fee
+    // — РАЗНЫЕ вещи: у "Гостя" (первый заказ) fee легитимно 0, но строку
+    // "Доставка" всё равно нужно показать (с прочерком), раз доставка
+    // для этого клиента вообще считается — просто сейчас бесплатно.
+    var deliveryEnabled = !!(state.profile && state.profile.delivery_enabled);
     var deliveryFee = (state.profile && state.profile.delivery_fee) || 0;
     var remainingTotal = cartTotal() - ticketItemPrice + deliveryFee;
 
@@ -2509,12 +2513,12 @@
         '<span class="checkout-summary-price">' + fmtSum(item.price * item.qty) + '</span>';
       summaryBox.appendChild(line);
     });
-    if (deliveryFee > 0) {
+    if (deliveryEnabled) {
       var deliveryLine = el("div", "checkout-summary-row");
       deliveryLine.innerHTML =
         '<span class="checkout-summary-name">' + escapeHtml(t("checkout.deliveryFeeLabel")) +
           ' <button type="button" class="checkout-delivery-info-btn">' + ICON_CHECKOUT_INFO + '</button></span>' +
-        '<span class="checkout-summary-price">' + fmtSum(deliveryFee) + '</span>';
+        '<span class="checkout-summary-price">' + (deliveryFee > 0 ? fmtSum(deliveryFee) : "—") + '</span>';
       deliveryLine.querySelector(".checkout-delivery-info-btn").addEventListener("click", function (e) {
         e.stopPropagation();
         haptic("select");
