@@ -2426,6 +2426,13 @@ def get_club_leaderboard(limit: int = 10) -> list:
     return out
 
 
+def get_total_clients_count() -> int:
+    """Общее число зарегистрированных клиентов в Sheet1 — для карточки
+    "Рейтинг" в PAUSE App ("N человек"), в отличие от get_club_leaderboard
+    НЕ ограничено топом и не требует заказов/tg_id — просто все строки."""
+    return len(_load_clients())
+
+
 def get_club_info_text() -> str:
     ws = _ws(config.SHEET_CLUB)
     return ws.acell(config.CLUB_INFO_TEXT_CELL).value or ""

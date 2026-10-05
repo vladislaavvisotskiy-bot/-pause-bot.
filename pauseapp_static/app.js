@@ -45,6 +45,7 @@
     feedFilter: "all",    // "all" | один из config.FEED_POST_TYPES — фильтр экрана CLUB
     leaderboard: null,     // топ-10 клиентов по заказам (ответ /api/club/leaderboard), см. loadClubLeaderboard
     leaderboardExpanded: false, // раскрыты ли места 4-10 под топ-3 (см. renderClubLeaderboard)
+    totalClients: 0,       // общее число клиентов из Sheet1 — для карточки "Рейтинг" (renderClubNowCards)
     messagesFilter: "all", // тот же принцип, отдельный фильтр экрана Послания
     favoriteKeys: null,    // null — ещё не грузили; иначе Set(s.key) избранных блюд клиента
     cart: [],              // корзина заказа — переживает закрытие визарда, см. addToCart/syncCartBar
@@ -199,6 +200,12 @@
       "club.pday.cta": "Узнать больше",
       "club.pday.participants": "{count} участников",
       "club.pday.countdownStub": "Розыгрыш в 12:00",
+
+      "club.top.eyebrow": "PAUSE TOP",
+      "club.top.heading": "Герои паузы",
+      "club.top.desc": "Рейтинг тех, кто чаще всех выбирает PAUSE — каждый заказ поднимает вас выше. Посмотрите, кто сейчас впереди.",
+      "club.top.cta": "Смотреть рейтинг",
+      "club.top.peopleCount": "{count} человек",
 
       "checkout.summaryTitle": "Сверка заказа",
       "checkout.deliveryFeeLabel": "Доставка",
@@ -460,6 +467,12 @@
       "club.pday.participants": "{count} ishtirokchi",
       "club.pday.countdownStub": "Qur'a 12:00 da",
 
+      "club.top.eyebrow": "PAUSE TOP",
+      "club.top.heading": "Pauza qahramonlari",
+      "club.top.desc": "PAUSE'ni eng ko'p tanlaganlar reytingi — har bir buyurtma sizni yuqoriga ko'taradi. Kim yetakchi ekanini ko'ring.",
+      "club.top.cta": "Reytingni ko'rish",
+      "club.top.peopleCount": "{count} kishi",
+
       "checkout.summaryTitle": "Buyurtma tekshiruvi",
       "checkout.deliveryFeeLabel": "Yetkazib berish",
       "checkout.deliveryInfoTitle": "Yetkazib berish qanday hisoblanadi",
@@ -719,6 +732,12 @@
       "club.pday.cta": "Learn more",
       "club.pday.participants": "{count} participants",
       "club.pday.countdownStub": "Draw at 12:00",
+
+      "club.top.eyebrow": "PAUSE TOP",
+      "club.top.heading": "Pause heroes",
+      "club.top.desc": "A ranking of who chooses PAUSE most often — every order moves you up. See who's leading right now.",
+      "club.top.cta": "View ranking",
+      "club.top.peopleCount": "{count} people",
 
       "checkout.summaryTitle": "Order summary",
       "checkout.deliveryFeeLabel": "Delivery",
@@ -1314,7 +1333,11 @@
       // следом грузим свежее.
       if (state.giveaway) renderClubGiveaway();
       loadClubGiveaway();
-      if (state.leaderboard) renderClubLeaderboard(); else loadClubLeaderboard();
+      // Рейтинг больше не рисуется инлайн на экране (см. renderClubLeaderboard) —
+      // грузится фоном только чтобы держать свежим число "N человек" на
+      // карточке и данные наготове, если по карточке тапнут.
+      if (state.leaderboard) renderClubNowCards();
+      loadClubLeaderboard();
     }
     if (name === "messages") { if (state.feed) renderMessagesFeedScreen(); else loadFeed(); }
   }
@@ -2118,8 +2141,11 @@
     return row;
   }
 
-  function renderClubLeaderboard() {
-    var root = document.getElementById("club-leaderboard");
+  // root — контейнер открытого по тапу на карточку "Рейтинг" окна (см.
+  // renderClubNowCards); отдельного всегда видимого места под рейтинг на
+  // экране больше нет (раньше был #club-leaderboard, убран по той же
+  // причине, что и старый виджет розыгрыша — повтор с новой карточкой).
+  function renderClubLeaderboard(root) {
     root.innerHTML = "";
     var list = state.leaderboard || [];
     if (!list.length) {
@@ -2144,7 +2170,7 @@
       toggle.addEventListener("click", function () {
         haptic("select");
         state.leaderboardExpanded = !state.leaderboardExpanded;
-        renderClubLeaderboard();
+        renderClubLeaderboard(root);
       });
       root.appendChild(toggle);
     }
@@ -2153,12 +2179,12 @@
   function loadClubLeaderboard() {
     api("/api/club/leaderboard").then(function (data) {
       state.leaderboard = data.leaderboard || [];
-      renderClubLeaderboard();
+      state.totalClients = data.total_clients || 0;
+      renderClubNowCards();
     }).catch(function () {
-      var root = document.getElementById("club-leaderboard");
-      root.innerHTML = "";
-      root.appendChild(el("div", "profile-section-title", t("club.leaderboardTitle")));
-      root.appendChild(el("div", "empty-note", t("club.leaderboardLoadFailed")));
+      // Карточка "Рейтинг" и так уже отрисована (с 0 человек при первой
+      // загрузке) — отдельного сообщения об ошибке тут больше негде
+      // показать, т.к. всегда видимого блока под рейтинг больше нет.
     });
   }
 
@@ -2203,6 +2229,34 @@
       });
     });
     root.appendChild(card);
+
+    // Вторая карточка — "Рейтинг" (см. макет: тот же стиль карточки, но
+    // другой цвет вместо фото, т.к. своей фотографии пока нет — по
+    // прямой просьбе взят единственный цветной акцент бренда
+    // (--accent-warm), чтобы не заводить случайный новый цвет мимо
+    // палитры). "N человек" — общее число клиентов из Sheet1
+    // (state.totalClients, см. loadClubLeaderboard), а не размер топа.
+    var totalClients = state.totalClients || 0;
+    var topCard = el("div", "pday-card pday-card-top");
+    topCard.innerHTML =
+      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
+      '<div class="pday-card-content">' +
+        '<div class="pday-card-eyebrow">' + escapeHtml(t("club.top.eyebrow")) + '</div>' +
+        '<div class="pday-card-heading">' + escapeHtml(t("club.top.heading")) + '</div>' +
+        '<div class="pday-card-desc">' + escapeHtml(t("club.top.desc")) + '</div>' +
+        '<div class="pday-card-btn">' + escapeHtml(t("club.top.cta")) + '</div>' +
+        '<div class="pday-card-stats">' +
+          '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.top.peopleCount", { count: totalClients })) + '</span>' +
+        '</div>' +
+      '</div>';
+    topCard.addEventListener("click", function () {
+      haptic("select");
+      openProfileSubscreen(t("club.leaderboardTitle"), function (sub) {
+        sub.innerHTML = "";
+        renderClubLeaderboard(sub);
+      });
+    });
+    root.appendChild(topCard);
   }
 
   // -------------------------------------------------------------------
@@ -6201,7 +6255,7 @@
     if (state.home) renderHomeScreen();
     if (state.menu) renderMenuScreen();
     if (state.feed) { renderFeedScreen(); renderMessagesFeedScreen(); }
-    if (state.leaderboard) renderClubLeaderboard();
+    if (state.leaderboard || state.giveaway) renderClubNowCards();
     if (state.profile) renderProfileScreen();
   }
 

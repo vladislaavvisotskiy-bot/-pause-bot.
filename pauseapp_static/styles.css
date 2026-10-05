@@ -523,6 +523,14 @@ p { margin: 0; color: var(--ink-soft); }
   color: rgba(242, 235, 220, 0.75);
 }
 .pday-card-stats span { display: flex; align-items: center; gap: 6px; }
+.pday-card + .pday-card { margin-top: 12px; }
+
+/* Карточка "Рейтинг" — тот же стиль карточки, другой цвет вместо фото:
+   единственный цветной акцент бренда (--accent-warm), чтобы не заводить
+   случайный новый цвет мимо палитры (см. :root). */
+.pday-card-top {
+  background: radial-gradient(130% 110% at 85% 0%, #c96a46 0%, #b1442e 50%, #6b2415 100%);
+}
 
 /* ------------------------------------------------------------------ */
 /* PAUSE Club / Послания — лента                                       */

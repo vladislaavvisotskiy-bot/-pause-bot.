@@ -1043,7 +1043,8 @@ async def api_messages(request: web.Request):
 
 async def api_club_leaderboard(request: web.Request):
     leaderboard = await _retry_sheets(sheets.get_club_leaderboard)
-    return web.json_response({"leaderboard": leaderboard})
+    total_clients = await _retry_sheets(sheets.get_total_clients_count)
+    return web.json_response({"leaderboard": leaderboard, "total_clients": total_clients})
 
 
 # ---------------------------------------------------------------------------
