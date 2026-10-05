@@ -237,21 +237,24 @@
       "checkout.deliveryFeeLabel": "Доставка",
       "checkout.deliveryInfoTitle": "Как считается доставка",
       "checkout.deliveryInfoText": "Стоимость доставки зависит от вашего статуса Pause Club — чем больше заказов вы уже сделали, тем дешевле (а на верхних уровнях — бесплатно). Статус считается автоматически по количеству заказов.",
-      "checkout.paymentTicket": "Билетом 🤎",
-      "checkout.paymentTicketHint": "Один билет = один сет бесплатно",
+      "checkout.paymentTicket": "Лепестком",
+      "checkout.paymentTicketHint": "Один лепесток = один сет бесплатно",
       "checkout.ticketRemainingTotal": "Итого к оплате",
-      "checkout.noTicket": "У вас сейчас нет доступного билета.",
-      "checkout.ticketSingleSetOnly": "Билетом можно оплатить только один сет за раз.",
-      "checkout.ticketNewPointNotAllowed": "Билетом нельзя оплатить заказ на новую точку — выберите точку из списка.",
+      "checkout.noTicket": "У вас сейчас нет доступного лепестка.",
+      "checkout.ticketSingleSetOnly": "Лепестком можно оплатить только один сет за раз.",
+      "checkout.ticketNewPointNotAllowed": "Лепестком нельзя оплатить заказ на новую точку — выберите точку из списка.",
 
       "bonuses.title": "Бонусы и промокоды",
-      "bonuses.ticketName": "Билет «PAUSE DAY»",
+      "bonuses.ticketName": "Лепесток «PAUSE DAY»",
       "bonuses.ticketAvailable": "Доступен",
       "bonuses.ticketUsed": "Использован",
       "bonuses.ticketWonOn": "Выигран {date}",
       "bonuses.ticketUsedOn": "Использован {date}",
-      "bonuses.ticketHint": "Оплатите билетом любой один сет при следующем заказе — спишем его сами.",
-      "bonuses.empty": "Пока бонусов нет — победите в «PAUSE DAY», и билет появится здесь 🤎",
+      "bonuses.ticketHint": "Оплатите лепестком любой один сет при следующем заказе — спишем его сами.",
+      "bonuses.petalsLabel": "Ваши лепестки", "bonuses.noneLeft": "Выиграйте в PAUSE DAY — и новый лепесток появится здесь.", "bonuses.use": "Использовать",
+      "checkout.petalApplied": "Лепесток применён — один сет за наш счёт",
+      "notif.new": "новое", "notif.win.title": "Вам достался лепесток", "notif.win.body": "Сегодня в PAUSE DAY выбрали именно вас — спасибо, что вы с нами. Лепесток уже ждёт в разделе «{section}»: им можно оплатить один любой сет.", "notif.win.cta": "Использовать",
+      "bonuses.empty": "Пока бонусов нет — победите в «PAUSE DAY», и лепесток появится здесь 🌸",
       "bonuses.loadFailed": "Не удалось загрузить бонусы.",
       "notifications.title": "Уведомления",
       "notifications.empty": "Пока ничего нет — здесь будут появляться важные новости: выигрыши в розыгрыше и обновления PAUSE App.",
@@ -530,21 +533,24 @@
       "checkout.deliveryFeeLabel": "Yetkazib berish",
       "checkout.deliveryInfoTitle": "Yetkazib berish qanday hisoblanadi",
       "checkout.deliveryInfoText": "Yetkazib berish narxi sizning Pause Club statusingizga bog'liq — qancha ko'p buyurtma bersangiz, shuncha arzon (yuqori darajalarda — bepul). Status buyurtmalar soniga qarab avtomatik hisoblanadi.",
-      "checkout.paymentTicket": "Chipta bilan 🤎",
-      "checkout.paymentTicketHint": "Bir chipta = bir set bepul",
+      "checkout.paymentTicket": "Gulbarg bilan",
+      "checkout.paymentTicketHint": "Bir gulbarg = bir set bepul",
       "checkout.ticketRemainingTotal": "To'lash uchun jami",
-      "checkout.noTicket": "Hozir sizda mavjud chipta yo'q.",
-      "checkout.ticketSingleSetOnly": "Chipta bilan bir vaqtda faqat bitta set to'lash mumkin.",
-      "checkout.ticketNewPointNotAllowed": "Yangi nuqtaga buyurtmani chipta bilan to'lab bo'lmaydi — ro'yxatdan nuqta tanlang.",
+      "checkout.noTicket": "Hozir sizda mavjud gulbarg yo'q.",
+      "checkout.ticketSingleSetOnly": "Gulbarg bilan bir vaqtda faqat bitta set to'lash mumkin.",
+      "checkout.ticketNewPointNotAllowed": "Yangi nuqtaga buyurtmani gulbarg bilan to'lab bo'lmaydi — ro'yxatdan nuqta tanlang.",
 
       "bonuses.title": "Bonus va promokodlar",
-      "bonuses.ticketName": "«PAUSE DAY» chiptasi",
+      "bonuses.ticketName": "«PAUSE DAY» gulbargi",
       "bonuses.ticketAvailable": "Mavjud",
       "bonuses.ticketUsed": "Ishlatilgan",
       "bonuses.ticketWonOn": "{date} da yutilgan",
       "bonuses.ticketUsedOn": "{date} da ishlatilgan",
-      "bonuses.ticketHint": "Keyingi buyurtmada chipta bilan istalgan bir setni to'lang — o'zimiz hisoblaymiz.",
-      "bonuses.empty": "Hozircha bonuslar yo'q — «PAUSE DAY»da g'alaba qozonsangiz, chipta shu yerda paydo bo'ladi 🤎",
+      "bonuses.ticketHint": "Keyingi buyurtmada gulbarg bilan istalgan bir setni to'lang — o'zimiz hisoblaymiz.",
+      "bonuses.petalsLabel": "Gulbarglaringiz", "bonuses.noneLeft": "PAUSE DAYda yuting — yangi gulbarg shu yerda paydo bo'ladi.", "bonuses.use": "Ishlatish",
+      "checkout.petalApplied": "Gulbarg qo'llandi — bitta set bizdan",
+      "notif.new": "yangi", "notif.win.title": "Sizga gulbarg tegdi", "notif.win.body": "Bugun PAUSE DAYda aynan siz tanlandingiz — biz bilan ekaningiz uchun rahmat. Gulbarg «{section}» bo'limida kutmoqda: u bilan istalgan bitta setni to'lash mumkin.", "notif.win.cta": "Ishlatish",
+      "bonuses.empty": "Hozircha bonuslar yo'q — «PAUSE DAY»da g'alaba qozonsangiz, gulbarg shu yerda paydo bo'ladi 🌸",
       "bonuses.loadFailed": "Bonuslarni yuklab bo'lmadi.",
       "notifications.title": "Bildirishnomalar",
       "notifications.empty": "Hozircha hech narsa yo'q — bu yerda muhim yangiliklar paydo bo'ladi: lotereya yutuqlari va PAUSE App yangilanishlari.",
@@ -823,21 +829,24 @@
       "checkout.deliveryFeeLabel": "Delivery",
       "checkout.deliveryInfoTitle": "How delivery is calculated",
       "checkout.deliveryInfoText": "Delivery cost depends on your Pause Club status — the more orders you've placed, the cheaper it gets (free at the top tiers). Status is calculated automatically from your order count.",
-      "checkout.paymentTicket": "With a ticket 🤎",
-      "checkout.paymentTicketHint": "One ticket = one set, free",
+      "checkout.paymentTicket": "With a petal",
+      "checkout.paymentTicketHint": "One petal = one set, free",
       "checkout.ticketRemainingTotal": "Total to pay",
-      "checkout.noTicket": "You don't have an available ticket right now.",
-      "checkout.ticketSingleSetOnly": "A ticket covers exactly one set at a time.",
-      "checkout.ticketNewPointNotAllowed": "A ticket can't pay for an order to a new point — pick a point from the list.",
+      "checkout.noTicket": "You don't have an available petal right now.",
+      "checkout.ticketSingleSetOnly": "A petal covers exactly one set at a time.",
+      "checkout.ticketNewPointNotAllowed": "A petal can't pay for an order to a new point — pick a point from the list.",
 
       "bonuses.title": "Bonuses & promo codes",
-      "bonuses.ticketName": "“PAUSE DAY” ticket",
+      "bonuses.ticketName": "“PAUSE DAY” petal",
       "bonuses.ticketAvailable": "Available",
       "bonuses.ticketUsed": "Used",
       "bonuses.ticketWonOn": "Won on {date}",
       "bonuses.ticketUsedOn": "Used on {date}",
-      "bonuses.ticketHint": "Pay with your ticket for any one set next time — we'll apply it ourselves.",
-      "bonuses.empty": "No bonuses yet — win the “PAUSE DAY” draw and a ticket will show up here 🤎",
+      "bonuses.ticketHint": "Pay with your petal for any one set next time — we'll apply it ourselves.",
+      "bonuses.petalsLabel": "Your petals", "bonuses.noneLeft": "Win PAUSE DAY and a new petal will appear here.", "bonuses.use": "Use it",
+      "checkout.petalApplied": "Petal applied — one set on us",
+      "notif.new": "new", "notif.win.title": "You've got a petal", "notif.win.body": "Today PAUSE DAY picked you — thank you for being with us. Your petal is waiting in “{section}”: use it to pay for any one set.", "notif.win.cta": "Use it",
+      "bonuses.empty": "No bonuses yet — win the “PAUSE DAY” draw and a petal will show up here 🌸",
       "bonuses.loadFailed": "Couldn't load bonuses.",
       "notifications.title": "Notifications",
       "notifications.empty": "Nothing yet — important news will show up here: giveaway wins and PAUSE App updates.",
@@ -3197,7 +3206,7 @@
         // обычной цене, а не перечёркиваем всю позицию целиком.
         var freeLine = el("div", "checkout-summary-row is-ticket-item");
         freeLine.innerHTML =
-          '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " (1 шт., билетом)" : "") + '</span>' +
+          '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " (1 шт., лепестком)" : "") + '</span>' +
           '<span class="checkout-summary-price is-struck">' + fmtSum(item.price) + '</span>';
         summaryBox.appendChild(freeLine);
         if (item.qty > 1) {
@@ -3238,13 +3247,23 @@
     payField.innerHTML = '<label>' + escapeHtml(t("checkout.paymentTitle")) + '</label>';
 
     if (ticketAvailable) {
-      var ticketToggle = el("div", "card option-row ticket-toggle-row" + (checkout.useTicket ? " selected" : ""));
+      var ticketToggle = el("div", "petal-pay" + (checkout.useTicket ? " selected" : ""));
       ticketToggle.innerHTML =
-        '<div><div class="option-row-label">' + escapeHtml(t("checkout.paymentTicket")) + '</div>' +
-        '<div class="option-row-sub">' + escapeHtml(t("checkout.paymentTicketHint")) + '</div></div>';
+        '<span class="petal-pay-icon">' + ICON_PETAL + '</span>' +
+        '<div class="petal-pay-text"><div class="petal-pay-label">' + escapeHtml(t("checkout.paymentTicket")) + '</div>' +
+        '<div class="petal-pay-sub">' + escapeHtml(checkout.useTicket ? t("checkout.petalApplied") : t("checkout.paymentTicketHint")) + '</div></div>' +
+        '<span class="petal-pay-check">' + (checkout.useTicket ? "✓" : "") + '</span>';
+      if (checkout.useTicket && checkout.petalFresh) {
+        // Один раз при выборе — лепестки разлетаются от иконки.
+        checkout.petalFresh = false;
+        var burst = el("div", "petal-burst");
+        for (var bi = 0; bi < 7; bi++) burst.appendChild(el("span", "petal-burst-p p" + bi, ICON_PETAL));
+        ticketToggle.appendChild(burst);
+      }
       ticketToggle.addEventListener("click", function () {
-        haptic("select");
+        haptic(checkout.useTicket ? "select" : "success");
         checkout.useTicket = !checkout.useTicket;
+        checkout.petalFresh = checkout.useTicket;
         wizardReplace(stepCheckout);
       });
       payField.appendChild(ticketToggle);
@@ -6648,6 +6667,9 @@
   // текст, нет смысла держать точку на колокольчике дальше; хаб (Главная)
   // перерисовывается следом, чтобы точка пропала, не дожидаясь обратного
   // перехода на вкладку.
+  // Лепесток — "билет" PAUSE DAY (оплачивает один сет). Заливка currentColor.
+  var ICON_PETAL = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 1.8c4.6 3.9 7.2 7.6 7.2 11.6a7.2 7.2 0 0 1-14.4 0c0-4 2.6-7.7 7.2-11.6z"/><path d="M12 7.5v11.4" stroke="rgba(255,255,255,0.45)" stroke-width="1.1" stroke-linecap="round" fill="none"/></svg>';
+
   function loadNotifications(root) {
     api("/api/notifications").then(function (data) {
       root.innerHTML = "";
@@ -6656,26 +6678,41 @@
         root.appendChild(el("div", "empty-note", t("notifications.empty")));
       } else {
         items.forEach(function (n) {
-          var card = el("div", "card notification-card" + (n.read ? "" : " is-unread"));
-          card.innerHTML =
-            '<div class="notification-text">' + escapeHtml(n.text) + '</div>' +
-            '<div class="notification-date">' + escapeHtml(n.created) + '</div>';
-          // Клик ведёт в "Бонусы и промокоды" только для выигрыша билета —
-          // остальные виды уведомлений (объявления и т.п.) пока просто
-          // читаются, им некуда вести.
-          if (n.kind && n.kind.indexOf("moment_comment:") === 0) {
+          var isWin = n.kind === "giveaway_win";
+          var isComment = n.kind && n.kind.indexOf("moment_comment:") === 0;
+          var card;
+          if (isWin) {
+            // Выигрыш в PAUSE DAY — праздничная карточка с лепестком; текст
+            // берём из i18n, а не из таблицы (на языке клиента, и красиво
+            // выглядит даже у старых уведомлений).
+            card = el("div", "notif-win" + (n.read ? "" : " is-unread"));
+            card.innerHTML =
+              '<div class="notif-win-bg">' + ICON_PETAL + '</div>' +
+              '<div class="notif-win-top"><span class="notif-win-icon">' + ICON_PETAL + '</span><span class="notif-win-eyebrow">PAUSE DAY</span>' +
+                (n.read ? "" : '<span class="notif-new">' + escapeHtml(t("notif.new")) + '</span>') + '</div>' +
+              '<div class="notif-win-title">' + escapeHtml(t("notif.win.title")) + '</div>' +
+              '<div class="notif-win-body">' + escapeHtml(t("notif.win.body", { section: t("profile.bonuses") })) + '</div>' +
+              '<div class="notif-win-foot"><span class="notif-win-cta">' + escapeHtml(t("notif.win.cta")) + '</span><span class="notif-win-date">' + escapeHtml(n.created) + '</span></div>';
+          } else {
+            card = el("div", "notif-row" + (n.read ? "" : " is-unread"));
+            card.innerHTML =
+              '<span class="notif-row-icon">' + (isComment ? ICON_MOM_COMMENT : ICON_LEAF) + '</span>' +
+              '<div class="notif-row-main"><div class="notif-row-text">' + escapeHtml(n.text) + '</div>' +
+              '<div class="notif-row-date">' + escapeHtml(n.created) + '</div></div>';
+          }
+          if (isWin) {
+            card.classList.add("is-clickable");
+            card.addEventListener("click", function () {
+              haptic("select");
+              openProfileSubscreen(t("bonuses.title"), loadBonuses);
+            });
+          }
+          if (isComment) {
             var momId = n.kind.slice("moment_comment:".length);
             card.classList.add("is-clickable");
             card.addEventListener("click", function () {
               haptic("select");
               loadMoments(function () { openWizard(function (b) { renderMomentDetail(b, momId); }); });
-            });
-          }
-          if (n.kind === "giveaway_win") {
-            card.classList.add("is-clickable");
-            card.addEventListener("click", function () {
-              haptic("select");
-              openProfileSubscreen(t("bonuses.title"), loadBonuses);
             });
           }
           root.appendChild(card);
@@ -6705,19 +6742,32 @@
       }
       var tickets = data.tickets || [];
       if (!tickets.length) {
-        root.appendChild(el("div", "empty-note", t("bonuses.empty")));
+        root.appendChild(el("div", "petal-empty", '<div class="petal-empty-icon">' + ICON_PETAL + '</div><p>' + escapeHtml(t("bonuses.empty")) + '</p>'));
         return;
       }
+      var availableCount = tickets.filter(function (tk) { return tk.available; }).length;
+      var hero = el("div", "petal-hero");
+      hero.innerHTML =
+        '<div class="petal-hero-bg">' + ICON_PETAL + '</div>' +
+        '<div class="petal-hero-label">' + escapeHtml(t("bonuses.petalsLabel")) + '</div>' +
+        '<div class="petal-hero-count">' + availableCount + '</div>' +
+        '<div class="petal-hero-hint">' + escapeHtml(availableCount ? t("bonuses.ticketHint") : t("bonuses.noneLeft")) + '</div>';
+      root.appendChild(hero);
       tickets.forEach(function (ticket) {
-        var card = el("div", "card bonus-ticket-card" + (ticket.available ? " is-available" : " is-used"));
+        var card = el("div", "petal-card" + (ticket.available ? " is-available" : " is-used"));
         card.innerHTML =
-          '<div class="bonus-ticket-name">' + escapeHtml(t("bonuses.ticketName")) + '</div>' +
-          '<div class="bonus-ticket-status">' + escapeHtml(t(ticket.available ? "bonuses.ticketAvailable" : "bonuses.ticketUsed")) + '</div>' +
-          '<div class="bonus-ticket-date">' + escapeHtml(t("bonuses.ticketWonOn", { date: ticket.date_won })) + '</div>' +
-          (ticket.available ? "" : '<div class="bonus-ticket-date">' + escapeHtml(t("bonuses.ticketUsedOn", { date: ticket.date_used })) + '</div>');
-        // Доступный билет ведёт к оформлению заказа — закрываем визард
+          '<span class="petal-card-icon">' + ICON_PETAL + '</span>' +
+          '<div class="petal-card-main">' +
+            '<div class="petal-card-name">' + escapeHtml(t("bonuses.ticketName")) + '</div>' +
+            '<div class="petal-card-date">' + escapeHtml(t("bonuses.ticketWonOn", { date: ticket.date_won })) + '</div>' +
+            (ticket.available ? "" : '<div class="petal-card-date">' + escapeHtml(t("bonuses.ticketUsedOn", { date: ticket.date_used })) + '</div>') +
+          '</div>' +
+          (ticket.available
+            ? '<span class="petal-card-cta">' + escapeHtml(t("bonuses.use")) + '</span>'
+            : '<span class="petal-card-status">' + escapeHtml(t("bonuses.ticketUsed")) + '</span>');
+        // Доступный лепесток ведёт к оформлению заказа — закрываем визард
         // (он модальный поверх вкладок) и открываем "Меню", откуда
-        // начинается выбор сетов; использованный билет никуда не ведёт.
+        // начинается выбор сетов; использованный никуда не ведёт.
         if (ticket.available) {
           card.classList.add("is-clickable");
           card.addEventListener("click", function () {
@@ -6728,8 +6778,6 @@
         }
         root.appendChild(card);
       });
-      var hasAvailable = tickets.some(function (tk) { return tk.available; });
-      if (hasAvailable) root.appendChild(el("div", "empty-note", t("bonuses.ticketHint")));
     }).catch(function () {
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", t("bonuses.loadFailed")));
