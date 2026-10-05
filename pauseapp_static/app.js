@@ -83,6 +83,7 @@
       "home.tagline": "Больше чем еда. Упаковано с Любовью ♡",
       "home.todayMenu": "Сегодняшнее меню",
       "home.todayMenuOpen": "На {date} — открыт приём заказов",
+      "home.ordersOpenTitle": "{date} открыт приём заказов", "home.chooseDishes": "Выбрать блюда",
       "home.menuToday": "Меню сегодня",
       "home.cutoffClosed": "Приём заказов на сегодня закрыт",
       "home.cominSoon": "Готовим, скоро опубликуем",
@@ -379,6 +380,7 @@
       "home.tagline": "Shunchaki ovqatdan ko'ra ko'proq. Sevgi bilan qadoqlangan ♡",
       "home.todayMenu": "Bugungi menyu",
       "home.todayMenuOpen": "{date} uchun — buyurtmalar qabul qilinmoqda",
+      "home.ordersOpenTitle": "{date} uchun buyurtmalar qabul qilinmoqda", "home.chooseDishes": "Taomlarni tanlash",
       "home.menuToday": "Bugungi menyu",
       "home.cutoffClosed": "Bugungi buyurtmalar qabul qilish yopildi",
       "home.cominSoon": "Tayyorlanmoqda, tez orada e'lon qilamiz",
@@ -675,6 +677,7 @@
       "home.tagline": "More than food. Packed with Love ♡",
       "home.todayMenu": "Today's menu",
       "home.todayMenuOpen": "For {date} — orders are open",
+      "home.ordersOpenTitle": "Orders are open for {date}", "home.chooseDishes": "Choose dishes",
       "home.menuToday": "Today's menu",
       "home.cutoffClosed": "Orders for today are closed",
       "home.cominSoon": "Preparing, publishing soon",
@@ -1577,6 +1580,88 @@
     });
   }
 
+  // --- Главная: карусель "новостей" ----------------------------------------
+
+  var homeCarouselTimer = null;
+
+  function buildHomeMenuSlide(m) {
+    var card = el("div", "pday-card pday-card-menu");
+    var open = m.published && !m.cutoff_passed;
+    var heading = open ? t("home.ordersOpenTitle", { date: m.date || "" })
+      : (m.published ? t("home.cutoffClosed") : t("home.cominSoon"));
+    card.innerHTML =
+      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
+      '<div class="pday-card-content">' +
+        '<div class="pday-card-eyebrow">' + escapeHtml(t("home.todayMenu")) + '</div>' +
+        '<div class="pday-card-heading">' + escapeHtml(heading) + '</div>' +
+        (open ? '<div class="pday-card-btn">' + escapeHtml(t("home.chooseDishes")) + '</div>' : "") +
+      '</div>';
+    card.addEventListener("click", function () { haptic("select"); showScreen("menu"); });
+    return card;
+  }
+
+  function buildHomeNewsCarousel(m) {
+    if (!state.clubCards && !state.clubCardsRequested) {
+      state.clubCardsRequested = true;
+      loadClubCards();
+    }
+    // Данные для страниц карточек (участники PAUSE DAY, рейтинг, стена) —
+    // подгружаем один раз в фоне, чтобы тап с Главной не открывал пустое.
+    if (!state.homeNewsPrefetched) {
+      state.homeNewsPrefetched = true;
+      if (!state.giveaway) loadClubGiveaway();
+      if (!state.leaderboard) loadClubLeaderboard();
+      if (!state.moments) loadMoments();
+    }
+    var slidesData = [buildHomeMenuSlide(m)];
+    (state.clubCards || DEFAULT_CLUB_CARDS).forEach(function (c) { slidesData.push(buildClubCard(c)); });
+
+    var carousel = el("div", "pday-carousel home-news");
+    var track = el("div", "pday-carousel-track");
+    var dots = el("div", "pday-carousel-dots");
+    var dotEls = [];
+    slidesData.forEach(function (card, i) {
+      var slide = el("div", "pday-carousel-slide");
+      slide.appendChild(card);
+      track.appendChild(slide);
+      var d = el("span", "pday-carousel-dot" + (i === 0 ? " active" : ""));
+      dotEls.push(d);
+      dots.appendChild(d);
+    });
+    carousel.appendChild(track);
+    if (slidesData.length > 1) carousel.appendChild(dots);
+
+    function currentIdx() { return Math.round(track.scrollLeft / Math.max(1, track.clientWidth)); }
+    var scrollTimer = null;
+    track.addEventListener("scroll", function () {
+      if (scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(function () {
+        var idx = currentIdx();
+        dotEls.forEach(function (d, i) { d.classList.toggle("active", i === idx); });
+      }, 60);
+    });
+
+    if (homeCarouselTimer) { clearInterval(homeCarouselTimer); homeCarouselTimer = null; }
+    if (slidesData.length > 1) {
+      var pausedUntil = 0;
+      var hold = function () { pausedUntil = Date.now() + 6000; };
+      track.addEventListener("touchstart", hold, { passive: true });
+      track.addEventListener("touchmove", hold, { passive: true });
+      track.addEventListener("pointerdown", hold);
+      homeCarouselTimer = setInterval(function () {
+        // перестаём крутить, если карусель ушла с экрана (другая вкладка/перерисовка)
+        if (!document.body.contains(track) || state.screen !== "home") {
+          if (!document.body.contains(track)) { clearInterval(homeCarouselTimer); homeCarouselTimer = null; }
+          return;
+        }
+        if (Date.now() < pausedUntil || !document.getElementById("wizard").hidden) return;
+        var next = (currentIdx() + 1) % slidesData.length;
+        track.scrollTo({ left: next * track.clientWidth, behavior: "smooth" });
+      }, 5000);
+    }
+    return carousel;
+  }
+
   function renderHomeScreen() {
     screenHeader("home-header", {
       rightBell: true,
@@ -1599,21 +1684,11 @@
       '<p><span class="home-tagline-brand">PAUSE</span> — ' + t("home.tagline") + '</p>';
     root.appendChild(hero);
 
-    var promo = el("div", "card home-promo");
-    promo.addEventListener("click", function () { showScreen("menu"); });
-    if (m.published && !m.cutoff_passed) {
-      promo.innerHTML =
-        '<div class="home-promo-icon">' + ICON_LEAF + '</div>' +
-        '<div><div class="home-promo-title">' + t("home.todayMenu") + '</div>' +
-        '<div class="home-promo-sub">' + t("home.todayMenuOpen", { date: escapeHtml(m.date || "") }) + '</div></div>' +
-        '<div class="home-promo-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg></div>';
-    } else {
-      promo.innerHTML =
-        '<div class="home-promo-icon">' + ICON_CLOCK + '</div>' +
-        '<div><div class="home-promo-title">' + t("home.menuToday") + '</div>' +
-        '<div class="home-promo-sub">' + (m.published ? t("home.cutoffClosed") : t("home.cominSoon")) + '</div></div>';
-    }
-    root.appendChild(promo);
+    // Новостная карусель вместо одной плашки "Сегодняшнее меню": первый
+    // слайд — статус приёма заказов (с датой), дальше карточки PAUSE Club.
+    // Каждые 5 секунд плавно листается сама, можно свайпнуть руками, тап
+    // по слайду открывает именно эту карточку.
+    root.appendChild(buildHomeNewsCarousel(m));
 
     var quickRow = el("div", "home-quick-row");
     QUICK_NAV.forEach(function (item) {
@@ -2774,6 +2849,7 @@
     api("/api/club/cards").then(function (data) {
       state.clubCards = data.cards || [];
       renderClubNowCards();
+      if (state.home && state.screen === "home") renderHomeScreen();
     }).catch(function () {});
   }
 
