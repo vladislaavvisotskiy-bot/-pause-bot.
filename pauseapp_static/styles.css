@@ -422,28 +422,46 @@ p { margin: 0; color: var(--ink-soft); }
 /* ------------------------------------------------------------------ */
 
 .club-hero { padding: calc(var(--safe-top) + 14px) 0 16px; }
-.club-hero-title { font-size: 27px; font-weight: 800; letter-spacing: 0.05em; color: var(--ink); }
+.club-hero-title { font-size: 28px; font-weight: 900; letter-spacing: 0.06em; color: var(--ink); }
 .club-hero-subtitle { margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
 
-.club-select-card { cursor: pointer; }
+/* Тёмная "акцентная" карточка — единственная такая на экране, отличает
+   статус от обычных белых карточек ниже, по образцу "PAUSE Select" на
+   присланном макете (тот же тёмный/светлый дуэт, что и .toast/
+   .profile-club-badge — других цветов в палитре нет, см. :root). */
+.club-select-card {
+  cursor: pointer;
+  background: var(--ink);
+  border-color: var(--ink);
+}
 .club-select-head { display: flex; align-items: center; gap: 12px; }
-.club-select-icon { flex: 0 0 auto; color: var(--ink); display: flex; }
+.club-select-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(242, 235, 220, 0.14);
+  color: var(--ivory);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .club-select-info { flex: 1; min-width: 0; }
-.club-select-name { font-size: 16px; font-weight: 700; color: var(--ink); }
-.club-select-sub { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
-.club-select-chevron { flex: 0 0 auto; color: var(--ink-soft); display: flex; }
-.club-select-progress { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
-.club-select-progress-track { flex: 1; height: 6px; border-radius: 999px; background: var(--ivory-deep); overflow: hidden; }
-.club-select-progress-fill { height: 100%; border-radius: 999px; background: var(--ink); }
-.club-select-progress-num { flex: 0 0 auto; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.club-select-name { font-size: 16px; font-weight: 700; color: var(--ivory); }
+.club-select-sub { font-size: 13px; color: rgba(242, 235, 220, 0.65); margin-top: 2px; }
+.club-select-chevron { flex: 0 0 auto; color: rgba(242, 235, 220, 0.65); display: flex; }
+.club-select-progress { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.club-select-progress-track { flex: 1; height: 6px; border-radius: 999px; background: rgba(242, 235, 220, 0.18); overflow: hidden; }
+.club-select-progress-fill { height: 100%; border-radius: 999px; background: var(--ivory); }
+.club-select-progress-num { flex: 0 0 auto; font-size: 12.5px; font-weight: 600; color: rgba(242, 235, 220, 0.75); font-variant-numeric: tabular-nums; }
 
 .club-tile-row { display: flex; gap: 10px; margin: 14px 0 4px; }
 .club-tile {
   flex: 1;
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 12px 8px;
+  border-radius: var(--radius-lg);
+  padding: 14px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
