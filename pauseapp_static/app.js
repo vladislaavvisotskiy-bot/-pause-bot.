@@ -2242,49 +2242,13 @@
     return wrap;
   }
 
+  // Старый инлайн-виджет (заголовок "PAUSE DAY" + статус "Вы участвуете"/
+  // победитель + список участников прямо на экране) убран — теперь это
+  // дублировало новую карточку PAUSE DAY под "Сейчас в клубе"
+  // (renderClubNowCards), которая уже открывает список участников по
+  // тапу. #club-giveaway в разметке больше не используется.
   function renderClubGiveaway() {
     renderClubNowCards();
-    var root = document.getElementById("club-giveaway");
-    root.innerHTML = "";
-    var g = state.giveaway;
-    if (!g) return;
-
-    var card = el("div", "giveaway-card" + (g.closed ? " is-closed" : ""));
-    card.appendChild(el("div", "giveaway-card-title", t("club.giveaway.title")));
-    card.appendChild(el("div", "giveaway-card-subtitle", t("club.giveaway.subtitle")));
-
-    if (g.closed) {
-      if (g.winner_name) {
-        var winnerBlock = el("div", "giveaway-winner");
-        winnerBlock.appendChild(el("div", "giveaway-winner-title", t("club.giveaway.winnerTitle")));
-        winnerBlock.appendChild(el("div", "giveaway-winner-name", t("club.giveaway.winnerNote", { name: escapeHtml(g.winner_name) })));
-        card.appendChild(winnerBlock);
-      } else {
-        card.appendChild(el("div", "empty-note", t("club.giveaway.noWinner")));
-      }
-      root.appendChild(card);
-      return;
-    }
-
-    if (g.eligible) {
-      if (g.joined) {
-        var badge = el("div", "giveaway-joined");
-        badge.appendChild(el("span", "giveaway-joined-badge", t("club.giveaway.joined")));
-        badge.appendChild(el("div", "giveaway-joined-note", t("club.giveaway.joinedNote", { time: g.draw_time || "12:00" })));
-        card.appendChild(badge);
-      }
-    } else {
-      var lvl = g.required_level || {};
-      var locked = el("div", "giveaway-locked");
-      locked.appendChild(el("div", "giveaway-locked-title", t("club.giveaway.lockedTitle", {
-        emoji: clubLevelIcon(lvl.key), label: escapeHtml(lvl.label || ""),
-      })));
-      locked.appendChild(el("div", "giveaway-locked-note", t("club.giveaway.lockedNote", { left: lvl.left || 0 })));
-      card.appendChild(locked);
-    }
-
-    card.appendChild(buildGiveawayParticipants(g.participant_names || []));
-    root.appendChild(card);
   }
 
   function loadClubGiveaway() {
@@ -2292,11 +2256,10 @@
       state.giveaway = data;
       renderClubGiveaway();
     }).catch(function () {
-      if (!state.giveaway) {
-        var root = document.getElementById("club-giveaway");
-        root.innerHTML = "";
-        root.appendChild(el("div", "empty-note", t("club.giveaway.loadFailed")));
-      }
+      // Карточка и так уже отрисована с тем, что было (или пусто, если
+      // это первая загрузка) — renderClubNowCards не требует g, просто
+      // покажет 0 участников, отдельного сообщения об ошибке тут не
+      // нужно (в отличие от старого виджета, который теперь убран).
     });
   }
 
