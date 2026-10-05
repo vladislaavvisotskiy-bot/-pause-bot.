@@ -1970,3 +1970,6 @@ p { margin: 0; color: var(--ink-soft); }
 .wizard-white .wizard-title.club-serif { margin-top: -8px; }
 .wizard-white .mom-composer { margin-bottom: 0; }
 .wizard-white .mom-list { margin-top: 20px; }
+
+.messages-soon p { line-height: 1.6; }
+.messages-soon-link { border: none; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

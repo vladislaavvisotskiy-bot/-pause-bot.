@@ -260,6 +260,7 @@
 
       "messages.title": "Послания",
       "messages.empty": "Пока никаких посланий нет.",
+      "messages.soon1": "Ещё не придумали, что сюда добавить :)", "messages.soon2": "Предложения пишите через",
       "messages.loadFailed": "Не удалось загрузить послания — потяните вниз, чтобы попробовать снова.",
 
       "profile.title": "Профиль", "profile.settings": "Настройки",
@@ -552,6 +553,7 @@
 
       "messages.title": "Xabarlar",
       "messages.empty": "Hozircha xabarlar yo'q.",
+      "messages.soon1": "Bu yerga nima qo'shishni hali o'ylab topmadik :)", "messages.soon2": "Takliflaringizni quyidagi orqali yozing:",
       "messages.loadFailed": "Xabarlarni yuklab bo'lmadi — qayta urinish uchun pastga torting.",
 
       "profile.title": "Profil", "profile.settings": "Sozlamalar",
@@ -844,6 +846,7 @@
 
       "messages.title": "Messages",
       "messages.empty": "No messages yet.",
+      "messages.soon1": "We haven't decided what to put here yet :)", "messages.soon2": "Send your ideas through",
       "messages.loadFailed": "Couldn't load messages — pull down to try again.",
 
       "profile.title": "Profile", "profile.settings": "Settings",
@@ -2006,9 +2009,7 @@
       renderClubNowCards();
       renderMessagesFeedScreen();
     }).catch(function () {
-      var msgRoot = document.getElementById("messages-feed-root");
-      msgRoot.innerHTML = "";
-      msgRoot.appendChild(el("div", "feed-empty", t("messages.loadFailed")));
+      renderMessagesFeedScreen();
     });
   }
 
@@ -2924,17 +2925,20 @@
       title: t("messages.title"),
       right: { icon: ICON_KEBAB, label: t("club.more"), onClick: function () { toast(t("club.moreSoon")); } },
     });
+    // Вкладка пока пустая: старая лента "Послания" не используется, вместо
+    // неё — заглушка со ссылкой на "Поддержка" (предложения, что сюда добавить).
+    document.getElementById("messages-feed-filters").innerHTML = "";
     var root = document.getElementById("messages-feed-root");
-    renderMessagesFeedFilters();
     root.innerHTML = "";
-    var posts = messagesFeedPosts().filter(function (p) {
-      return state.messagesFilter === "all" || p.type === state.messagesFilter;
-    });
-    if (!posts.length) {
-      root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + t("messages.empty") + "</p>"));
-      return;
-    }
-    posts.forEach(function (post) { root.appendChild(buildFeedPostCard(post)); });
+    var box = el("div", "feed-empty messages-soon");
+    box.appendChild(el("div", null, ICON_LEAF));
+    box.appendChild(el("p", null, escapeHtml(t("messages.soon1"))));
+    var line = el("p", null, escapeHtml(t("messages.soon2")) + " ");
+    var link = el("button", "messages-soon-link", escapeHtml(t("profile.support")));
+    link.addEventListener("click", function () { haptic("select"); openSupportSubscreen(); });
+    line.appendChild(link);
+    box.appendChild(line);
+    root.appendChild(box);
   }
 
   function buildFeedPostCard(post) {
