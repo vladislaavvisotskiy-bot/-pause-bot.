@@ -797,6 +797,224 @@ def mark_debt_reminder_sent(row: int):
     ws.update_cell(row, config.DR_SENT, "Да")
 
 
+# ---------------------------------------------------------------------------
+# CRM (PAUSE App, Операционный центр → CRM, только is_main_admin) — та же
+# форма, что и "Должники" выше: отдельные листы для комментариев и
+# напоминаний по client_id (см. config.SHEET_CRM_*), плюс отдельный лист
+# для стадии лида (warm/dozhim/sale). "cold" — виртуальная стадия: нет
+# строки в SHEET_CRM_LEADS вообще, вычисляется, не хранится.
+# ---------------------------------------------------------------------------
+
+_CRM_LEADS_HEADER = ["client_id", "stage", "stage_updated"]
+_CRM_COMMENTS_HEADER = ["client_id", "date", "text"]
+_CRM_REMINDERS_HEADER = ["client_id", "created", "date", "note", "done"]
+
+
+def get_crm_stage(client_id) -> str:
+    ws = _ws_or_create(config.SHEET_CRM_LEADS, _CRM_LEADS_HEADER)
+    rows = ws.get_all_values()
+    target = str(client_id)
+    for i, row in enumerate(rows):
+        if i == 0:
+            continue
+        if len(row) >= config.CRM_STAGE and row[config.CRM_CLIENT_ID - 1].strip() == target:
+            return row[config.CRM_STAGE - 1].strip() or config.CRM_STAGE_COLD
+    return config.CRM_STAGE_COLD
+
+
+def set_crm_stage(client_id, stage: str):
+    """Ставит стадию лида явно (ручная кнопка "Продажа"/"Дожим" в карточке,
+    либо внутренний вызов _promote_crm_to_warm при первом комментарии/
+    напоминании) — находит существующую строку клиента и обновляет, иначе
+    дописывает новую."""
+    ws = _ws_or_create(config.SHEET_CRM_LEADS, _CRM_LEADS_HEADER)
+    rows = ws.get_all_values()
+    target = str(client_id)
+    for i, row in enumerate(rows):
+        if i == 0:
+            continue
+        r = i + 1
+        if len(row) >= config.CRM_CLIENT_ID and row[config.CRM_CLIENT_ID - 1].strip() == target:
+            ws.update_cells([
+                gspread.Cell(r, config.CRM_STAGE, stage),
+                gspread.Cell(r, config.CRM_STAGE_UPDATED, today_date_str()),
+            ], value_input_option="RAW")
+            return
+    ws.append_row([target, stage, today_date_str()], value_input_option="RAW")
+
+
+def _promote_crm_to_warm_if_cold(client_id):
+    """Первый комментарий или напоминание по лиду автоматически переводит
+    его из "холодных" в "тёплые" — по прямой просьбе (если уже
+    теплый/дожим/продажа, не трогаем)."""
+    if get_crm_stage(client_id) == config.CRM_STAGE_COLD:
+        set_crm_stage(client_id, config.CRM_STAGE_WARM)
+
+
+def get_crm_comments(client_id) -> list:
+    ws = _ws_or_create(config.SHEET_CRM_COMMENTS, _CRM_COMMENTS_HEADER)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r == 1:
+            continue
+        if len(row) < config.CC_TEXT or row[config.CC_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        out.append({"row": r, "date": row[config.CC_DATE - 1].strip(), "text": row[config.CC_TEXT - 1].strip()})
+    out.sort(key=lambda c: c["row"], reverse=True)  # новые сверху
+    return out
+
+
+def add_crm_comment(client_id, text: str):
+    ws = _ws_or_create(config.SHEET_CRM_COMMENTS, _CRM_COMMENTS_HEADER)
+    ws.append_row([str(client_id), today_date_str(), text], value_input_option="RAW")
+    _promote_crm_to_warm_if_cold(client_id)
+
+
+def get_crm_reminders(client_id, only_pending: bool = True) -> list:
+    ws = _ws_or_create(config.SHEET_CRM_REMINDERS, _CRM_REMINDERS_HEADER)
+    rows = ws.get_all_values()
+    out = []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r == 1:
+            continue
+        if len(row) < config.CR_DONE or row[config.CR_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        done = row[config.CR_DONE - 1].strip().lower() == "да"
+        if only_pending and done:
+            continue
+        out.append({
+            "row": r,
+            "created": row[config.CR_CREATED - 1].strip(),
+            "date": row[config.CR_DATE - 1].strip(),
+            "note": row[config.CR_NOTE - 1].strip(),
+            "done": done,
+        })
+    out.sort(key=lambda r: r["row"])
+    return out
+
+
+def set_crm_reminder(client_id, reminder_date: str, note: str = ""):
+    ws = _ws_or_create(config.SHEET_CRM_REMINDERS, _CRM_REMINDERS_HEADER)
+    ws.append_row([str(client_id), today_date_str(), reminder_date, note or "", ""], value_input_option="RAW")
+    _promote_crm_to_warm_if_cold(client_id)
+
+
+def mark_crm_reminder_done(row: int):
+    ws = _ws_or_create(config.SHEET_CRM_REMINDERS, _CRM_REMINDERS_HEADER)
+    ws.update_cell(row, config.CR_DONE, "Да")
+
+
+def _crm_stage_index() -> dict:
+    ws = _ws_or_create(config.SHEET_CRM_LEADS, _CRM_LEADS_HEADER)
+    rows = ws.get_all_values()
+    out = {}
+    for i, row in enumerate(rows):
+        if i == 0:
+            continue
+        if len(row) >= config.CRM_STAGE and row[config.CRM_CLIENT_ID - 1].strip():
+            out[row[config.CRM_CLIENT_ID - 1].strip()] = row[config.CRM_STAGE - 1].strip() or config.CRM_STAGE_COLD
+    return out
+
+
+def get_crm_clients_list() -> list:
+    """Полный список клиентов для экрана "Клиенты" — имя/район/точка/
+    заказы/дата регистрации/стадия CRM, одним проходом (без отдельного
+    запроса стадии на каждого клиента). Фильтры (имя/район/
+    заказывал-не заказывал) и сортировка — на фронте, список и так
+    небольшой (тот же объём, что уже читает get_club_leaderboard)."""
+    stages = _crm_stage_index()
+    out = []
+    for c in _load_clients():
+        out.append({
+            "id": c["id"], "name": c["name"], "zone": c["zone"], "point": c["point"],
+            "contact": c["contact"], "order_count": c["order_count"], "reg_date": c["reg_date"],
+            "stage": stages.get(str(c["id"]), config.CRM_STAGE_COLD),
+        })
+    return out
+
+
+def get_crm_leads_overview() -> dict:
+    """{"today_count", "cold": [...], "warm": [...], "dozhim": [...]} —
+    экран "Лиды". "Продажа" сюда не попадает вовсе — по прямой просьбе
+    лид, отмеченный продажей, считается закрытым и больше не "лид"
+    (остаётся виден в обычном списке "Клиенты"). Последний комментарий и
+    ближайшее незакрытое напоминание — читаются ОДНИМ проходом по каждому
+    листу (не по запросу на лида), чтобы открытие "Лиды" не било по
+    Sheets API N+1 запросами на N клиентов."""
+    stages = _crm_stage_index()
+
+    last_comment = {}
+    for row in _ws_or_create(config.SHEET_CRM_COMMENTS, _CRM_COMMENTS_HEADER).get_all_values()[1:]:
+        if len(row) >= config.CC_TEXT and row[config.CC_CLIENT_ID - 1].strip():
+            last_comment[row[config.CC_CLIENT_ID - 1].strip()] = {
+                "date": row[config.CC_DATE - 1].strip(), "text": row[config.CC_TEXT - 1].strip(),
+            }
+
+    pending_reminder = {}
+    for row in _ws_or_create(config.SHEET_CRM_REMINDERS, _CRM_REMINDERS_HEADER).get_all_values()[1:]:
+        if len(row) < config.CR_DONE or not row[config.CR_CLIENT_ID - 1].strip():
+            continue
+        if row[config.CR_DONE - 1].strip().lower() == "да":
+            continue
+        pending_reminder[row[config.CR_CLIENT_ID - 1].strip()] = {
+            "date": row[config.CR_DATE - 1].strip(), "note": row[config.CR_NOTE - 1].strip(),
+        }
+
+    today = today_date_str()
+    today_count = 0
+    buckets = {"cold": [], "warm": [], "dozhim": []}
+    for c in _load_clients():
+        cid = str(c["id"])
+        if c["reg_date"] == today:
+            today_count += 1
+        stage = stages.get(cid, config.CRM_STAGE_COLD)
+        if stage == config.CRM_STAGE_SALE or stage not in buckets:
+            continue
+        buckets[stage].append({
+            "id": c["id"], "name": c["name"], "zone": c["zone"], "contact": c["contact"],
+            "reg_date": c["reg_date"], "order_count": c["order_count"],
+            "last_comment": last_comment.get(cid),
+            "reminder": pending_reminder.get(cid),
+        })
+    return {"today_count": today_count, "cold": buckets["cold"], "warm": buckets["warm"], "dozhim": buckets["dozhim"]}
+
+
+def get_client_full_profile(client_id) -> dict:
+    """Полный отчёт по клиенту для карточки в "Клиенты"/"Лиды" — профиль +
+    статус Pause Club + долг + стадия/комментарии/напоминания CRM +
+    последние заказы, одним вызовом (вместо нескольких отдельных запросов
+    с фронта на каждый блок карточки)."""
+    client = next((c for c in _load_clients() if str(c["id"]) == str(client_id)), None)
+    if not client:
+        return {}
+    cid = str(client["id"])
+    level = get_club_level(client["order_count"])
+    return {
+        "id": client["id"], "name": client["name"], "zone": client["zone"], "point": client["point"],
+        "contact": client["contact"], "telegram": client["telegram"], "tg_id": client["tg_id"],
+        "reg_date": client["reg_date"], "order_count": client["order_count"],
+        "club": {"key": level["key"], "emoji": level["emoji"], "label": level["label"]},
+        "debt": get_client_debt(cid),
+        "stage": get_crm_stage(cid),
+        "comments": get_crm_comments(cid),
+        "reminders": get_crm_reminders(cid, only_pending=True),
+        "orders": [
+            {
+                "date": g["date"],
+                "summary": ", ".join(
+                    f"{i['qty']}× {display_set_name(i['set'])}" for i in g["items"]
+                ),
+                "canceled": g["canceled"],
+                "paid": g["paid"],
+            }
+            for g in get_client_order_groups(cid, limit=5)
+        ],
+    }
+
+
 def get_client_orders(client_id, limit=10) -> list:
     ws = _ws(config.SHEET_ORDERS)
     rows = ws.get_all_values()

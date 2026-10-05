@@ -121,6 +121,31 @@ DR_DATE = 3        # C — дата, на которую напоминание 
 DR_NOTE = 4        # D
 DR_SENT = 5        # E — "Да" после отправки, чтобы не прислать дважды
 
+# CRM (PAUSE App, Операционный центр → CRM) — три новых листа, той же
+# формы, что и "Должники" выше (DC_*/DR_*) — комментарии и напоминания
+# привязаны к client_id, отдельный лист для стадии лида. "Холодный" —
+# НЕ отдельное значение стадии, а отсутствие строки в SHEET_CRM_LEADS
+# вообще (клиент, с которым ещё не было ни одного взаимодействия в CRM).
+SHEET_CRM_LEADS = "CRM Лиды"
+SHEET_CRM_COMMENTS = "CRM Комментарии"
+SHEET_CRM_REMINDERS = "CRM Напоминания"
+CRM_CLIENT_ID = 1   # A
+CRM_STAGE = 2        # B — "warm"/"dozhim"/"sale"
+CRM_STAGE_UPDATED = 3  # C — дата последней смены стадии
+CC_CLIENT_ID = 1
+CC_DATE = 2
+CC_TEXT = 3
+CR_CLIENT_ID = 1
+CR_CREATED = 2
+CR_DATE = 3
+CR_NOTE = 4
+CR_DONE = 5          # E — "Да", когда напоминание обработано/закрыто
+
+CRM_STAGE_COLD = "cold"      # виртуальная — нет строки в SHEET_CRM_LEADS
+CRM_STAGE_WARM = "warm"
+CRM_STAGE_DOZHIM = "dozhim"
+CRM_STAGE_SALE = "sale"
+
 # Sheet1 (CRM): header row 5, data starts row 6
 CLIENTS_HEADER_ROW = 5
 CLIENTS_DATA_START_ROW = 6

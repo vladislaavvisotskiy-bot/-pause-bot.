@@ -1274,6 +1274,30 @@ p { margin: 0; color: var(--ink-soft); }
 .ops-debtor-card-name { font-size: 18px; font-weight: 700; color: var(--ink); }
 .ops-debtor-card-line { font-size: 13.5px; color: var(--ink-soft); margin-top: 3px; }
 
+/* CRM — "Клиенты"/"Лиды" (см. app.js: loadCrmClientsList/loadCrmLeads) */
+.crm-filter-box .field { margin-bottom: 10px; }
+.crm-filter-box select { width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 14.5px; }
+.crm-pill-row { display: flex; gap: 8px; overflow-x: auto; }
+.crm-client-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; cursor: pointer; }
+.crm-client-row:active { background: var(--ink-soft-bg); }
+.crm-client-row-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+.crm-client-row-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.crm-client-row-side { text-align: right; flex: 0 0 auto; }
+.crm-client-row-orders { font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
+.crm-stage-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--ink-soft-bg); color: var(--ink-soft); }
+.crm-stage-warm { background: var(--accent-warm-soft); color: var(--accent-warm); }
+.crm-stage-dozhim { background: rgba(177, 68, 46, 0.12); color: var(--accent-warm); }
+.crm-stage-sale { background: var(--success-soft, rgba(60, 130, 90, 0.14)); color: var(--success, #3c825a); }
+
+.crm-lead-row { cursor: pointer; }
+.crm-lead-row:active { background: var(--ink-soft-bg); }
+.crm-lead-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.crm-lead-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+.crm-lead-date { font-size: 12px; color: var(--ink-soft); flex: 0 0 auto; }
+.crm-lead-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.crm-lead-comment { font-size: 12.5px; color: var(--ink); margin-top: 6px; }
+.crm-lead-reminder { font-size: 12.5px; color: var(--accent-warm); margin-top: 4px; }
+
 .ops-contact-actions { display: flex; gap: 10px; margin-top: 12px; }
 .ops-contact-btn {
   flex: 1;

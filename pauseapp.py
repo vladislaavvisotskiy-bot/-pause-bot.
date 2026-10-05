@@ -2021,6 +2021,94 @@ async def api_pause_admins_remove(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# CRM (PAUSE App, Операционный центр → CRM) — "Клиенты" (учёт/фильтры/
+# полная карточка) и "Лиды" (холодные/тёплые/дожим, комментарии,
+# напоминания, перевод в "Продажа"). Строго is_main_admin — отдельного
+# делегируемого права под CRM по прямой просьбе не заводили (в отличие
+# от "Должники"/"Меню"), это инструмент только для владельца.
+# ---------------------------------------------------------------------------
+
+async def api_crm_clients(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    clients = await _retry_sheets(sheets.get_crm_clients_list)
+    return web.json_response({"clients": clients})
+
+
+async def api_crm_client_detail(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    client_id = request.match_info.get("client_id", "")
+    profile = await _retry_sheets(sheets.get_client_full_profile, client_id)
+    if not profile:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response(profile)
+
+
+async def api_crm_leads(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    overview = await _retry_sheets(sheets.get_crm_leads_overview)
+    return web.json_response(overview)
+
+
+async def api_crm_stage_set(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    stage = (body.get("stage") or "").strip()
+    if stage not in (config.CRM_STAGE_WARM, config.CRM_STAGE_DOZHIM, config.CRM_STAGE_SALE, config.CRM_STAGE_COLD):
+        return web.json_response({"error": "bad_stage"}, status=400)
+    await _retry_sheets(sheets.set_crm_stage, client_id, stage)
+    return web.json_response({"stage": stage})
+
+
+async def api_crm_comment_add(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        return web.json_response({"error": "text_required"}, status=400)
+    await _retry_sheets(sheets.add_crm_comment, client_id, text)
+    comments = await _retry_sheets(sheets.get_crm_comments, client_id)
+    stage = await _retry_sheets(sheets.get_crm_stage, client_id)
+    return web.json_response({"comments": comments, "stage": stage})
+
+
+async def api_crm_reminder_set(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    date_str = (body.get("date") or "").strip()
+    note = (body.get("note") or "").strip()
+    try:
+        dt.datetime.strptime(date_str, "%d.%m.%Y")
+    except ValueError:
+        return web.json_response({"error": "bad_date"}, status=400)
+    await _retry_sheets(sheets.set_crm_reminder, client_id, date_str, note)
+    reminders = await _retry_sheets(sheets.get_crm_reminders, client_id)
+    stage = await _retry_sheets(sheets.get_crm_stage, client_id)
+    return web.json_response({"reminders": reminders, "stage": stage})
+
+
+async def api_crm_reminder_done(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    client_id = request.match_info.get("client_id", "")
+    body = await request.json()
+    row = body.get("row")
+    if not isinstance(row, int):
+        return web.json_response({"error": "row_required"}, status=400)
+    await _retry_sheets(sheets.mark_crm_reminder_done, row)
+    reminders = await _retry_sheets(sheets.get_crm_reminders, client_id)
+    return web.json_response({"reminders": reminders})
+
+
+# ---------------------------------------------------------------------------
 
 def create_app(bot=None) -> web.Application:
     app = web.Application(middlewares=[error_middleware, admin_auth_middleware])
@@ -2084,4 +2172,11 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/pause-admins", api_pause_admins_add)
     app.router.add_post("/api/pause-admins/{tg_id}/feature", api_pause_admins_feature)
     app.router.add_post("/api/pause-admins/{tg_id}/remove", api_pause_admins_remove)
+    app.router.add_get("/api/crm/clients", api_crm_clients)
+    app.router.add_get("/api/crm/clients/{client_id}", api_crm_client_detail)
+    app.router.add_get("/api/crm/leads", api_crm_leads)
+    app.router.add_post("/api/crm/clients/{client_id}/stage", api_crm_stage_set)
+    app.router.add_post("/api/crm/clients/{client_id}/comment", api_crm_comment_add)
+    app.router.add_post("/api/crm/clients/{client_id}/reminder", api_crm_reminder_set)
+    app.router.add_post("/api/crm/clients/{client_id}/reminder/done", api_crm_reminder_done)
     return app

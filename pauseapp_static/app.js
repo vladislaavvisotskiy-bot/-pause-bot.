@@ -3391,6 +3391,9 @@
   var ICON_OPS_ADMINS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-2.9 8-7 10-4.1-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>';
   var ICON_OPS_GIVEAWAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M3 12h18"/><path d="M12 8v12"/><path d="M12 8c-1.8 0-3.2-1.3-3.2-2.8S9.2 3 10.5 3c1.3 0 1.8 1.6 1.5 2.8M12 8c1.8 0 3.2-1.3 3.2-2.8S14.8 3 13.5 3c-1.3 0-1.8 1.6-1.5 2.8"/></svg>';
   var ICON_OPS_MENU = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>';
+  var ICON_OPS_CRM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><circle cx="8" cy="13.5" r="1.6"/><path d="M12.5 13h5M12.5 16.5h5"/></svg>';
+  var ICON_OPS_LEADS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16l-6.5 8.5V19l-3 2v-8.5z"/></svg>';
+  var CRM_STAGE_LABELS = { cold: "Холодный", warm: "Тёплый", dozhim: "Дожим", sale: "Продажа" };
   var ICON_CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>';
 
   function opsStepHeader(body, title) {
@@ -3463,6 +3466,33 @@
           sub.appendChild(el("div", "skeleton-block"));
           body.appendChild(sub);
           loadOpsDebtorsList(sub);
+        });
+      }));
+    }
+    if (state.isMainAdmin) {
+      rows.appendChild(buildProfileRow(ICON_OPS_CRM, "CRM", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "CRM");
+          var crmRows = el("div", "card profile-nav-list");
+          crmRows.appendChild(buildProfileRow(ICON_OPS_DEBTORS, "Клиенты", function () {
+            wizardStep(function (b) {
+              opsStepHeader(b, "Клиенты");
+              var sub = el("div");
+              sub.appendChild(el("div", "skeleton-block"));
+              b.appendChild(sub);
+              loadCrmClientsList(sub);
+            });
+          }));
+          crmRows.appendChild(buildProfileRow(ICON_OPS_LEADS, "Лиды", function () {
+            wizardStep(function (b) {
+              opsStepHeader(b, "Лиды");
+              var sub = el("div");
+              sub.appendChild(el("div", "skeleton-block"));
+              b.appendChild(sub);
+              loadCrmLeads(sub);
+            });
+          }));
+          body.appendChild(crmRows);
         });
       }));
     }
@@ -4881,6 +4911,358 @@
     }
 
     load();
+  }
+
+  // --- Операционный центр → CRM (только главный админ) --------------------
+  // "Клиенты" — учёт/фильтры/полная карточка. "Лиды" — холодные/тёплые/
+  // дожим, комментарии, напоминания (та же форма, что и у "Должники" —
+  // ops-input-box/ops-comment-row/ops-reminder-row переиспользуются как
+  // есть). Стадия "cold" ВИРТУАЛЬНАЯ (нет строки в CRM Лиды) — см.
+  // sheets.get_crm_stage/get_crm_leads_overview.
+
+  function loadCrmClientsList(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/crm/clients").then(function (data) {
+      render(data.clients || []);
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить список клиентов: " + err.message));
+    });
+
+    function render(clients) {
+      root.innerHTML = "";
+
+      var filterBox = el("div", "card crm-filter-box");
+      var searchField = el("div", "field");
+      searchField.innerHTML = '<label>Поиск по имени</label>';
+      var searchInput = el("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "Имя...";
+      searchField.appendChild(searchInput);
+      filterBox.appendChild(searchField);
+
+      var zones = clients.reduce(function (acc, c) { if (c.zone && acc.indexOf(c.zone) === -1) acc.push(c.zone); return acc; }, []).sort();
+      var zoneField = el("div", "field");
+      zoneField.innerHTML = '<label>Район</label>';
+      var zoneSelect = document.createElement("select");
+      var allOpt = document.createElement("option");
+      allOpt.value = ""; allOpt.textContent = "Все районы";
+      zoneSelect.appendChild(allOpt);
+      zones.forEach(function (z) {
+        var o = document.createElement("option");
+        o.value = z; o.textContent = z;
+        zoneSelect.appendChild(o);
+      });
+      zoneField.appendChild(zoneSelect);
+      filterBox.appendChild(zoneField);
+
+      var orderFilter = "";
+      var orderPills = el("div", "crm-pill-row");
+      [{ key: "", label: "Все" }, { key: "yes", label: "Заказывал" }, { key: "no", label: "Не заказывал" }].forEach(function (opt) {
+        var pill = el("button", "date-pill" + (opt.key === "" ? " active" : ""), opt.label);
+        pill.addEventListener("click", function () {
+          orderFilter = opt.key;
+          Array.prototype.forEach.call(orderPills.children, function (p) { p.classList.remove("active"); });
+          pill.classList.add("active");
+          applyFilters();
+        });
+        orderPills.appendChild(pill);
+      });
+      filterBox.appendChild(orderPills);
+      root.appendChild(filterBox);
+
+      var listBox = el("div");
+      root.appendChild(listBox);
+
+      function applyFilters() {
+        var q = searchInput.value.trim().toLowerCase();
+        var zone = zoneSelect.value;
+        var filtered = clients.filter(function (c) {
+          if (q && c.name.toLowerCase().indexOf(q) === -1) return false;
+          if (zone && c.zone !== zone) return false;
+          if (orderFilter === "yes" && !(c.order_count > 0)) return false;
+          if (orderFilter === "no" && c.order_count > 0) return false;
+          return true;
+        });
+        filtered.sort(function (a, b) { return a.name.localeCompare(b.name, "ru"); });
+        renderList(filtered);
+      }
+
+      function renderList(list) {
+        listBox.innerHTML = "";
+        if (!list.length) {
+          listBox.appendChild(el("div", "empty-note", "Никого не нашли."));
+          return;
+        }
+        list.forEach(function (c) {
+          var row = el("div", "card crm-client-row");
+          row.innerHTML =
+            '<div class="crm-client-row-main">' +
+              '<div class="crm-client-row-name">' + escapeHtml(c.name) + '</div>' +
+              '<div class="crm-client-row-sub">' + escapeHtml(c.zone || "") + (c.point ? " — " + escapeHtml(c.point) : "") + '</div>' +
+            '</div>' +
+            '<div class="crm-client-row-side">' +
+              '<div class="crm-client-row-orders">' + c.order_count + ' зак.</div>' +
+              '<div class="crm-stage-badge crm-stage-' + c.stage + '">' + CRM_STAGE_LABELS[c.stage] + '</div>' +
+            '</div>';
+          row.addEventListener("click", function () {
+            haptic("select");
+            wizardStep(function (body) {
+              opsStepHeader(body, c.name);
+              var sub = el("div");
+              sub.appendChild(el("div", "skeleton-block"));
+              body.appendChild(sub);
+              loadCrmClientDetail(sub, c.id);
+            });
+          });
+          listBox.appendChild(row);
+        });
+      }
+
+      searchInput.addEventListener("input", applyFilters);
+      zoneSelect.addEventListener("change", applyFilters);
+      applyFilters();
+    }
+  }
+
+  function loadCrmClientDetail(root, clientId) {
+    function load() {
+      root.innerHTML = "";
+      root.appendChild(el("div", "skeleton-block"));
+      api("/api/crm/clients/" + encodeURIComponent(clientId)).then(function (data) {
+        render(data);
+      }).catch(function (err) {
+        root.innerHTML = "";
+        root.appendChild(el("div", "empty-note", "Не удалось загрузить данные: " + err.message));
+      });
+    }
+
+    function render(data) {
+      root.innerHTML = "";
+
+      var card = el("div", "card");
+      card.innerHTML =
+        '<div class="ops-debtor-card-name">' + escapeHtml(data.name) + '</div>' +
+        (data.contact ? '<div class="ops-debtor-card-line">' + escapeHtml(_opsFmtPhone(data.contact)) + '</div>' : "") +
+        (data.telegram ? '<div class="ops-debtor-card-line">@' + escapeHtml(data.telegram.replace(/^@/, "")) + '</div>' : "") +
+        '<div class="ops-debtor-card-line">' + escapeHtml(data.zone || "") + (data.point ? " — " + escapeHtml(data.point) : "") + '</div>' +
+        (data.reg_date ? '<div class="ops-debtor-card-line">Регистрация: ' + escapeHtml(data.reg_date) + '</div>' : "");
+      root.appendChild(card);
+
+      var actionsRow = el("div", "ops-contact-actions");
+      var writeBtn = el("button", "ops-contact-btn ops-contact-btn-primary");
+      writeBtn.innerHTML = ICON_OPS_MESSAGE + '<span>Написать</span>';
+      var tgLink = data.tg_id ? "tg://user?id=" + data.tg_id : (data.telegram ? "https://t.me/" + data.telegram.replace(/^@/, "") : "");
+      if (tgLink) {
+        writeBtn.addEventListener("click", function () { window.location.href = tgLink; });
+      } else {
+        writeBtn.disabled = true;
+        writeBtn.title = "Телеграм не привязан";
+      }
+      var telHref = _opsTelHref(data.contact);
+      var callBtn;
+      if (telHref) {
+        callBtn = document.createElement("a");
+        callBtn.href = telHref;
+        callBtn.className = "ops-contact-btn";
+      } else {
+        callBtn = el("button", "ops-contact-btn");
+        callBtn.disabled = true;
+        callBtn.title = "Номер телефона не указан";
+      }
+      callBtn.innerHTML = ICON_OPS_CALL + '<span>Позвонить</span>';
+      actionsRow.appendChild(writeBtn);
+      actionsRow.appendChild(callBtn);
+      root.appendChild(actionsRow);
+
+      var statRow = el("div", "profile-stat-row");
+      var ordersTile = el("div", "profile-stat");
+      ordersTile.innerHTML = '<div class="profile-stat-value">' + data.order_count + '</div><div class="profile-stat-label">Заказов</div>';
+      statRow.appendChild(ordersTile);
+      var clubTile = el("div", "profile-stat");
+      clubTile.innerHTML = '<div class="profile-stat-value">' + data.club.emoji + '</div><div class="profile-stat-label">' + escapeHtml(data.club.label) + '</div>';
+      statRow.appendChild(clubTile);
+      if (data.debt > 0) {
+        var debtTile = el("div", "profile-stat");
+        debtTile.innerHTML = '<div class="profile-stat-value">' + fmtSum(data.debt) + '</div><div class="profile-stat-label">Долг</div>';
+        statRow.appendChild(debtTile);
+      }
+      root.appendChild(statRow);
+
+      // --- стадия CRM — "Холодный" сюда намеренно не включён: это
+      // виртуальное состояние "ещё не трогали", возврат в него через UI не
+      // нужен (comментарий/напоминание и так уже необратимо "согрели" лида).
+      root.appendChild(el("h3", "ops-section-title", "Стадия: " + CRM_STAGE_LABELS[data.stage]));
+      var stageRow = el("div", "payment-tiles-row");
+      [{ key: "warm", label: "Тёплый" }, { key: "dozhim", label: "Дожим" }, { key: "sale", label: "Продажа" }].forEach(function (opt) {
+        var btn = el("button", "payment-tile" + (data.stage === opt.key ? " active" : ""), opt.label);
+        btn.addEventListener("click", function () {
+          haptic("select");
+          api("/api/crm/clients/" + encodeURIComponent(clientId) + "/stage", { method: "POST", body: { stage: opt.key } })
+            .then(function () { load(); })
+            .catch(function (err) { toast("Не удалось сохранить: " + err.message); });
+        });
+        stageRow.appendChild(btn);
+      });
+      root.appendChild(stageRow);
+
+      // --- комментарии ---
+      root.appendChild(el("h3", "ops-section-title", "Комментарии"));
+      var commentBox = el("div", "ops-input-box ops-input-box-comment");
+      var commentField = el("div", "field");
+      var commentInput = el("textarea");
+      commentInput.rows = 2;
+      commentField.appendChild(commentInput);
+      commentBox.appendChild(commentField);
+      var addCommentBtn = el("button", "btn-ghost", "Добавить комментарий");
+      addCommentBtn.addEventListener("click", function () {
+        var text = commentInput.value.trim();
+        if (!text) return;
+        addCommentBtn.disabled = true;
+        api("/api/crm/clients/" + encodeURIComponent(clientId) + "/comment", { method: "POST", body: { text: text } })
+          .then(function () { load(); })
+          .catch(function (err) { addCommentBtn.disabled = false; toast("Не удалось сохранить: " + err.message); });
+      });
+      commentBox.appendChild(addCommentBtn);
+      root.appendChild(commentBox);
+
+      if (data.comments.length) {
+        var commentsCard = el("div", "card");
+        data.comments.forEach(function (c, idx) {
+          var row = el("div", "ops-comment-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          row.innerHTML = '<div class="ops-comment-date">' + c.date + '</div><div class="ops-comment-text">' + escapeHtml(c.text) + '</div>';
+          commentsCard.appendChild(row);
+        });
+        root.appendChild(commentsCard);
+      }
+
+      // --- напоминание ---
+      root.appendChild(el("h3", "ops-section-title", "Напоминание"));
+      var remBox = el("div", "ops-input-box ops-input-box-reminder");
+      var remRow = el("div", "ops-select-row");
+      var dateField = el("div", "field");
+      dateField.innerHTML = '<label>Дата</label>';
+      var dateInput = el("input");
+      dateInput.type = "date";
+      dateField.appendChild(dateInput);
+      var noteField = el("div", "field");
+      noteField.innerHTML = '<label>Заметка</label>';
+      var noteInput = el("input");
+      noteInput.type = "text";
+      noteInput.placeholder = "Например: скинуть меню вечером";
+      noteField.appendChild(noteInput);
+      remRow.appendChild(dateField);
+      remRow.appendChild(noteField);
+      remBox.appendChild(remRow);
+      var setReminderBtn = el("button", "btn-ghost", "Установить напоминание");
+      setReminderBtn.addEventListener("click", function () {
+        if (!dateInput.value) { toast("Выберите дату"); return; }
+        setReminderBtn.disabled = true;
+        api("/api/crm/clients/" + encodeURIComponent(clientId) + "/reminder", {
+          method: "POST", body: { date: _opsIsoToRu(dateInput.value), note: noteInput.value.trim() },
+        }).then(function () { load(); }).catch(function (err) {
+          setReminderBtn.disabled = false; toast("Не удалось сохранить: " + err.message);
+        });
+      });
+      remBox.appendChild(setReminderBtn);
+      root.appendChild(remBox);
+
+      if (data.reminders.length) {
+        var remCard = el("div", "card");
+        data.reminders.forEach(function (r, idx) {
+          var row = el("div", "ops-reminder-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          var left = el("div", "ops-breakdown-name", r.date + (r.note ? ' — ' + escapeHtml(r.note) : ''));
+          var doneBtn = el("button", "btn-text", "Готово");
+          doneBtn.addEventListener("click", function () {
+            doneBtn.disabled = true;
+            api("/api/crm/clients/" + encodeURIComponent(clientId) + "/reminder/done", {
+              method: "POST", body: { row: r.row },
+            }).then(function () { load(); }).catch(function (err) {
+              doneBtn.disabled = false; toast("Не удалось сохранить: " + err.message);
+            });
+          });
+          row.appendChild(left);
+          row.appendChild(doneBtn);
+          remCard.appendChild(row);
+        });
+        root.appendChild(remCard);
+      }
+
+      // --- последние заказы ---
+      if (data.orders && data.orders.length) {
+        root.appendChild(el("h3", "ops-section-title", "Последние заказы"));
+        var ordersCard = el("div", "card");
+        data.orders.forEach(function (o, idx) {
+          var row = el("div", "ops-comment-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          var statusNote = o.canceled ? " (отменён)" : (o.paid ? " · оплачено" : "");
+          row.innerHTML = '<div class="ops-comment-date">' + escapeHtml(o.date) + '</div><div class="ops-comment-text">' + escapeHtml(o.summary) + escapeHtml(statusNote) + '</div>';
+          ordersCard.appendChild(row);
+        });
+        root.appendChild(ordersCard);
+      }
+    }
+
+    load();
+  }
+
+  function loadCrmLeads(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/crm/leads").then(function (data) {
+      render(data);
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить лиды: " + err.message));
+    });
+
+    function buildLeadRow(l) {
+      var row = el("div", "card crm-lead-row");
+      var commentLine = l.last_comment ? '<div class="crm-lead-comment">💬 ' + escapeHtml(l.last_comment.text) + '</div>' : "";
+      var reminderLine = l.reminder ? '<div class="crm-lead-reminder">⏰ ' + escapeHtml(l.reminder.date) + (l.reminder.note ? ' — ' + escapeHtml(l.reminder.note) : '') + '</div>' : "";
+      row.innerHTML =
+        '<div class="crm-lead-row-top">' +
+          '<div class="crm-lead-name">' + escapeHtml(l.name) + '</div>' +
+          '<div class="crm-lead-date">' + escapeHtml(l.reg_date) + '</div>' +
+        '</div>' +
+        '<div class="crm-lead-sub">' + escapeHtml(l.zone || "") + (l.contact ? " · " + escapeHtml(_opsFmtPhone(l.contact)) : "") + '</div>' +
+        commentLine + reminderLine;
+      row.addEventListener("click", function () {
+        haptic("select");
+        wizardStep(function (body) {
+          opsStepHeader(body, l.name);
+          var sub = el("div");
+          sub.appendChild(el("div", "skeleton-block"));
+          body.appendChild(sub);
+          loadCrmClientDetail(sub, l.id);
+        });
+      });
+      return row;
+    }
+
+    function render(data) {
+      root.innerHTML = "";
+
+      var counterRow = el("div", "profile-stat-row");
+      var counterTile = el("div", "profile-stat");
+      counterTile.innerHTML = '<div class="profile-stat-value">' + data.today_count + '</div><div class="profile-stat-label">Новых сегодня</div>';
+      counterRow.appendChild(counterTile);
+      root.appendChild(counterRow);
+
+      [
+        { key: "cold", label: "Холодные" },
+        { key: "warm", label: "Тёплые" },
+        { key: "dozhim", label: "Дожим" },
+      ].forEach(function (pool) {
+        var items = (data[pool.key] || []).slice().reverse(); // новые регистрации сверху
+        root.appendChild(el("h3", "ops-section-title", pool.label + " (" + items.length + ")"));
+        if (!items.length) {
+          root.appendChild(el("div", "empty-note", "Пусто."));
+          return;
+        }
+        items.forEach(function (l) { root.appendChild(buildLeadRow(l)); });
+      });
+    }
   }
 
   // --- Операционный центр → Администраторы (только главный админ) ---------
