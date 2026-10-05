@@ -187,6 +187,7 @@
       "club.giveaway.showLess": "Свернуть",
       "club.giveaway.loadFailed": "Не удалось загрузить розыгрыш.",
 
+      "checkout.summaryTitle": "Сверка заказа",
       "checkout.deliveryFeeLabel": "Доставка",
       "checkout.paymentTicket": "Билетом 🤎",
       "checkout.paymentTicketHint": "Один билет = один сет бесплатно",
@@ -431,6 +432,7 @@
       "club.giveaway.showLess": "Yig'ish",
       "club.giveaway.loadFailed": "Sovg'a o'yinini yuklab bo'lmadi.",
 
+      "checkout.summaryTitle": "Buyurtma tekshiruvi",
       "checkout.deliveryFeeLabel": "Yetkazib berish",
       "checkout.paymentTicket": "Chipta bilan 🤎",
       "checkout.paymentTicketHint": "Bir chipta = bir set bepul",
@@ -675,6 +677,7 @@
       "club.giveaway.showLess": "Show less",
       "club.giveaway.loadFailed": "Couldn't load the giveaway.",
 
+      "checkout.summaryTitle": "Order summary",
       "checkout.deliveryFeeLabel": "Delivery",
       "checkout.paymentTicket": "With a ticket 🤎",
       "checkout.paymentTicketHint": "One ticket = one set, free",
@@ -2438,8 +2441,6 @@
     commentInput.value = checkout.comment || "";
     commentInput.addEventListener("input", function (e) { checkout.comment = e.target.value; });
 
-    var payField = el("div", "field");
-    payField.innerHTML = '<label>' + escapeHtml(t("checkout.paymentTitle")) + '</label>';
     var cashValue = (state.menu.payment_options || []).filter(function (p) { return !/карт/i.test(p); })[0] || t("checkout.cash");
     var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
 
@@ -2468,13 +2469,55 @@
     var deliveryFee = (state.profile && state.profile.delivery_fee) || 0;
     var remainingTotal = cartTotal() - ticketItemPrice + deliveryFee;
 
+    // Сверка по сумме — сколько каких сетов, доставка (если есть) и
+    // итог — показываем ВСЕГДА на этом последнем шаге, перед выбором
+    // оплаты (а не только когда включён билет, как раньше), по прямой
+    // просьбе: раньше это было видно только на экране "Корзина" на шаг
+    // раньше, тут же, перед самой оплатой, не повторялось вовсе.
+    var summaryField = el("div", "field");
+    summaryField.innerHTML = '<label>' + escapeHtml(t("checkout.summaryTitle")) + '</label>';
+    var summaryBox = el("div", "card checkout-ticket-summary");
+    state.cart.forEach(function (item, idx) {
+      var isTicketItem = checkout.useTicket && idx === checkout.ticketItemIndex;
+      if (isTicketItem) {
+        // Билетом берётся РОВНО 1 шт. этой позиции — если их было
+        // больше, остаток (qty - 1) показываем отдельной строкой по
+        // обычной цене, а не перечёркиваем всю позицию целиком.
+        var freeLine = el("div", "checkout-summary-row is-ticket-item");
+        freeLine.innerHTML =
+          '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " (1 шт., билетом)" : "") + '</span>' +
+          '<span class="checkout-summary-price is-struck">' + fmtSum(item.price) + '</span>';
+        summaryBox.appendChild(freeLine);
+        if (item.qty > 1) {
+          var restLine = el("div", "checkout-summary-row");
+          restLine.innerHTML =
+            '<span class="checkout-summary-name">' + escapeHtml(item.display) + " ×" + (item.qty - 1) + '</span>' +
+            '<span class="checkout-summary-price">' + fmtSum(item.price * (item.qty - 1)) + '</span>';
+          summaryBox.appendChild(restLine);
+        }
+        return;
+      }
+      var line = el("div", "checkout-summary-row");
+      line.innerHTML =
+        '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " ×" + item.qty : "") + '</span>' +
+        '<span class="checkout-summary-price">' + fmtSum(item.price * item.qty) + '</span>';
+      summaryBox.appendChild(line);
+    });
     if (deliveryFee > 0) {
-      var deliveryRow = el("div", "card checkout-summary-row checkout-delivery-row");
-      deliveryRow.innerHTML =
+      var deliveryLine = el("div", "checkout-summary-row");
+      deliveryLine.innerHTML =
         '<span class="checkout-summary-name">' + escapeHtml(t("checkout.deliveryFeeLabel")) + '</span>' +
         '<span class="checkout-summary-price">' + fmtSum(deliveryFee) + '</span>';
-      payField.appendChild(deliveryRow);
+      summaryBox.appendChild(deliveryLine);
     }
+    var summaryTotalRow = el("div", "summary-total");
+    summaryTotalRow.innerHTML = '<span class="summary-total-label">' + escapeHtml(t("checkout.ticketRemainingTotal")) + '</span><span class="summary-total-value">' + fmtSum(remainingTotal) + '</span>';
+    summaryBox.appendChild(summaryTotalRow);
+    summaryField.appendChild(summaryBox);
+    body.appendChild(summaryField);
+
+    var payField = el("div", "field");
+    payField.innerHTML = '<label>' + escapeHtml(t("checkout.paymentTitle")) + '</label>';
 
     if (ticketAvailable) {
       var ticketToggle = el("div", "card option-row ticket-toggle-row" + (checkout.useTicket ? " selected" : ""));
@@ -2502,40 +2545,6 @@
         pickerBox.appendChild(pickRow);
       });
       payField.appendChild(pickerBox);
-    }
-
-    if (checkout.useTicket) {
-      var summaryBox = el("div", "card checkout-ticket-summary");
-      state.cart.forEach(function (item, idx) {
-        var isTicketItem = idx === checkout.ticketItemIndex;
-        if (isTicketItem) {
-          // Билетом берётся РОВНО 1 шт. этой позиции — если их было
-          // больше, остаток (qty - 1) показываем отдельной строкой по
-          // обычной цене, а не перечёркиваем всю позицию целиком.
-          var freeLine = el("div", "checkout-summary-row is-ticket-item");
-          freeLine.innerHTML =
-            '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " (1 шт., билетом)" : "") + '</span>' +
-            '<span class="checkout-summary-price is-struck">' + fmtSum(item.price) + '</span>';
-          summaryBox.appendChild(freeLine);
-          if (item.qty > 1) {
-            var restLine = el("div", "checkout-summary-row");
-            restLine.innerHTML =
-              '<span class="checkout-summary-name">' + escapeHtml(item.display) + " ×" + (item.qty - 1) + '</span>' +
-              '<span class="checkout-summary-price">' + fmtSum(item.price * (item.qty - 1)) + '</span>';
-            summaryBox.appendChild(restLine);
-          }
-          return;
-        }
-        var line = el("div", "checkout-summary-row");
-        line.innerHTML =
-          '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " ×" + item.qty : "") + '</span>' +
-          '<span class="checkout-summary-price">' + fmtSum(item.price * item.qty) + '</span>';
-        summaryBox.appendChild(line);
-      });
-      var remRow = el("div", "summary-total");
-      remRow.innerHTML = '<span class="summary-total-label">' + escapeHtml(t("checkout.ticketRemainingTotal")) + '</span><span class="summary-total-value">' + fmtSum(remainingTotal) + '</span>';
-      summaryBox.appendChild(remRow);
-      payField.appendChild(summaryBox);
     }
 
     // Наличные/карта нужны только на ту часть заказа, что не покрыта
