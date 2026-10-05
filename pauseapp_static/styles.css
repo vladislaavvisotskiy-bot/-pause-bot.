@@ -1850,3 +1850,69 @@ p { margin: 0; color: var(--ink-soft); }
 .gp-person-name { font-size: 13px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gp-empty { padding: 20px 16px; border-radius: 18px; text-align: center; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); background: rgba(133, 135, 114, 0.12); }
 .gp-pool .leaderboard-toggle { margin-top: 10px; }
+
+/* ------------------------------------------------------------------ */
+/* PAUSE MOMENTS — стена постов (по духу Threads)                      */
+/* ------------------------------------------------------------------ */
+
+.mom-av .leaderboard-avatar { width: 44px; height: 44px; font-size: 15px; }
+.mom-av.sm .leaderboard-avatar { width: 34px; height: 34px; font-size: 12px; }
+.mom-note { margin: 4px 0 14px; padding: 12px 14px; border-radius: 16px; background: rgba(133, 135, 114, 0.14); color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+
+.mom-composer { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px; margin-bottom: 6px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); cursor: pointer; }
+.mom-composer-ph { flex: 1; color: var(--ink-soft); font-size: 14.5px; }
+.mom-composer-ic { color: #858772; display: flex; }
+
+.mom-list { margin-top: 6px; }
+.mom-post, .mom-comment { display: flex; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.mom-list .mom-post:last-child, .mom-comment:last-child { border-bottom: none; }
+.mom-post.tappable { cursor: pointer; }
+.mom-main { flex: 1; min-width: 0; }
+.mom-head { display: flex; align-items: center; gap: 8px; }
+.mom-name { font-weight: 600; font-size: 14.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mom-time { font-size: 12.5px; color: var(--ink-soft); flex: 1; white-space: nowrap; }
+.mom-del { flex: 0 0 auto; margin-left: auto; width: 30px; height: 30px; border: none; background: none; color: var(--ink-soft); display: flex; align-items: center; justify-content: center; border-radius: 50%; padding: 0; }
+.mom-del svg { width: 17px; height: 17px; }
+.mom-del:active { background: var(--ink-soft-bg); }
+.mom-text { margin-top: 4px; font-size: 15px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+
+.mom-photos { display: grid; gap: 4px; margin-top: 10px; border-radius: 16px; overflow: hidden; }
+.mom-photos img { width: 100%; height: 100%; object-fit: cover; display: block; background: var(--ink-soft-bg); }
+.mom-photos.n1 img { max-height: 380px; }
+.mom-photos.n2 { grid-template-columns: 1fr 1fr; }
+.mom-photos.n2 img { aspect-ratio: 3 / 4; }
+.mom-photos.n3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.mom-photos.n3 img { aspect-ratio: 1; }
+.mom-photos.n3 img:first-child { grid-row: span 2; aspect-ratio: auto; }
+.mom-photos.n4 { grid-template-columns: 1fr 1fr; }
+.mom-photos.n4 img { aspect-ratio: 1; }
+
+.mom-actions { margin-top: 10px; display: flex; gap: 18px; color: var(--ink-soft); }
+.mom-act { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.mom-act b { font-weight: 600; }
+
+.mom-comments { margin-top: 2px; }
+.mom-no-comments { padding: 18px 0; text-align: center; color: var(--ink-soft); font-size: 13.5px; }
+.mom-comment { padding: 12px 0; }
+.mom-comment .mom-text { font-size: 14.5px; }
+.mom-comment-bar { position: sticky; bottom: 0; display: flex; gap: 8px; margin-top: 14px; padding: 10px 0 2px; background: linear-gradient(180deg, rgba(242, 235, 220, 0), var(--ivory) 30%); }
+.mom-comment-input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 999px; padding: 11px 16px; background: var(--card); font-size: 15px; color: var(--ink); outline: none; }
+.mom-comment-send { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; border: none; background: #858772; color: #fffdf5; display: flex; align-items: center; justify-content: center; padding: 0; }
+.mom-comment-send:disabled { opacity: .5; }
+
+.mom-compose-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.mom-compose-text { width: 100%; border: none; outline: none; resize: none; background: transparent; font-size: 17px; line-height: 1.5; color: var(--ink); min-height: 120px; padding: 0; font-family: inherit; }
+.mom-compose-text::placeholder { color: var(--ink-soft); }
+.mom-thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.mom-thumb { position: relative; width: 92px; height: 92px; border-radius: 14px; overflow: hidden; }
+.mom-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.mom-thumb-x { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; border: none; background: rgba(43, 40, 35, 0.65); color: #fff; font-size: 16px; line-height: 1; padding: 0; }
+.mom-compose-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 12px 0 2px; background: linear-gradient(180deg, rgba(242, 235, 220, 0), var(--ivory) 30%); }
+.mom-add-photo { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 10px 16px; font-size: 14px; font-weight: 500; }
+.mom-add-photo:disabled { opacity: .45; }
+.mom-counter { flex: 1; text-align: right; font-size: 12.5px; color: var(--ink-soft); }
+.mom-publish { border: none; border-radius: 999px; padding: 11px 22px; background: var(--ink); color: var(--ivory); font-size: 14.5px; font-weight: 600; }
+.mom-publish:disabled { opacity: .35; }
+
+.mom-viewer { position: fixed; inset: 0; z-index: 400; background: rgba(15, 14, 12, 0.94); display: flex; align-items: center; justify-content: center; }
+.mom-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }

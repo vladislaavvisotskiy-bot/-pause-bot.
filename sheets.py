@@ -5463,3 +5463,94 @@ def set_club_card_photo(card_id: str, file_id: str):
                 c["photo"] = file_id
                 return None
     return _mutate_club_cards(fn)
+
+
+# ---------------------------------------------------------------------------
+# PAUSE MOMENTS — стена постов клиентов и комментарии (config.SHEET_MOMENTS /
+# SHEET_MOMENT_COMMENTS). Свои листы, старая "Лента" (Послания) не трогается.
+# ---------------------------------------------------------------------------
+
+_MOM_HEADER = ["id", "ts", "tg_id", "name", "text", "file_ids", "status"]
+_MOMC_HEADER = ["id", "post_id", "ts", "tg_id", "name", "text", "status"]
+
+
+def _moment_now() -> str:
+    return dt.datetime.now(TASHKENT_TZ).isoformat(timespec="seconds")
+
+
+def _moment_row(row, n):
+    return list(row) + [""] * (n - len(row))
+
+
+def create_moment(tg_id, name: str, text: str, file_ids: list) -> dict:
+    ws = _ws_or_create(config.SHEET_MOMENTS, _MOM_HEADER)
+    post = {"id": f"M{int(time.time() * 1000)}", "ts": _moment_now(), "tg_id": str(tg_id), "name": name or "",
+            "text": text or "", "file_ids": [f for f in file_ids if f]}
+    ws.append_row([post["id"], post["ts"], post["tg_id"], post["name"], post["text"], ",".join(post["file_ids"]), ""],
+                  value_input_option="RAW")
+    return post
+
+
+def _live_comment_counts() -> dict:
+    ws = _ws_or_create(config.SHEET_MOMENT_COMMENTS, _MOMC_HEADER)
+    counts = {}
+    for row in ws.get_all_values()[1:]:
+        row = _moment_row(row, len(_MOMC_HEADER))
+        if row[0].strip() and row[6].strip() != config.FEED_STATUS_DELETED:
+            counts[row[1]] = counts.get(row[1], 0) + 1
+    return counts
+
+
+def get_moments(limit: int = 50) -> list:
+    """Живые посты, новые сверху, с числом комментариев."""
+    ws = _ws_or_create(config.SHEET_MOMENTS, _MOM_HEADER)
+    out = []
+    for row in ws.get_all_values()[1:]:
+        row = _moment_row(row, len(_MOM_HEADER))
+        if not row[0].strip() or row[6].strip() == config.FEED_STATUS_DELETED:
+            continue
+        out.append({"id": row[0], "ts": row[1], "tg_id": row[2], "name": row[3], "text": row[4],
+                    "file_ids": [f.strip() for f in row[5].split(",") if f.strip()]})
+    out.reverse()
+    out = out[:limit]
+    counts = _live_comment_counts()
+    for p in out:
+        p["comment_count"] = counts.get(p["id"], 0)
+    return out
+
+
+def _set_status_by_id(sheet_name, header, item_id, status_col):
+    ws = _ws_or_create(sheet_name, header)
+    for i, row in enumerate(ws.get_all_values()):
+        if i and row and row[0] == item_id:
+            ws.update_cell(i + 1, status_col, config.FEED_STATUS_DELETED)
+            return True
+    return False
+
+
+def delete_moment(post_id: str) -> bool:
+    return _set_status_by_id(config.SHEET_MOMENTS, _MOM_HEADER, post_id, 7)
+
+
+def add_moment_comment(post_id: str, tg_id, name: str, text: str) -> dict:
+    ws = _ws_or_create(config.SHEET_MOMENT_COMMENTS, _MOMC_HEADER)
+    c = {"id": f"C{int(time.time() * 1000)}", "post_id": post_id, "ts": _moment_now(),
+         "tg_id": str(tg_id), "name": name or "", "text": text or ""}
+    ws.append_row([c["id"], post_id, c["ts"], c["tg_id"], c["name"], c["text"], ""], value_input_option="RAW")
+    return c
+
+
+def get_moment_comments(post_id: str) -> list:
+    """Комментарии поста — от старых к новым (как в переписке)."""
+    ws = _ws_or_create(config.SHEET_MOMENT_COMMENTS, _MOMC_HEADER)
+    out = []
+    for row in ws.get_all_values()[1:]:
+        row = _moment_row(row, len(_MOMC_HEADER))
+        if row[1] != post_id or not row[0].strip() or row[6].strip() == config.FEED_STATUS_DELETED:
+            continue
+        out.append({"id": row[0], "post_id": row[1], "ts": row[2], "tg_id": row[3], "name": row[4], "text": row[5]})
+    return out
+
+
+def delete_moment_comment(comment_id: str) -> bool:
+    return _set_status_by_id(config.SHEET_MOMENT_COMMENTS, _MOMC_HEADER, comment_id, 7)

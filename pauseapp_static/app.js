@@ -227,6 +227,11 @@
       "club.moments.desc": "Место, где люди делятся моментами, впечатлениями и мыслями. Делись тем, что хочется сохранить.",
       "club.moments.cta": "Поделиться моментом",
       "club.moments.count": "{count} моментов",
+      "mom.justNow": "сейчас", "mom.placeholder": "Что нового?", "mom.addPhoto": "Фото", "mom.publish": "Опубликовать", "mom.publishing": "Публикуем…",
+      "mom.published": "Опубликовано", "mom.deleted": "Удалено", "mom.delete": "Удалить", "mom.deleteConfirm": "Удалить этот пост?", "mom.deleteCommentConfirm": "Удалить этот комментарий?",
+      "mom.empty": "Здесь пока тихо — станьте первым, кто поделится моментом", "mom.comments": "Комментарии", "mom.noComments": "Комментариев пока нет — напишите первым",
+      "mom.commentPh": "Написать комментарий…", "mom.send": "Отправить", "mom.photosMax": "Не больше {n} фото", "mom.registerFirst": "Чтобы публиковать и комментировать, нужно зарегистрироваться как клиент",
+      "mom.loadFailed": "Не удалось загрузить",
 
       "checkout.summaryTitle": "Сверка заказа",
       "checkout.deliveryFeeLabel": "Доставка",
@@ -514,6 +519,11 @@
       "club.moments.desc": "Odamlar bu yerda lahzalar, taassurotlar va fikrlar bilan bo'lishadi. Saqlab qolgingiz kelgan narsani ulashing.",
       "club.moments.cta": "Lahza ulashish",
       "club.moments.count": "{count} lahza",
+      "mom.justNow": "hozir", "mom.placeholder": "Yangiliklar nima?", "mom.addPhoto": "Rasm", "mom.publish": "Joylash", "mom.publishing": "Joylanmoqda…",
+      "mom.published": "Joylandi", "mom.deleted": "O'chirildi", "mom.delete": "O'chirish", "mom.deleteConfirm": "Bu postni o'chirasizmi?", "mom.deleteCommentConfirm": "Bu izohni o'chirasizmi?",
+      "mom.empty": "Bu yerda hozircha jimjit — birinchi bo'lib lahza ulashing", "mom.comments": "Izohlar", "mom.noComments": "Hozircha izohlar yo'q — birinchi bo'lib yozing",
+      "mom.commentPh": "Izoh yozing…", "mom.send": "Yuborish", "mom.photosMax": "{n} tadan ko'p rasm bo'lmaydi", "mom.registerFirst": "Joylash va izoh yozish uchun mijoz sifatida ro'yxatdan o'ting",
+      "mom.loadFailed": "Yuklab bo'lmadi",
 
       "checkout.summaryTitle": "Buyurtma tekshiruvi",
       "checkout.deliveryFeeLabel": "Yetkazib berish",
@@ -801,6 +811,11 @@
       "club.moments.desc": "A place where people share moments, impressions and thoughts. Share what's worth keeping.",
       "club.moments.cta": "Share a moment",
       "club.moments.count": "{count} moments",
+      "mom.justNow": "now", "mom.placeholder": "What's new?", "mom.addPhoto": "Photo", "mom.publish": "Post", "mom.publishing": "Posting…",
+      "mom.published": "Posted", "mom.deleted": "Deleted", "mom.delete": "Delete", "mom.deleteConfirm": "Delete this post?", "mom.deleteCommentConfirm": "Delete this comment?",
+      "mom.empty": "It's quiet here — be the first to share a moment", "mom.comments": "Comments", "mom.noComments": "No comments yet — be the first",
+      "mom.commentPh": "Write a comment…", "mom.send": "Send", "mom.photosMax": "No more than {n} photos", "mom.registerFirst": "Register as a client to post and comment",
+      "mom.loadFailed": "Couldn't load",
 
       "checkout.summaryTitle": "Order summary",
       "checkout.deliveryFeeLabel": "Delivery",
@@ -1391,6 +1406,7 @@
       api("/api/profile").then(function (p) { if (p && p.registered) { state.profile = p; renderClubHero(); } }).catch(function () {});
       if (state.feed) renderClubNowCards();
       loadFeed();
+      loadMoments();
       // Пул розыгрыша — всегда свежий (как home), не "кэш или загрузка":
       // кто сегодня в пуле и подведён ли итог меняется в реальном
       // времени, старое показываем сразу, не дожидаясь сети, и тут же
@@ -1940,27 +1956,6 @@
   // -------------------------------------------------------------------
 
   function feedTypeLabel(type) { return t("feed.type." + type); }
-  var FEED_TYPES_ORDER = ["photo", "message", "announcement", "giveaway", "news"];
-
-  function apiUploadFeed(type, caption, files) {
-    var fd = new FormData();
-    fd.append("type", type);
-    fd.append("caption", caption || "");
-    files.forEach(function (f) { fd.append("photo", f, f.name); });
-    return fetch(API_BASE + "/api/feed", {
-      method: "POST",
-      headers: { "X-Telegram-Init-Data": initData() },
-      body: fd,
-    }).then(function (resp) {
-      if (!resp.ok) {
-        return resp.json().catch(function () { return {}; }).then(function (data) {
-          throw new Error(data.error || ("HTTP " + resp.status));
-        });
-      }
-      return resp.json();
-    });
-  }
-
   // Картинки ленты (и, ниже, аватарки в таблице лидеров Pause Club) идут
   // через свой прокси-эндпоинт, который требует ту же подпись initData,
   // что и остальные запросы (см. pauseapp.py: admin_auth_middleware — гейт
@@ -2006,30 +2001,13 @@
       // видимый экран, renderMessagesFeedScreen) и карточку "PAUSE
       // MOMENTS" в CLUB (только число постов на самой карточке, см.
       // renderClubNowCards — полный список строится заново только когда
-      // карточку открывают, см. renderClubMomentsContent).
+      // карточку открывают, см. renderMomentsFeed).
       renderClubNowCards();
       renderMessagesFeedScreen();
     }).catch(function () {
       var msgRoot = document.getElementById("messages-feed-root");
       msgRoot.innerHTML = "";
       msgRoot.appendChild(el("div", "feed-empty", t("messages.loadFailed")));
-    });
-  }
-
-  function renderFeedFilters(root) {
-    root.innerHTML = "";
-    var counts = {};
-    (state.feed || []).forEach(function (p) { counts[p.type] = (counts[p.type] || 0) + 1; });
-
-    var allChip = el("button", "filter-chip" + (state.feedFilter === "all" ? " active" : ""), t("menu.all"));
-    allChip.addEventListener("click", function () { state.feedFilter = "all"; renderClubMomentsContent(); });
-    root.appendChild(allChip);
-
-    FEED_TYPES_ORDER.forEach(function (ft) {
-      if (!counts[ft]) return;
-      var chip = el("button", "filter-chip" + (state.feedFilter === ft ? " active" : ""), feedTypeLabel(ft));
-      chip.addEventListener("click", function () { state.feedFilter = ft; renderClubMomentsContent(); });
-      root.appendChild(chip);
     });
   }
 
@@ -2120,71 +2098,338 @@
     root.appendChild(el("h3", "club-now-heading", t("club.nowHeading")));
   }
 
-  // Контейнер открытого по тапу на карточку "PAUSE MOMENTS" окна (см.
-  // openClubMoments) — раньше лента/фильтры/"Опубликовать" рисовались
-  // прямо на экране CLUB (#feed-root и т.п.), теперь только здесь, по
-  // той же причине, что розыгрыш и рейтинг: не дублировать карточку.
-  var clubMomentsRoot = null;
+  // -------------------------------------------------------------------
+  // PAUSE MOMENTS — стена постов клиентов (в духе Threads/ВК): аватарка,
+  // имя, время, текст и/или фото, комментарии. Свои листы "Моменты" /
+  // "Моменты комментарии" (см. sheets.get_moments), старая "Лента" живёт
+  // только для вкладки "Послания". Публиковать и комментировать может
+  // любой зарегистрированный клиент, удалять — только админ.
+  // -------------------------------------------------------------------
 
-  function renderClubMomentsContent() {
-    if (!clubMomentsRoot) return;
-    var root = clubMomentsRoot;
-    root.innerHTML = "";
+  var ICON_MOM_COMMENT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="19" height="19" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 20.5l1.5-5A8.5 8.5 0 1 1 21 11.5z"/></svg>';
+  var ICON_MOM_IMAGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></svg>';
+  var ICON_MOM_SEND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+  var MOM_MAX_PHOTOS = 4;
+  var MOM_MAX_TEXT = 2000;
 
-    var composeBtn = el("button", "btn-primary feed-compose-btn", t("club.compose"));
-    composeBtn.addEventListener("click", openComposeFeed);
-    root.appendChild(composeBtn);
+  function isAnyAdmin() { return !!(state.isMainAdmin || state.paFinance || state.paDebtors || state.paMenu); }
+  function momCanWrite() { return !state.profile || state.profile.registered !== false; }
+  function momMyName() { return (state.profile && state.profile.name) || ""; }
+  function momMyId() { return state.myTgId || (state.profile && state.profile.tg_id) || ""; }
 
-    var filtersEl = el("div", "feed-filters");
-    root.appendChild(filtersEl);
-    renderFeedFilters(filtersEl);
+  function momAgo(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var s = Math.round((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return t("mom.justNow");
+    var lang = state.lang === "uz" ? "uz" : (state.lang === "en" ? "en" : "ru");
+    try {
+      var rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto", style: "short" });
+      if (s < 3600) return rtf.format(-Math.floor(s / 60), "minute");
+      if (s < 86400) return rtf.format(-Math.floor(s / 3600), "hour");
+      if (s < 86400 * 7) return rtf.format(-Math.floor(s / 86400), "day");
+    } catch (e) {}
+    return d.toLocaleDateString(lang, { day: "numeric", month: "short" });
+  }
 
-    var posts = (state.feed || []).filter(function (p) { return state.feedFilter === "all" || p.type === state.feedFilter; });
+  function momErrText(err) {
+    if (err && err.code === "not_registered") return t("mom.registerFirst");
+    return (err && err.message) || "";
+  }
 
-    if (!posts.length) {
-      root.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + t("club.empty") + "</p>"));
-      return;
+  function momAvatar(tgId, name, small) {
+    var w = el("div", "mom-av" + (small ? " sm" : ""));
+    w.appendChild(buildLeaderboardAvatar(tgId, name));
+    return w;
+  }
+
+  // Уменьшаем фото перед отправкой (телефонные снимки по 5-10 МБ грузились
+  // бы очень долго): длинная сторона до 1600 px, JPEG.
+  function momDownscale(file) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var max = 1600, w = img.naturalWidth, h = img.naturalHeight;
+        var k = Math.min(1, max / Math.max(w, h));
+        if (k === 1 && file.size < 900 * 1024) { URL.revokeObjectURL(url); resolve(file); return; }
+        var cv = document.createElement("canvas");
+        cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        cv.toBlob(function (blob) { resolve(blob || file); }, "image/jpeg", 0.86);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  function openMomPhotoViewer(url) {
+    var ov = el("div", "mom-viewer");
+    var img = el("img");
+    img.alt = "";
+    setPhotoSrc(img, url);
+    ov.appendChild(img);
+    ov.addEventListener("click", function () { ov.remove(); });
+    document.body.appendChild(ov);
+  }
+
+  function buildMomPhotos(urls) {
+    var wrap = el("div", "mom-photos n" + Math.min(urls.length, 4));
+    urls.forEach(function (u) {
+      var img = el("img");
+      img.alt = "";
+      setPhotoSrc(img, u);
+      img.addEventListener("click", function (e) { e.stopPropagation(); haptic("select"); openMomPhotoViewer(u); });
+      wrap.appendChild(img);
+    });
+    return wrap;
+  }
+
+  function momDeleteBtn(onClick) {
+    var b = el("button", "mom-del", ICON_TRASH);
+    b.setAttribute("aria-label", t("mom.delete"));
+    b.addEventListener("click", function (e) { e.stopPropagation(); onClick(); });
+    return b;
+  }
+
+  function buildMomentPost(post, onOpen, onDeleted) {
+    var row = el("div", "mom-post" + (onOpen ? " tappable" : ""));
+    row.appendChild(momAvatar(post.tg_id, post.name));
+    var main = el("div", "mom-main");
+    var head = el("div", "mom-head");
+    head.appendChild(el("span", "mom-name", escapeHtml(post.name || t("profile.noName"))));
+    head.appendChild(el("span", "mom-time", escapeHtml(momAgo(post.ts))));
+    if (isAnyAdmin()) {
+      head.appendChild(momDeleteBtn(function () {
+        showConfirm(t("mom.deleteConfirm"), t("mom.delete"), function () {
+          api("/api/moments/delete", { method: "POST", body: { id: post.id } }).then(function () {
+            haptic("success");
+            state.moments = (state.moments || []).filter(function (p) { return p.id !== post.id; });
+            renderClubNowCards();
+            toast(t("mom.deleted"));
+            if (onDeleted) onDeleted();
+          }).catch(function (err) { toast(momErrText(err)); });
+        });
+      }));
     }
+    main.appendChild(head);
+    if (post.text) main.appendChild(el("div", "mom-text", escapeHtml(post.text)));
+    if ((post.image_urls || []).length) main.appendChild(buildMomPhotos(post.image_urls));
+    var acts = el("div", "mom-actions");
+    acts.innerHTML = '<span class="mom-act">' + ICON_MOM_COMMENT + (post.comment_count ? '<b>' + post.comment_count + '</b>' : "") + '</span>';
+    main.appendChild(acts);
+    row.appendChild(main);
+    if (onOpen) row.addEventListener("click", function () { haptic("select"); onOpen(post); });
+    return row;
+  }
 
-    // Отдельный чип "Фото" — сеткой миниатюр (как на макете), а не
-    // полноразмерными карточками; остальные фильтры (включая "Все") —
-    // обычный вертикальный список карточек, как и раньше.
-    if (state.feedFilter === "photo") {
-      var grid = el("div", "feed-photo-grid");
-      posts.forEach(function (post) {
-        var url = (post.image_urls || [])[0];
-        if (!url) return;
-        var cell = el("div", "feed-photo-cell");
-        var img = el("img", "feed-photo-thumb");
-        img.alt = "";
-        cell.appendChild(img);
-        loadFeedImage(url, img);
-        cell.addEventListener("click", function () { openFeedPostDetail(post); });
-        grid.appendChild(cell);
-      });
-      root.appendChild(grid);
-      return;
-    }
-
-    posts.forEach(function (post) { root.appendChild(buildFeedPostCard(post)); });
+  function loadMoments(onDone) {
+    api("/api/moments").then(function (data) {
+      state.moments = data.posts || [];
+      renderClubNowCards();
+      if (onDone) onDone(true);
+    }).catch(function () { if (onDone) onDone(false); });
   }
 
   function openClubMoments() {
     haptic("select");
-    openProfileSubscreen(t("club.moments.eyebrow"), function (sub) {
-      clubMomentsRoot = sub;
-      renderClubMomentsContent();
-    }, true);
+    openWizard(function (body) { renderMomentsFeed(body); });
   }
 
-  // Открывает один пост ленты крупно (из сетки миниатюр) — переиспользует
-  // ровно ту же карточку, что и обычный список, просто в оверлее визарда.
-  function openFeedPostDetail(post) {
-    haptic("select");
-    openWizard(function (body) {
-      wizardPhaseEl.innerHTML = "";
-      body.appendChild(buildFeedPostCard(post));
+  function renderMomentsFeed(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title club-serif", escapeHtml(t("club.moments.eyebrow"))));
+
+    if (momCanWrite()) {
+      var composer = el("div", "mom-composer");
+      composer.appendChild(momAvatar(momMyId(), momMyName(), true));
+      composer.appendChild(el("span", "mom-composer-ph", escapeHtml(t("mom.placeholder"))));
+      composer.appendChild(el("span", "mom-composer-ic", ICON_MOM_IMAGE));
+      composer.addEventListener("click", function () { haptic("select"); wizardStep(renderMomentCompose); });
+      body.appendChild(composer);
+    } else {
+      body.appendChild(el("div", "mom-note", escapeHtml(t("mom.registerFirst"))));
+    }
+
+    var list = el("div", "mom-list");
+    body.appendChild(list);
+    var stillHere = function () { return document.body.contains(list); };
+
+    function draw() {
+      list.innerHTML = "";
+      var posts = state.moments;
+      if (!posts) { list.appendChild(el("div", "skeleton-block")); return; }
+      if (!posts.length) {
+        list.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + escapeHtml(t("mom.empty")) + "</p>"));
+        return;
+      }
+      posts.forEach(function (p) {
+        list.appendChild(buildMomentPost(p, function (post) {
+          wizardStep(function (b) { renderMomentDetail(b, post.id); });
+        }, draw));
+      });
+    }
+    draw();
+    loadMoments(function (ok) {
+      if (!stillHere()) return;
+      if (ok) draw();
+      else if (!state.moments) { list.innerHTML = ""; list.appendChild(el("div", "empty-note", escapeHtml(t("mom.loadFailed")))); }
     });
+  }
+
+  function renderMomentCompose(body) {
+    wizardPhaseEl.innerHTML = "";
+    var files = [];
+    var head = el("div", "mom-compose-head");
+    head.appendChild(momAvatar(momMyId(), momMyName()));
+    head.appendChild(el("div", "mom-name", escapeHtml(momMyName() || t("profile.noName"))));
+    body.appendChild(head);
+
+    var ta = el("textarea", "mom-compose-text");
+    ta.placeholder = t("mom.placeholder");
+    ta.maxLength = MOM_MAX_TEXT;
+    ta.rows = 5;
+    body.appendChild(ta);
+    function autosize() { ta.style.height = "auto"; ta.style.height = Math.max(120, ta.scrollHeight) + "px"; }
+
+    var thumbs = el("div", "mom-thumbs");
+    body.appendChild(thumbs);
+
+    var bar = el("div", "mom-compose-bar");
+    var input = el("input");
+    input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
+    var addBtn = el("button", "mom-add-photo", ICON_MOM_IMAGE + '<span>' + escapeHtml(t("mom.addPhoto")) + '</span>');
+    addBtn.addEventListener("click", function () { input.click(); });
+    var counter = el("span", "mom-counter");
+    var publish = el("button", "mom-publish", escapeHtml(t("mom.publish")));
+    bar.appendChild(addBtn); bar.appendChild(counter); bar.appendChild(publish); bar.appendChild(input);
+    body.appendChild(bar);
+
+    function sync() {
+      var len = ta.value.length;
+      counter.textContent = len > MOM_MAX_TEXT * 0.8 ? (len + "/" + MOM_MAX_TEXT) : (files.length ? files.length + "/" + MOM_MAX_PHOTOS : "");
+      publish.disabled = !(ta.value.trim() || files.length);
+      addBtn.disabled = files.length >= MOM_MAX_PHOTOS;
+    }
+    function drawThumbs() {
+      thumbs.innerHTML = "";
+      files.forEach(function (f, i) {
+        var w = el("div", "mom-thumb");
+        var img = el("img");
+        img.alt = "";
+        img.src = URL.createObjectURL(f);
+        var x = el("button", "mom-thumb-x", "×");
+        x.addEventListener("click", function () { files.splice(i, 1); drawThumbs(); sync(); });
+        w.appendChild(img); w.appendChild(x);
+        thumbs.appendChild(w);
+      });
+    }
+    input.addEventListener("change", function () {
+      Array.prototype.slice.call(input.files || []).forEach(function (f) {
+        if (files.length < MOM_MAX_PHOTOS) files.push(f); else toast(t("mom.photosMax", { n: MOM_MAX_PHOTOS }));
+      });
+      input.value = "";
+      drawThumbs(); sync();
+    });
+    ta.addEventListener("input", function () { autosize(); sync(); });
+    sync();
+
+    publish.addEventListener("click", function () {
+      publish.disabled = true;
+      publish.textContent = t("mom.publishing");
+      Promise.all(files.map(momDownscale)).then(function (blobs) {
+        var fd = new FormData();
+        fd.append("text", ta.value.trim());
+        blobs.forEach(function (b, i) { fd.append("photo", b, "moment" + i + ".jpg"); });
+        return fetch(API_BASE + "/api/moments", { method: "POST", headers: { "X-Telegram-Init-Data": initData() }, body: fd });
+      }).then(function (resp) {
+        return resp.json().catch(function () { return {}; }).then(function (data) {
+          if (!resp.ok) { var e = new Error(data.error || ("HTTP " + resp.status)); e.code = data.error; throw e; }
+          return data;
+        });
+      }).then(function (data) {
+        haptic("success");
+        toast(t("mom.published"));
+        state.moments = [data.post].concat(state.moments || []);
+        renderClubNowCards();
+        wizardBack();
+      }).catch(function (err) {
+        publish.textContent = t("mom.publish");
+        sync();
+        toast(momErrText(err));
+      });
+    });
+    setTimeout(function () { ta.focus(); }, 150);
+  }
+
+  function renderMomentDetail(body, postId) {
+    wizardPhaseEl.innerHTML = "";
+    var post = (state.moments || []).filter(function (p) { return p.id === postId; })[0];
+    if (!post) { body.appendChild(el("div", "empty-note", escapeHtml(t("mom.loadFailed")))); return; }
+    body.appendChild(buildMomentPost(post, null, function () { wizardBack(); }));
+    body.appendChild(el("h3", "club-serif-h", escapeHtml(t("mom.comments"))));
+    var list = el("div", "mom-comments");
+    list.appendChild(el("div", "skeleton-block"));
+    body.appendChild(list);
+
+    var comments = null;
+    function drawComments() {
+      list.innerHTML = "";
+      if (!comments.length) { list.appendChild(el("div", "mom-no-comments", escapeHtml(t("mom.noComments")))); return; }
+      comments.forEach(function (c) {
+        var row = el("div", "mom-comment");
+        row.appendChild(momAvatar(c.tg_id, c.name, true));
+        var main = el("div", "mom-main");
+        var head = el("div", "mom-head");
+        head.appendChild(el("span", "mom-name", escapeHtml(c.name || t("profile.noName"))));
+        head.appendChild(el("span", "mom-time", escapeHtml(momAgo(c.ts))));
+        if (isAnyAdmin()) {
+          head.appendChild(momDeleteBtn(function () {
+            showConfirm(t("mom.deleteCommentConfirm"), t("mom.delete"), function () {
+              api("/api/moments/comments/delete", { method: "POST", body: { id: c.id } }).then(function () {
+                comments = comments.filter(function (x) { return x.id !== c.id; });
+                post.comment_count = comments.length;
+                drawComments();
+              }).catch(function (err) { toast(momErrText(err)); });
+            });
+          }));
+        }
+        main.appendChild(head);
+        main.appendChild(el("div", "mom-text", escapeHtml(c.text)));
+        row.appendChild(main);
+        list.appendChild(row);
+      });
+    }
+    api("/api/moments/" + encodeURIComponent(postId) + "/comments").then(function (data) {
+      comments = data.comments || [];
+      drawComments();
+    }).catch(function () { list.innerHTML = ""; list.appendChild(el("div", "empty-note", escapeHtml(t("mom.loadFailed")))); });
+
+    if (!momCanWrite()) { body.appendChild(el("div", "mom-note", escapeHtml(t("mom.registerFirst")))); return; }
+    var bar = el("div", "mom-comment-bar");
+    var input = el("input", "mom-comment-input");
+    input.type = "text"; input.placeholder = t("mom.commentPh"); input.maxLength = 600;
+    var send = el("button", "mom-comment-send", ICON_MOM_SEND);
+    send.setAttribute("aria-label", t("mom.send"));
+    function doSend() {
+      var text = input.value.trim();
+      if (!text || comments === null) return;
+      send.disabled = true;
+      api("/api/moments/" + encodeURIComponent(postId) + "/comments", { method: "POST", body: { text: text } }).then(function (data) {
+        haptic("success");
+        input.value = "";
+        comments.push(data.comment);
+        post.comment_count = comments.length;
+        drawComments();
+        send.disabled = false;
+        input.focus();
+      }).catch(function (err) { send.disabled = false; toast(momErrText(err)); });
+    }
+    send.addEventListener("click", doSend);
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); doSend(); } });
+    bar.appendChild(input); bar.appendChild(send);
+    body.appendChild(bar);
   }
 
   // -------------------------------------------------------------------
@@ -2357,7 +2602,7 @@
       stat1: t("club.top.peopleCount", { count: state.totalClients || 0 }), stat2: "" };
     if (kind === "moments") return {
       eyebrow: t("club.moments.eyebrow"), heading: t("club.moments.heading"), desc: t("club.moments.desc"), cta: t("club.moments.cta"),
-      stat1: t("club.moments.count", { count: (state.feed || []).length }), stat2: "" };
+      stat1: t("club.moments.count", { count: (state.moments || []).length }), stat2: "" };
     return { eyebrow: "", heading: "", desc: "", cta: "", stat1: "", stat2: "" };
   }
 
@@ -2667,12 +2912,14 @@
   function buildFeedPostCard(post) {
     var card = el("div", "card feed-post feed-post-" + post.type);
 
-    var delBtn = el("button", "feed-post-delete", "×");
-    delBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      showConfirm(t("club.deleteConfirm"), t("club.deleteYes"), function () { deleteFeedPost(post.id); });
-    });
-    card.appendChild(delBtn);
+    if (isAnyAdmin()) {
+      var delBtn = el("button", "feed-post-delete", "×");
+      delBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        showConfirm(t("club.deleteConfirm"), t("club.deleteYes"), function () { deleteFeedPost(post.id); });
+      });
+      card.appendChild(delBtn);
+    }
 
     (post.image_urls || []).forEach(function (url) {
       var img = el("img", "feed-post-photo");
@@ -2701,74 +2948,8 @@
       haptic("success");
       toast(t("club.deleted"));
       state.feed = (state.feed || []).filter(function (p) { return p.id !== id; });
-      renderClubMomentsContent();
       renderClubNowCards();
     }).catch(function (err) { toast(t("club.deleteFailed", { msg: err.message })); });
-  }
-
-  function openComposeFeed() {
-    var compose = { type: "photo", caption: "", files: [] };
-
-    function renderComposeStep(body) {
-      wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", t("club.newPost")));
-
-      var typeRow = el("div", "type-picker-row");
-      FEED_TYPES_ORDER.forEach(function (ft) {
-        var chip = el("button", "type-picker-chip" + (compose.type === ft ? " selected" : ""), feedTypeLabel(ft));
-        chip.addEventListener("click", function () { compose.type = ft; wizardReplace(renderComposeStep); });
-        typeRow.appendChild(chip);
-      });
-      body.appendChild(typeRow);
-
-      var captionField = el("div", "field");
-      captionField.innerHTML = '<label>' + (compose.type === "photo" ? t("club.captionOptional") : t("club.postText")) + '</label><textarea id="feed-caption" rows="4"></textarea>';
-      body.appendChild(captionField);
-      body.querySelector("#feed-caption").value = compose.caption;
-      body.querySelector("#feed-caption").addEventListener("input", function (e) { compose.caption = e.target.value; });
-
-      if (compose.type === "photo") {
-        var uploadZone = el("div", "upload-zone", t("club.uploadHint"));
-        var input = el("input");
-        input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
-        uploadZone.appendChild(input);
-        body.appendChild(uploadZone);
-        var grid = el("div", "photo-picker-grid");
-        body.appendChild(grid);
-        uploadZone.addEventListener("click", function () { input.click(); });
-        input.addEventListener("change", function () {
-          compose.files = Array.prototype.slice.call(input.files);
-          grid.innerHTML = "";
-          compose.files.forEach(function (f) {
-            var thumb = el("img", "photo-picker-thumb");
-            thumb.src = URL.createObjectURL(f);
-            grid.appendChild(thumb);
-          });
-        });
-      }
-
-      var submit = el("button", "btn-primary wizard-footer-btn", t("club.publish"));
-      submit.addEventListener("click", function () {
-        if (compose.type === "photo" && !compose.files.length) { toast(t("club.needPhoto")); return; }
-        if (compose.type !== "photo" && !compose.caption.trim()) { toast(t("club.needText")); return; }
-        submit.disabled = true;
-        submit.textContent = t("club.publishing");
-        apiUploadFeed(compose.type, compose.caption, compose.files).then(function () {
-          haptic("success");
-          toast(t("club.published"));
-          closeWizard();
-          state.feed = null;
-          loadFeed();
-        }).catch(function (err) {
-          submit.disabled = false;
-          submit.textContent = t("club.publish");
-          toast(t("club.publishFailed", { msg: err.message }));
-        });
-      });
-      body.appendChild(submit);
-    }
-
-    openWizard(renderComposeStep);
   }
 
   // -------------------------------------------------------------------
@@ -6762,7 +6943,7 @@
     // следующей полной перезагрузки данных на них.
     if (state.home) renderHomeScreen();
     if (state.menu) renderMenuScreen();
-    if (state.feed) { renderMessagesFeedScreen(); renderClubMomentsContent(); }
+    if (state.feed) { renderMessagesFeedScreen(); }
     if (state.leaderboard || state.giveaway || state.feed) renderClubNowCards();
     if (state.profile) renderProfileScreen();
   }
@@ -6775,6 +6956,7 @@
     initNav();
     initBottomNavScroll();
     api("/api/me").then(function (me) {
+      state.myTgId = me.tg_id || "";
       state.isMainAdmin = !!me.is_main_admin;
       state.paFinance = !!me.pa_finance;
       state.paDebtors = !!me.pa_debtors;

@@ -1252,6 +1252,7 @@ async def api_feed_publish(request: web.Request):
 
 
 async def api_feed_delete(request: web.Request):
+    _require_any_admin(request)
     body = await request.json()
     post_id = (body.get("id") or "").strip()
     if not post_id:
@@ -1278,6 +1279,108 @@ async def api_feed_image(request: web.Request):
         body=buf.read(), content_type="image/jpeg",
         headers={"Cache-Control": "private, max-age=86400"},
     )
+
+
+# ---------------------------------------------------------------------------
+# PAUSE MOMENTS — стена постов клиентов. Читать и писать (пост/комментарий)
+# может любой зарегистрированный клиент, удалять — только админ.
+# ---------------------------------------------------------------------------
+
+def _is_any_admin(request: web.Request) -> bool:
+    return bool(request["is_main_admin"] or request["pa_finance"] or request["pa_debtors"] or request["pa_menu"])
+
+
+def _require_any_admin(request: web.Request):
+    if not _is_any_admin(request):
+        raise web.HTTPForbidden(text=json.dumps({"error": "forbidden"}), content_type="application/json")
+
+
+def _moment_out(p: dict) -> dict:
+    return {
+        "id": p["id"], "ts": p["ts"], "tg_id": p["tg_id"], "name": p["name"], "text": p["text"],
+        "image_urls": ["/pauseapp/api/feed/image/" + fid for fid in p.get("file_ids", [])],
+        "comment_count": p.get("comment_count", 0),
+    }
+
+
+async def api_moments_list(request: web.Request):
+    posts = await _retry_sheets(sheets.get_moments, 50)
+    return web.json_response({"posts": [_moment_out(p) for p in posts]})
+
+
+async def api_moments_publish(request: web.Request):
+    """multipart: text, photo (0..MOMENT_MAX_PHOTOS). Имя автора — из его
+    профиля клиента на сервере, а не из запроса."""
+    client = await _retry_sheets(sheets.find_client_by_tg_id, request["tg_id"])
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=403)
+    text = ""
+    photos = []
+    reader = await request.multipart()
+    async for field in reader:
+        if field.name == "text":
+            text = (await field.text()).strip()
+        elif field.name == "photo" and len(photos) < config.MOMENT_MAX_PHOTOS:
+            data = await field.read(decode=False)
+            if data:
+                if len(data) > MAX_SCREENSHOT_BYTES:
+                    return web.json_response({"error": "too_large"}, status=400)
+                photos.append((data, field.filename or "moment.jpg"))
+    text = text[:config.MOMENT_MAX_TEXT]
+    if not text and not photos:
+        return web.json_response({"error": "empty"}, status=400)
+    file_ids = []
+    if photos:
+        if not config.MEDIA_CHAT_ID:
+            return web.json_response({"error": "media_chat_not_configured"}, status=503)
+        bot = request.app.get("bot")
+        if not bot:
+            return web.json_response({"error": "bot_unavailable"}, status=503)
+        try:
+            for data, filename in photos:
+                msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=filename))
+                file_ids.append(msg.photo[-1].file_id)
+        except Exception:
+            logger.exception("PAUSE App: не удалось загрузить фото момента в канал")
+            return web.json_response({"error": "upload_failed"}, status=502)
+    post = await _retry_sheets(sheets.create_moment, request["tg_id"], client.get("name", ""), text, file_ids)
+    post["comment_count"] = 0
+    return web.json_response({"ok": True, "post": _moment_out(post)})
+
+
+async def api_moments_delete(request: web.Request):
+    _require_any_admin(request)
+    body = await request.json()
+    await _retry_sheets(sheets.delete_moment, (body.get("id") or "").strip())
+    return web.json_response({"ok": True})
+
+
+def _comment_out(c: dict) -> dict:
+    return {"id": c["id"], "ts": c["ts"], "tg_id": c["tg_id"], "name": c["name"], "text": c["text"]}
+
+
+async def api_moment_comments_list(request: web.Request):
+    items = await _retry_sheets(sheets.get_moment_comments, request.match_info["post_id"])
+    return web.json_response({"comments": [_comment_out(c) for c in items]})
+
+
+async def api_moment_comment_add(request: web.Request):
+    client = await _retry_sheets(sheets.find_client_by_tg_id, request["tg_id"])
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=403)
+    body = await request.json()
+    text = (body.get("text") or "").strip()[:config.MOMENT_MAX_COMMENT]
+    if not text:
+        return web.json_response({"error": "empty"}, status=400)
+    c = await _retry_sheets(sheets.add_moment_comment, request.match_info["post_id"], request["tg_id"], client.get("name", ""), text)
+    return web.json_response({"ok": True, "comment": _comment_out(c)})
+
+
+async def api_moment_comment_delete(request: web.Request):
+    _require_any_admin(request)
+    body = await request.json()
+    await _retry_sheets(sheets.delete_moment_comment, (body.get("id") or "").strip())
+    return web.json_response({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -2261,6 +2364,12 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/feed", api_feed_publish)
     app.router.add_post("/api/feed/delete", api_feed_delete)
     app.router.add_get("/api/feed/image/{file_id}", api_feed_image)
+    app.router.add_get("/api/moments", api_moments_list)
+    app.router.add_post("/api/moments", api_moments_publish)
+    app.router.add_post("/api/moments/delete", api_moments_delete)
+    app.router.add_post("/api/moments/comments/delete", api_moment_comment_delete)
+    app.router.add_get("/api/moments/{post_id}/comments", api_moment_comments_list)
+    app.router.add_post("/api/moments/{post_id}/comments", api_moment_comment_add)
     app.router.add_get("/api/ops/summary", api_ops_summary)
     app.router.add_get("/api/ops/orders", api_ops_orders)
     app.router.add_get("/api/ops/debtors", api_ops_debtors)

@@ -155,6 +155,16 @@ CR_DONE = 5          # E — "Да", когда напоминание обра�
 # порядок карточек на экране.
 SHEET_CLUB_CARDS = "Pause Club Карточки"
 
+# PAUSE MOMENTS — стена постов клиентов (PAUSE App → Pause Club). Два НОВЫХ
+# листа, создаются ботом сами (sheets._ws_or_create). Фото — file_id из
+# закрытого канала MEDIA_CHAT_ID (как у остальных фото приложения). Время —
+# ISO с часовым поясом Ташкента. Удаление мягкое (status "удалён").
+SHEET_MOMENTS = "Моменты"
+SHEET_MOMENT_COMMENTS = "Моменты комментарии"
+MOMENT_MAX_PHOTOS = 4
+MOMENT_MAX_TEXT = 2000
+MOMENT_MAX_COMMENT = 600
+
 CRM_STAGE_COLD = "cold"      # виртуальная — нет строки в SHEET_CRM_LEADS
 CRM_STAGE_WARM = "warm"
 CRM_STAGE_DOZHIM = "dozhim"
