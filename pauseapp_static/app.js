@@ -1505,6 +1505,7 @@
     body.scrollTop = 0;
     document.getElementById("wizard-back").style.visibility = wizardStack.length > 1 ? "visible" : "hidden";
     var fn = wizardStack[wizardStack.length - 1];
+    document.getElementById("wizard").classList.remove("wizard-white");
     fn(body);
   }
 
@@ -2239,6 +2240,7 @@
 
   function renderMomentsFeed(body) {
     wizardPhaseEl.innerHTML = "";
+    document.getElementById("wizard").classList.add("wizard-white");
     body.appendChild(el("h2", "wizard-title club-serif", escapeHtml(t("club.moments.eyebrow"))));
 
     if (momCanWrite()) {
@@ -2280,6 +2282,7 @@
 
   function renderMomentCompose(body) {
     wizardPhaseEl.innerHTML = "";
+    document.getElementById("wizard").classList.add("wizard-white");
     var files = [];
     var head = el("div", "mom-compose-head");
     head.appendChild(momAvatar(momMyId(), momMyName()));
@@ -2365,6 +2368,7 @@
 
   function renderMomentDetail(body, postId) {
     wizardPhaseEl.innerHTML = "";
+    document.getElementById("wizard").classList.add("wizard-white");
     var post = (state.moments || []).filter(function (p) { return p.id === postId; })[0];
     if (!post) { body.appendChild(el("div", "empty-note", escapeHtml(t("mom.loadFailed")))); return; }
     body.appendChild(buildMomentPost(post, null, function () { wizardBack(); }));
