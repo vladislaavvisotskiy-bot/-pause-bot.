@@ -18,6 +18,7 @@ The user is on a Pro plan with a limited weekly quota shared across all Claude u
 - **Batch related fixes into one commit/response** instead of back-and-forth micro-turns, when the user already described everything needed.
 - **Ask only when truly blocked** (ambiguous requirement, destructive action, missing credential) — don't ask clarifying questions answerable by reading the code yourself.
 - **Keep prose replies short.** Skip restating the request back, skip long preambles — state what changed and what's next.
+- **No screenshots unless asked** (explicit user instruction, don't render/send preview images on your own). Keep replies minimal: a few lines on what changed + the deploy reminder only if relevant. Skip visual preview renders unless the user asks to see something.
 
 ## Current state (PAUSE App → "Pause Club" screen)
 
