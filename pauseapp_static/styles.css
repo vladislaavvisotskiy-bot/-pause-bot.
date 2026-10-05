@@ -1965,3 +1965,8 @@ p { margin: 0; color: var(--ink-soft); }
 }
 .wizard-white .mom-comments .mom-comment { border-bottom-color: rgba(43, 40, 35, 0.07); }
 .wizard-white .mom-composer, .wizard-white .mom-comment-input, .wizard-white .mom-add-photo { background: #fdfbf6; border-color: rgba(43, 40, 35, 0.09); }
+
+/* PAUSE MOMENTS — заголовок чуть выше, между "Что нового?" и постами больше воздуха */
+.wizard-white .wizard-title.club-serif { margin-top: -8px; }
+.wizard-white .mom-composer { margin-bottom: 0; }
+.wizard-white .mom-list { margin-top: 20px; }
