@@ -2693,6 +2693,17 @@
       // следующий заказ в той же сессии увидел бы уже потраченный билет
       // как доступный.
       if (state.profile && data.giveaway) state.profile.has_ticket = data.giveaway.has_ticket;
+      // order_count/club/delivery_fee — раньше НЕ обновлялись после
+      // заказа вовсе (только has_ticket патчился точечно), поэтому
+      // статус Pause Club и доставка на следующем заказе в этой же
+      // сессии ещё долго показывали состояние "до заказа" (тот самый
+      // репорт "сделал заказ, статус/доставка не обновились") —
+      // воспроизведено и подтверждено. Перечитываем профиль фоном, не
+      // задерживая сам экран подтверждения заказа — если не получится,
+      // не страшно, обновится при следующей полной загрузке.
+      api("/api/profile").then(function (fresh) {
+        if (fresh && fresh.registered) state.profile = fresh;
+      }).catch(function () {});
       wizardStep(function (b) { stepOrderConfirmed(b, pending, care); });
     }).catch(function (err) {
       btn.disabled = false;
