@@ -176,9 +176,9 @@
       "club.publishFailed": "Не удалось опубликовать: {msg}",
       "club.loadFailed": "Не удалось загрузить ленту — потяните вниз, чтобы попробовать снова.",
       "feed.type.photo": "Фото", "feed.type.message": "Послание", "feed.type.announcement": "Анонс",
-      "feed.type.giveaway": "Розыгрыш", "feed.type.news": "Новость",
+      "feed.type.giveaway": "PAUSE GIFT", "feed.type.news": "Новость",
 
-      "club.giveaway.title": "🤎 Пауза в подарок",
+      "club.giveaway.title": "🤎 PAUSE DAY",
       "club.giveaway.subtitle": "Каждый день дарим один сет PAUSE тому, кого выберет случай.",
       "club.giveaway.poolTitle": "Сегодня в пуле",
       "club.giveaway.poolCount": "Участников сегодня: {count}",
@@ -192,7 +192,13 @@
       "club.giveaway.noWinner": "Сегодня в пуле никого не было — ждём вас в следующий раз 🌿",
       "club.giveaway.showAll": "Показать всех",
       "club.giveaway.showLess": "Свернуть",
-      "club.giveaway.loadFailed": "Не удалось загрузить розыгрыш.",
+      "club.giveaway.loadFailed": "Не удалось загрузить PAUSE GIFT.",
+
+      "club.pday.heading": "Дарим эмоции",
+      "club.pday.desc": "Каждый день мы дарим один сет PAUSE тому, кого выберет случай. Участвуй просто своими заказами.",
+      "club.pday.cta": "Узнать больше",
+      "club.pday.participants": "{count} участников",
+      "club.pday.countdownStub": "Розыгрыш в 12:00",
 
       "checkout.summaryTitle": "Сверка заказа",
       "checkout.deliveryFeeLabel": "Доставка",
@@ -206,13 +212,13 @@
       "checkout.ticketNewPointNotAllowed": "Билетом нельзя оплатить заказ на новую точку — выберите точку из списка.",
 
       "bonuses.title": "Бонусы и промокоды",
-      "bonuses.ticketName": "Билет «Пауза в подарок»",
+      "bonuses.ticketName": "Билет «PAUSE DAY»",
       "bonuses.ticketAvailable": "Доступен",
       "bonuses.ticketUsed": "Использован",
       "bonuses.ticketWonOn": "Выигран {date}",
       "bonuses.ticketUsedOn": "Использован {date}",
       "bonuses.ticketHint": "Оплатите билетом любой один сет при следующем заказе — спишем его сами.",
-      "bonuses.empty": "Пока бонусов нет — победите в «Паузе в подарок», и билет появится здесь 🤎",
+      "bonuses.empty": "Пока бонусов нет — победите в «PAUSE DAY», и билет появится здесь 🤎",
       "bonuses.loadFailed": "Не удалось загрузить бонусы.",
       "notifications.title": "Уведомления",
       "notifications.empty": "Пока ничего нет — здесь будут появляться важные новости: выигрыши в розыгрыше и обновления PAUSE App.",
@@ -232,7 +238,7 @@
       "profile.clubTitle": "Pause Club",
       "profile.clubOrders": "{range} заказов",
       "profile.clubDelivery": "Доставка",
-      "profile.clubGiveaways": "Розыгрыши",
+      "profile.clubGiveaways": "PAUSE GIFT",
       "club.level.guest": "PAUSE Guest.", "club.level.regular": "PAUSE Member.",
       "club.level.circle": "PAUSE Insider.", "club.level.ambassador": "Vip Pause Club.",
       "profile.statOrders": "заказов", "profile.statPromo": "акции", "profile.statPosts": "постов",
@@ -430,9 +436,9 @@
       "club.publishFailed": "Joylab bo'lmadi: {msg}",
       "club.loadFailed": "Lentani yuklab bo'lmadi — qayta urinish uchun pastga torting.",
       "feed.type.photo": "Rasm", "feed.type.message": "Xabar", "feed.type.announcement": "E'lon",
-      "feed.type.giveaway": "Sovg'a o'yini", "feed.type.news": "Yangilik",
+      "feed.type.giveaway": "PAUSE GIFT", "feed.type.news": "Yangilik",
 
-      "club.giveaway.title": "🤎 Sovg'adagi pauza",
+      "club.giveaway.title": "🤎 PAUSE DAY",
       "club.giveaway.subtitle": "Har kuni tasodif tanlagan bitta odamga PAUSE'dan bir set sovg'a qilamiz.",
       "club.giveaway.poolTitle": "Bugungi pul",
       "club.giveaway.poolCount": "Bugun ishtirokchilar: {count}",
@@ -446,7 +452,13 @@
       "club.giveaway.noWinner": "Bugun pulda hech kim yo'q edi — keyingi safar sizni kutamiz 🌿",
       "club.giveaway.showAll": "Barchasini ko'rsatish",
       "club.giveaway.showLess": "Yig'ish",
-      "club.giveaway.loadFailed": "Sovg'a o'yinini yuklab bo'lmadi.",
+      "club.giveaway.loadFailed": "PAUSE GIFT'ni yuklab bo'lmadi.",
+
+      "club.pday.heading": "His-tuyg'ularni sovg'a qilamiz",
+      "club.pday.desc": "Har kuni tasodif tanlagan bitta odamga bitta PAUSE seti sovg'a qilamiz. Shunchaki buyurtma bering.",
+      "club.pday.cta": "Batafsil",
+      "club.pday.participants": "{count} ishtirokchi",
+      "club.pday.countdownStub": "Qur'a 12:00 da",
 
       "checkout.summaryTitle": "Buyurtma tekshiruvi",
       "checkout.deliveryFeeLabel": "Yetkazib berish",
@@ -460,13 +472,13 @@
       "checkout.ticketNewPointNotAllowed": "Yangi nuqtaga buyurtmani chipta bilan to'lab bo'lmaydi — ro'yxatdan nuqta tanlang.",
 
       "bonuses.title": "Bonus va promokodlar",
-      "bonuses.ticketName": "«Sovg'adagi pauza» chiptasi",
+      "bonuses.ticketName": "«PAUSE DAY» chiptasi",
       "bonuses.ticketAvailable": "Mavjud",
       "bonuses.ticketUsed": "Ishlatilgan",
       "bonuses.ticketWonOn": "{date} da yutilgan",
       "bonuses.ticketUsedOn": "{date} da ishlatilgan",
       "bonuses.ticketHint": "Keyingi buyurtmada chipta bilan istalgan bir setni to'lang — o'zimiz hisoblaymiz.",
-      "bonuses.empty": "Hozircha bonuslar yo'q — «Sovg'adagi pauza»da g'alaba qozonsangiz, chipta shu yerda paydo bo'ladi 🤎",
+      "bonuses.empty": "Hozircha bonuslar yo'q — «PAUSE DAY»da g'alaba qozonsangiz, chipta shu yerda paydo bo'ladi 🤎",
       "bonuses.loadFailed": "Bonuslarni yuklab bo'lmadi.",
       "notifications.title": "Bildirishnomalar",
       "notifications.empty": "Hozircha hech narsa yo'q — bu yerda muhim yangiliklar paydo bo'ladi: lotereya yutuqlari va PAUSE App yangilanishlari.",
@@ -486,7 +498,7 @@
       "profile.clubTitle": "Pause Club",
       "profile.clubOrders": "{range} ta buyurtma",
       "profile.clubDelivery": "Yetkazib berish",
-      "profile.clubGiveaways": "Yutuqlar",
+      "profile.clubGiveaways": "PAUSE GIFT",
       "club.level.guest": "PAUSE Guest.", "club.level.regular": "PAUSE Member.",
       "club.level.circle": "PAUSE Insider.", "club.level.ambassador": "Vip Pause Club.",
       "profile.statOrders": "buyurtma", "profile.statPromo": "aksiya", "profile.statPosts": "post",
@@ -684,9 +696,9 @@
       "club.publishFailed": "Couldn't publish: {msg}",
       "club.loadFailed": "Couldn't load the feed — pull down to try again.",
       "feed.type.photo": "Photo", "feed.type.message": "Message", "feed.type.announcement": "Announcement",
-      "feed.type.giveaway": "Giveaway", "feed.type.news": "News",
+      "feed.type.giveaway": "PAUSE GIFT", "feed.type.news": "News",
 
-      "club.giveaway.title": "🤎 Pause as a gift",
+      "club.giveaway.title": "🤎 PAUSE DAY",
       "club.giveaway.subtitle": "Every day we gift one PAUSE set to someone chosen at random.",
       "club.giveaway.poolTitle": "Today's pool",
       "club.giveaway.poolCount": "In today's pool: {count}",
@@ -700,7 +712,13 @@
       "club.giveaway.noWinner": "Nobody was in the pool today — see you next time 🌿",
       "club.giveaway.showAll": "Show all",
       "club.giveaway.showLess": "Show less",
-      "club.giveaway.loadFailed": "Couldn't load the giveaway.",
+      "club.giveaway.loadFailed": "Couldn't load PAUSE GIFT.",
+
+      "club.pday.heading": "Gifting good moments",
+      "club.pday.desc": "Every day we gift one PAUSE set to someone chosen at random. Just join in with your orders.",
+      "club.pday.cta": "Learn more",
+      "club.pday.participants": "{count} participants",
+      "club.pday.countdownStub": "Draw at 12:00",
 
       "checkout.summaryTitle": "Order summary",
       "checkout.deliveryFeeLabel": "Delivery",
@@ -714,13 +732,13 @@
       "checkout.ticketNewPointNotAllowed": "A ticket can't pay for an order to a new point — pick a point from the list.",
 
       "bonuses.title": "Bonuses & promo codes",
-      "bonuses.ticketName": "“Pause as a gift” ticket",
+      "bonuses.ticketName": "“PAUSE DAY” ticket",
       "bonuses.ticketAvailable": "Available",
       "bonuses.ticketUsed": "Used",
       "bonuses.ticketWonOn": "Won on {date}",
       "bonuses.ticketUsedOn": "Used on {date}",
       "bonuses.ticketHint": "Pay with your ticket for any one set next time — we'll apply it ourselves.",
-      "bonuses.empty": "No bonuses yet — win the “Pause as a gift” draw and a ticket will show up here 🤎",
+      "bonuses.empty": "No bonuses yet — win the “PAUSE DAY” draw and a ticket will show up here 🤎",
       "bonuses.loadFailed": "Couldn't load bonuses.",
       "notifications.title": "Notifications",
       "notifications.empty": "Nothing yet — important news will show up here: giveaway wins and PAUSE App updates.",
@@ -742,7 +760,7 @@
       "profile.clubTitle": "Pause Club",
       "profile.clubOrders": "{range} orders",
       "profile.clubDelivery": "Delivery",
-      "profile.clubGiveaways": "Giveaways",
+      "profile.clubGiveaways": "PAUSE GIFT",
       "profile.statOrders": "orders", "profile.statPromo": "promos", "profile.statPosts": "posts",
       "profile.myOrders": "My orders", "profile.favorites": "Favorites", "profile.notifications": "Notifications",
       "profile.myMessages": "My messages",
@@ -2145,7 +2163,50 @@
   }
 
   // -------------------------------------------------------------------
-  // "Пауза в подарок" — ежедневный розыгрыш, видимый ВСЕМ во вкладке
+  // Карточка "PAUSE DAY" под "Сейчас в клубе" (см. renderClubHero) — по
+  // присланному макету: фон-"фото" (у нас пока декоративный градиент +
+  // листик вместо настоящей фотографии — своей фотографии ещё нет),
+  // эйбрау "PAUSE GIFT", тёплое описание, кнопка (чисто визуальная — вся
+  // карточка кликабельна целиком) и строка статистики. Данные — те же
+  // state.giveaway, что и у виджета ниже (#club-giveaway), поэтому
+  // перерисовывается вместе с ним, см. renderClubGiveaway. Счётчик до
+  // 12:00 — специально СТАТИЧНАЯ заглушка (прямая просьба: "визуально но
+  // не рабочий"), никакого живого таймера здесь нет.
+  // -------------------------------------------------------------------
+
+  var ICON_PDAY_PEOPLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c0.8-3.2 2.9-4.8 6-4.8s5.2 1.6 6 4.8"/><circle cx="17.5" cy="8.5" r="2.3"/><path d="M15.8 14.4c2.4 0.3 3.9 1.8 4.6 4.6"/></svg>';
+  var ICON_PDAY_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5l3.2 2"/></svg>';
+
+  function renderClubNowCards() {
+    var root = document.getElementById("club-now-cards");
+    if (!root) return;
+    root.innerHTML = "";
+    var names = (state.giveaway && state.giveaway.participant_names) || [];
+    var card = el("div", "pday-card");
+    card.innerHTML =
+      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
+      '<div class="pday-card-content">' +
+        '<div class="pday-card-eyebrow">' + escapeHtml(t("feed.type.giveaway")) + '</div>' +
+        '<div class="pday-card-heading">' + escapeHtml(t("club.pday.heading")) + '</div>' +
+        '<div class="pday-card-desc">' + escapeHtml(t("club.pday.desc")) + '</div>' +
+        '<div class="pday-card-btn">' + escapeHtml(t("club.pday.cta")) + '</div>' +
+        '<div class="pday-card-stats">' +
+          '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.pday.participants", { count: names.length })) + '</span>' +
+          '<span>' + ICON_PDAY_CLOCK + escapeHtml(t("club.pday.countdownStub")) + '</span>' +
+        '</div>' +
+      '</div>';
+    card.addEventListener("click", function () {
+      haptic("select");
+      openProfileSubscreen(t("feed.type.giveaway"), function (sub) {
+        sub.innerHTML = "";
+        sub.appendChild(buildGiveawayParticipants((state.giveaway && state.giveaway.participant_names) || []));
+      });
+    });
+    root.appendChild(card);
+  }
+
+  // -------------------------------------------------------------------
+  // "PAUSE DAY" — ежедневный розыгрыш, видимый ВСЕМ во вкладке
   // Pause Club (см. pauseapp.py: api_club_giveaway). Статус "Внутренний
   // круг" и выше даёт автодобавление в сегодняшний пул сразу после
   // заказа (см. _refresh_giveaway_state на сервере) — кому статус пока
@@ -2182,6 +2243,7 @@
   }
 
   function renderClubGiveaway() {
+    renderClubNowCards();
     var root = document.getElementById("club-giveaway");
     root.innerHTML = "";
     var g = state.giveaway;
@@ -3656,9 +3718,9 @@
       }));
     }
     if (state.isMainAdmin || state.paFinance) {
-      rows.appendChild(buildProfileRow(ICON_OPS_GIVEAWAY, "Розыгрыш «Пауза в подарок»", function () {
+      rows.appendChild(buildProfileRow(ICON_OPS_GIVEAWAY, "PAUSE GIFT «PAUSE DAY»", function () {
         wizardStep(function (body) {
-          opsStepHeader(body, "Розыгрыш «Пауза в подарок»");
+          opsStepHeader(body, "PAUSE GIFT «PAUSE DAY»");
           var sub = el("div");
           sub.appendChild(el("div", "skeleton-block"));
           body.appendChild(sub);

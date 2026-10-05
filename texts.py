@@ -350,7 +350,7 @@ ADMIN_DAILY_GIVEAWAY_WINNER_ALERT = (
 ADMIN_GIVEAWAY_TODAY_HEADER = "🤎 Участники «Паузы в подарок» на {date}:"
 ADMIN_GIVEAWAY_TODAY_EMPTY = "Пока никто не участвует в сегодняшней «Паузе в подарок»."
 
-# --- "Пауза в подарок" в PAUSE App — видимый всем пул, автоматический
+# --- "PAUSE DAY" (бывшая "Пауза в подарок") в PAUSE App — видимый всем пул, автоматический
 # розыгрыш в 12:00 (см. pauseapp.run_daily_giveaway_draw). Отдельно от
 # DAILY_GIVEAWAY_* выше — это старая, ручная механика самого бота, её не
 # трогаем (см. договорённость: "Только в PAUSE App"). Уведомление уходит
@@ -358,17 +358,17 @@ ADMIN_GIVEAWAY_TODAY_EMPTY = "Пока никто не участвует в с�
 # текст идёт не через I18N приложения, а прямо на русском, как и остальные
 # сообщения бота.
 APP_DAILY_GIVEAWAY_WINNER_MSG = (
-    "🤎 Пауза в подарок\n\n"
+    "🤎 PAUSE DAY\n\n"
     "Сегодня в пуле выбрали именно вас — спасибо, что вы с нами 🌿\n"
     "В «Бонусы и промокоды» появился билет: оплатите им один любой сет, "
     "когда захочется."
 )
 APP_ADMIN_DAILY_GIVEAWAY_WINNER_ALERT = (
-    "🤎 PAUSE App: победитель «Паузы в подарок» на {date} — {name} (ID {client_id}). "
+    "🤎 PAUSE App: победитель «PAUSE DAY» на {date} — {name} (ID {client_id}). "
     "Билет начислен."
 )
 APP_ADMIN_DAILY_GIVEAWAY_EMPTY_ALERT = (
-    "🤎 PAUSE App: розыгрыш «Пауза в подарок» на {date} подведён — сегодня пул был пуст, без победителя."
+    "🤎 PAUSE App: PAUSE GIFT «PAUSE DAY» на {date} подведён — сегодня пул был пуст, без победителя."
 )
 
 BACK_BTN = "‹ Назад"

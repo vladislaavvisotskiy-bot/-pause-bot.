@@ -474,6 +474,56 @@ p { margin: 0; color: var(--ink-soft); }
 
 .club-now-heading { font-size: 17px; font-weight: 700; color: var(--ink); margin: 20px 0 10px; }
 
+/* Карточка "PAUSE DAY" под "Сейчас в клубе" (см. app.js: renderClubNowCards)
+   — фон-"фото" по макету; настоящей фотографии ещё нет, поэтому фон —
+   тёмный градиент с крупным полупрозрачным листом (тот же ICON_LEAF, что
+   и бренд-иконка везде в приложении) вместо неё. */
+.pday-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  min-height: 230px;
+  padding: 20px;
+  cursor: pointer;
+  color: var(--ivory);
+  background: radial-gradient(130% 110% at 85% 0%, #3d4a37 0%, #232a1f 55%, #181d15 100%);
+}
+.pday-card-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px;
+  color: rgba(242, 235, 220, 0.1);
+  pointer-events: none;
+}
+.pday-card-bg svg { width: 160px; height: 160px; }
+.pday-card-content { position: relative; z-index: 1; display: flex; flex-direction: column; }
+.pday-card-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(242, 235, 220, 0.75); }
+.pday-card-heading { font-size: 21px; font-weight: 700; margin-top: 8px; }
+.pday-card-desc { font-size: 13.5px; line-height: 1.5; color: rgba(242, 235, 220, 0.8); margin-top: 8px; max-width: 86%; }
+.pday-card-btn {
+  align-self: flex-start;
+  margin-top: 16px;
+  background: var(--ivory);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 999px;
+}
+.pday-card-stats {
+  display: flex;
+  gap: 18px;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(242, 235, 220, 0.18);
+  font-size: 12px;
+  color: rgba(242, 235, 220, 0.75);
+}
+.pday-card-stats span { display: flex; align-items: center; gap: 6px; }
+
 /* ------------------------------------------------------------------ */
 /* PAUSE Club / Послания — лента                                       */
 /* ------------------------------------------------------------------ */
