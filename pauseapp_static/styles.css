@@ -1918,11 +1918,12 @@ p { margin: 0; color: var(--ink-soft); }
 .mom-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
 /* PAUSE MOMENTS — белая заливка страницы (стена, публикация, пост) */
-.wizard.wizard-white { background: #fff; }
+.wizard.wizard-white { --mom-bg: #eceee3; background: var(--mom-bg); }
 .wizard-white .mom-composer { background: #fff; border-color: rgba(43, 40, 35, 0.14); }
-.wizard-white .mom-comment-bar, .wizard-white .mom-compose-bar { background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff 30%); }
+.wizard-white .mom-comment-bar, .wizard-white .mom-compose-bar { background: linear-gradient(180deg, rgba(236, 238, 227, 0), var(--mom-bg) 30%); }
 .wizard-white .mom-comment-input, .wizard-white .mom-add-photo { background: #fff; }
-.wizard-white .mom-photos img { background: #eee9de; }
+.wizard-white .mom-photos img { background: #dcdfd0; }
+.wizard-white .mom-post, .wizard-white .mom-comment { border-bottom-color: rgba(43, 40, 35, 0.09); }
 
 /* PAUSE MOMENTS — компактнее и выше: всё чуть мельче, заголовок и строка
    "Что нового?" ближе к верху экрана */
