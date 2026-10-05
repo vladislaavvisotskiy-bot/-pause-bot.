@@ -472,7 +472,14 @@
       var marker = L.marker(placedLatLngs[cursor], {
         icon: numberedIcon(idx + 1, p.status === "Сдано", markerColorFor(p)),
       }).addTo(state.map);
-      marker.bindPopup(p.address || p.point);
+      // "Сдано" — рядом с названием ещё и время, когда курьер это
+      // отметил (p.delivered_at, та же величина, что и в статусе
+      // карточки точки, см. buildStatusTag выше), по прямой просьбе —
+      // админу нужно видеть это прямо по тапу на точку на карте, не
+      // открывая саму точку.
+      var popupLabel = p.address || p.point;
+      if (p.status === "Сдано" && p.delivered_at) popupLabel += " — Сдано " + p.delivered_at;
+      marker.bindPopup(popupLabel);
       state.markers.push(marker);
       cursor++;
     });
