@@ -3393,6 +3393,7 @@
   var ICON_OPS_MENU = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>';
   var ICON_OPS_CRM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><circle cx="8" cy="13.5" r="1.6"/><path d="M12.5 13h5M12.5 16.5h5"/></svg>';
   var ICON_OPS_LEADS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16l-6.5 8.5V19l-3 2v-8.5z"/></svg>';
+  var ICON_CRM_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/></svg>';
   var CRM_STAGE_LABELS = { cold: "Холодный", warm: "Тёплый", dozhim: "Дожим", sale: "Продажа" };
   var ICON_CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>';
 
@@ -4933,13 +4934,29 @@
     function render(clients) {
       root.innerHTML = "";
 
+      // Поиск — свёрнут по умолчанию (иконка-лупа), разворачивается по
+      // тапу в поле ввода, по прямой просьбе (раньше поле всегда
+      // занимало место сверху, даже когда им не пользовались).
       var filterBox = el("div", "card crm-filter-box");
-      var searchField = el("div", "field");
-      searchField.innerHTML = '<label>Поиск по имени</label>';
+      var searchRow = el("div", "crm-search-row");
+      var searchToggle = el("button", "crm-search-toggle", ICON_CRM_SEARCH);
+      var searchField = el("div", "field crm-search-field");
+      searchField.hidden = true;
       var searchInput = el("input");
       searchInput.type = "text";
-      searchInput.placeholder = "Имя...";
+      searchInput.placeholder = "Поиск по имени...";
       searchField.appendChild(searchInput);
+      searchToggle.addEventListener("click", function () {
+        searchField.hidden = !searchField.hidden;
+        if (!searchField.hidden) {
+          searchInput.focus();
+        } else if (searchInput.value) {
+          searchInput.value = "";
+          applyFilters();
+        }
+      });
+      searchRow.appendChild(searchToggle);
+      filterBox.appendChild(searchRow);
       filterBox.appendChild(searchField);
 
       var zones = clients.reduce(function (acc, c) { if (c.zone && acc.indexOf(c.zone) === -1) acc.push(c.zone); return acc; }, []).sort();
@@ -4970,6 +4987,22 @@
         orderPills.appendChild(pill);
       });
       filterBox.appendChild(orderPills);
+
+      var stageFilter = "";
+      var stagePills = el("div", "crm-pill-row");
+      [{ key: "", label: "Все статусы" }].concat(
+        Object.keys(CRM_STAGE_LABELS).map(function (k) { return { key: k, label: CRM_STAGE_LABELS[k] }; })
+      ).forEach(function (opt) {
+        var pill = el("button", "date-pill" + (opt.key === "" ? " active" : ""), opt.label);
+        pill.addEventListener("click", function () {
+          stageFilter = opt.key;
+          Array.prototype.forEach.call(stagePills.children, function (p) { p.classList.remove("active"); });
+          pill.classList.add("active");
+          applyFilters();
+        });
+        stagePills.appendChild(pill);
+      });
+      filterBox.appendChild(stagePills);
       root.appendChild(filterBox);
 
       var listBox = el("div");
@@ -4983,19 +5016,29 @@
           if (zone && c.zone !== zone) return false;
           if (orderFilter === "yes" && !(c.order_count > 0)) return false;
           if (orderFilter === "no" && c.order_count > 0) return false;
+          if (stageFilter && c.stage !== stageFilter) return false;
           return true;
         });
         filtered.sort(function (a, b) { return a.name.localeCompare(b.name, "ru"); });
         renderList(filtered);
       }
 
+      // Визуальное разделение — список разбит на буквенные секции (как в
+      // обычном списке контактов), по прямой просьбе: сплошная лента
+      // карточек без ориентиров плохо читалась на полном списке клиентов.
       function renderList(list) {
         listBox.innerHTML = "";
         if (!list.length) {
           listBox.appendChild(el("div", "empty-note", "Никого не нашли."));
           return;
         }
+        var lastLetter = null;
         list.forEach(function (c) {
+          var letter = (c.name || "?").trim().charAt(0).toUpperCase() || "?";
+          if (letter !== lastLetter) {
+            listBox.appendChild(el("div", "crm-alpha-label", letter));
+            lastLetter = letter;
+          }
           var row = el("div", "card crm-client-row");
           row.innerHTML =
             '<div class="crm-client-row-main">' +
@@ -5240,6 +5283,26 @@
       return row;
     }
 
+    // "Сегодня" по значению data.today — дате, которую посчитал СЕРВЕР
+    // (sheets.today_date_str), а не часами устройства админа: ровно то,
+    // что уже один раз ловили на оплате доставки (другой часовой пояс на
+    // телефоне даёт другую календарную дату) — здесь та же ловушка, с тем
+    // же решением.
+    function regDateInRange(regDate, todayStr, rangeKey) {
+      if (rangeKey === "all") return true;
+      var p = (todayStr || "").split(".");
+      if (p.length !== 3) return true;
+      var today = new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]));
+      var rp = (regDate || "").split(".");
+      if (rp.length !== 3) return false;
+      var reg = new Date(Number(rp[2]), Number(rp[1]) - 1, Number(rp[0]));
+      var diffDays = Math.round((today - reg) / 86400000);
+      if (rangeKey === "today") return diffDays === 0;
+      if (rangeKey === "yesterday") return diffDays === 1;
+      if (rangeKey === "week") return diffDays >= 0 && diffDays <= 6;
+      return true;
+    }
+
     function render(data) {
       root.innerHTML = "";
 
@@ -5249,19 +5312,70 @@
       counterRow.appendChild(counterTile);
       root.appendChild(counterRow);
 
+      // По прямой просьбе: раньше счётчик честно показывал "сегодня 2", а
+      // список ниже всегда показывал ВСЕХ лидов разом (например 208) —
+      // непонятно было, что это за два разных числа. Теперь день и статус
+      // — отдельные фильтры, применяются вместе.
+      var filterBox = el("div", "card crm-filter-box");
+      var dayFilter = "today";
+      var dayPills = el("div", "crm-pill-row");
       [
+        { key: "today", label: "Сегодня" },
+        { key: "yesterday", label: "Вчера" },
+        { key: "week", label: "7 дней" },
+        { key: "all", label: "Все" },
+      ].forEach(function (opt) {
+        var pill = el("button", "date-pill" + (opt.key === dayFilter ? " active" : ""), opt.label);
+        pill.addEventListener("click", function () {
+          dayFilter = opt.key;
+          Array.prototype.forEach.call(dayPills.children, function (p) { p.classList.remove("active"); });
+          pill.classList.add("active");
+          applyFilters();
+        });
+        dayPills.appendChild(pill);
+      });
+      filterBox.appendChild(dayPills);
+
+      var poolFilter = "";
+      var poolDefs = [
         { key: "cold", label: "Холодные" },
         { key: "warm", label: "Тёплые" },
         { key: "dozhim", label: "Дожим" },
-      ].forEach(function (pool) {
-        var items = (data[pool.key] || []).slice().reverse(); // новые регистрации сверху
-        root.appendChild(el("h3", "ops-section-title", pool.label + " (" + items.length + ")"));
-        if (!items.length) {
-          root.appendChild(el("div", "empty-note", "Пусто."));
-          return;
-        }
-        items.forEach(function (l) { root.appendChild(buildLeadRow(l)); });
+      ];
+      var poolPills = el("div", "crm-pill-row");
+      [{ key: "", label: "Все статусы" }].concat(poolDefs).forEach(function (opt) {
+        var pill = el("button", "date-pill" + (opt.key === "" ? " active" : ""), opt.label);
+        pill.addEventListener("click", function () {
+          poolFilter = opt.key;
+          Array.prototype.forEach.call(poolPills.children, function (p) { p.classList.remove("active"); });
+          pill.classList.add("active");
+          applyFilters();
+        });
+        poolPills.appendChild(pill);
       });
+      filterBox.appendChild(poolPills);
+      root.appendChild(filterBox);
+
+      var listBox = el("div");
+      root.appendChild(listBox);
+
+      function applyFilters() {
+        listBox.innerHTML = "";
+        var pools = poolFilter ? poolDefs.filter(function (p) { return p.key === poolFilter; }) : poolDefs;
+        pools.forEach(function (pool) {
+          var items = (data[pool.key] || [])
+            .filter(function (l) { return regDateInRange(l.reg_date, data.today, dayFilter); })
+            .slice().reverse(); // новые регистрации сверху
+          listBox.appendChild(el("h3", "ops-section-title", pool.label + " (" + items.length + ")"));
+          if (!items.length) {
+            listBox.appendChild(el("div", "empty-note", "Пусто."));
+            return;
+          }
+          items.forEach(function (l) { listBox.appendChild(buildLeadRow(l)); });
+        });
+      }
+
+      applyFilters();
     }
   }
 

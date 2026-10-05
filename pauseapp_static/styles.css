@@ -1277,7 +1277,21 @@ p { margin: 0; color: var(--ink-soft); }
 /* CRM — "Клиенты"/"Лиды" (см. app.js: loadCrmClientsList/loadCrmLeads) */
 .crm-filter-box .field { margin-bottom: 10px; }
 .crm-filter-box select { width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 14.5px; }
-.crm-pill-row { display: flex; gap: 8px; overflow-x: auto; }
+.crm-pill-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 10px; }
+.crm-pill-row:last-child { margin-bottom: 0; }
+.crm-search-row { display: flex; justify-content: flex-end; }
+.crm-search-toggle {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink-soft);
+}
+.crm-search-toggle:active { background: var(--ink-soft-bg); }
+.crm-search-field { margin-top: 10px; margin-bottom: 10px; }
+.crm-alpha-label { font-size: 12px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 2px 6px; }
+.crm-alpha-label:first-child { margin-top: 2px; }
 .crm-client-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; cursor: pointer; }
 .crm-client-row:active { background: var(--ink-soft-bg); }
 .crm-client-row-name { font-size: 15px; font-weight: 600; color: var(--ink); }

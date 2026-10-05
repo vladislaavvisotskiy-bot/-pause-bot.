@@ -979,7 +979,10 @@ def get_crm_leads_overview() -> dict:
             "last_comment": last_comment.get(cid),
             "reminder": pending_reminder.get(cid),
         })
-    return {"today_count": today_count, "cold": buckets["cold"], "warm": buckets["warm"], "dozhim": buckets["dozhim"]}
+    return {
+        "today": today, "today_count": today_count,
+        "cold": buckets["cold"], "warm": buckets["warm"], "dozhim": buckets["dozhim"],
+    }
 
 
 def get_client_full_profile(client_id) -> dict:
