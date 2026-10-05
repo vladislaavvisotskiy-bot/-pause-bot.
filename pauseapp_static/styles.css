@@ -2078,3 +2078,12 @@ p { margin: 0; color: var(--ink-soft); }
 .menu-set-card-pill { font-size: 10.5px; font-weight: 600; color: #5f6150; background: rgba(133, 135, 114, 0.16); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
 .menu-set-card:not(.expanded) .menu-set-card-chevron { width: 26px; height: 26px; margin-top: -2px; border-radius: 50%; background: var(--ink-soft-bg); display: flex; align-items: center; justify-content: center; }
 .menu-set-card:not(.expanded) .menu-set-card-chevron svg { width: 14px; height: 14px; }
+
+
+/* Меню — карточки шире (почти во всю ширину экрана), состав снова
+   построчно: каждая строка с левого края карточки, под фото и заголовком. */
+#menu-root .menu-set-card { margin-left: -8px; margin-right: -8px; }
+.menu-set-card:not(.expanded) { flex-wrap: wrap; }
+.menu-set-card:not(.expanded) .menu-set-card-body { min-height: 96px; flex: 1 1 0; }
+.menu-set-card-list { flex: 0 0 100%; margin-top: 2px; padding-top: 10px; border-top: 1px solid rgba(43, 40, 35, 0.08); }
+.menu-set-card-list li { font-size: 13px; }

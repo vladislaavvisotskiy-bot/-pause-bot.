@@ -1851,16 +1851,10 @@
       head.appendChild(el("div", "menu-set-card-chevron" + (expanded ? " up" : ""), ICON_CHEVRON));
       body.appendChild(head);
 
-      if (s.description && s.description.length) {
-        if (expanded) {
-          var list = el("ul", "menu-set-card-desc");
-          s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
-          body.appendChild(list);
-        } else {
-          // Свёрнутая карточка: состав одной строкой через "·", не больше двух
-          // строк — высота карточки и фото не зависят от длины описания.
-          body.appendChild(el("div", "menu-set-card-summary", escapeHtml(s.description.join(" · "))));
-        }
+      if (s.description && s.description.length && expanded) {
+        var list = el("ul", "menu-set-card-desc");
+        s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
+        body.appendChild(list);
       }
 
       if (!expanded) {
@@ -1874,6 +1868,14 @@
         }
         body.appendChild(foot);
         card.appendChild(body);
+        // Состав — отдельным блоком под фото и заголовком, на всю ширину
+        // карточки: каждая строка начинается с левого края, а размер фото
+        // от числа строк не зависит.
+        if (s.description && s.description.length) {
+          var fullList = el("ul", "menu-set-card-desc menu-set-card-list");
+          s.description.forEach(function (line) { fullList.appendChild(el("li", null, escapeHtml(line))); });
+          card.appendChild(fullList);
+        }
         card.onclick = function () { haptic("select"); expanded = true; render(); };
         return;
       }
