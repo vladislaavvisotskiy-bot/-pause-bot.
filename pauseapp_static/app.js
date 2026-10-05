@@ -3921,9 +3921,18 @@
     s1.addEventListener("click", function () { haptic("select"); openProfileSubscreen(t("orders.title"), loadOrders); });
     var s2 = el("div", "profile-stat");
     s2.innerHTML = '<div class="profile-stat-value">—</div><div class="profile-stat-label">' + t("profile.statPromo") + '</div>';
-    var s3 = el("div", "profile-stat");
-    var postsCount = (state.feed || []).filter(function (post) { return post.author === p.name; }).length;
-    s3.innerHTML = '<div class="profile-stat-value">' + postsCount + '</div><div class="profile-stat-label">' + t("profile.statPosts") + '</div>';
+    // "Постов" — мои посты на стене PAUSE MOMENTS (по tg_id автора); тап
+    // открывает саму стену. Стена могла ещё не загружаться — подтягиваем.
+    var s3 = el("button", "profile-stat profile-stat-clickable");
+    function myMomentsCount() {
+      return (state.moments || []).filter(function (post) { return String(post.tg_id) === String(state.myTgId); }).length;
+    }
+    function drawPostsStat() {
+      s3.innerHTML = '<div class="profile-stat-value">' + myMomentsCount() + '</div><div class="profile-stat-label">' + t("profile.statPosts") + '</div>';
+    }
+    drawPostsStat();
+    if (!state.moments) loadMoments(function (ok) { if (ok && document.body.contains(s3)) drawPostsStat(); });
+    s3.addEventListener("click", openClubMoments);
     statRow.appendChild(s1); statRow.appendChild(s2); statRow.appendChild(s3);
     root.appendChild(statRow);
 
