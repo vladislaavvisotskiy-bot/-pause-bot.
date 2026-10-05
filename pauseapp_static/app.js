@@ -2030,7 +2030,7 @@
       '</div>' +
       '<div class="club-select-progress">' +
         '<div class="club-select-progress-track"><div class="club-select-progress-fill" style="width:' + pct + '%"></div></div>' +
-        '<span class="club-select-progress-num">' + orderCount + (left > 0 ? "/" + total : "") + '</span>' +
+        '<span class="club-select-progress-num">' + orderCount + (left > 0 ? " / " + total : "") + '</span>' +
       '</div>';
     card.addEventListener("click", function () {
       haptic("select");
@@ -2075,6 +2075,7 @@
     root.innerHTML = "";
     var hero = el("div", "club-hero");
     hero.innerHTML =
+      '<div class="club-hero-leaf">' + ICON_LEAF + '</div>' +
       '<div class="club-hero-title">' + escapeHtml(t("club.title")).toUpperCase() + '</div>' +
       '<div class="club-hero-subtitle">' + escapeHtml(t("club.hero.subtitle1")) + '<br>' + escapeHtml(t("club.hero.subtitle2")) + '</div>';
     root.appendChild(hero);
