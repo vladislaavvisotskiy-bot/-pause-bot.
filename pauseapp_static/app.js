@@ -159,6 +159,7 @@
       "club.leaderboardShowLess": "Свернуть",
       "club.leaderboardEmpty": "Рейтинг пока пуст — сделайте первый заказ!",
       "club.leaderboardLoadFailed": "Не удалось загрузить рейтинг.",
+      "club.lb.subtitle": "Рейтинг по числу заказов", "club.lb.you": "Вы", "club.lb.toTop": "До топ-10 — ещё {n} {orders}", "club.lb.noRank": "Сделайте первый заказ — и вы появитесь в рейтинге", "club.lb.of": "из {n}",
       "club.empty": "Пока здесь тихо — самое время опубликовать первый пост.",
       "club.deleteConfirm": "Удалить этот пост из ленты?",
       "club.deleteYes": "Да, удалить",
@@ -436,6 +437,7 @@
       "club.leaderboardShowLess": "Yig'ish",
       "club.leaderboardEmpty": "Reyting hali bo'sh — birinchi buyurtmani bering!",
       "club.leaderboardLoadFailed": "Reytingni yuklab bo'lmadi.",
+      "club.lb.subtitle": "Buyurtmalar soni bo'yicha reyting", "club.lb.you": "Siz", "club.lb.toTop": "Top-10 gacha yana {n} {orders}", "club.lb.noRank": "Birinchi buyurtmani bering — reytingda paydo bo'lasiz", "club.lb.of": "{n} dan",
       "club.empty": "Hozircha bu yerda jimjit — birinchi postni joylash uchun ayni payt.",
       "club.deleteConfirm": "Bu postni lentadan o'chirasizmi?",
       "club.deleteYes": "Ha, o'chirish",
@@ -713,6 +715,7 @@
       "club.leaderboardShowLess": "Show less",
       "club.leaderboardEmpty": "Leaderboard is empty yet — place your first order!",
       "club.leaderboardLoadFailed": "Couldn't load the leaderboard.",
+      "club.lb.subtitle": "Ranked by number of orders", "club.lb.you": "You", "club.lb.toTop": "{n} more {orders} to reach the top 10", "club.lb.noRank": "Place your first order to join the ranking", "club.lb.of": "of {n}",
       "club.empty": "It's quiet here — a great time to publish the first post.",
       "club.deleteConfirm": "Delete this post from the feed?",
       "club.deleteYes": "Yes, delete",
@@ -2034,7 +2037,7 @@
       '</div>';
     card.addEventListener("click", function () {
       haptic("select");
-      openProfileSubscreen(t("profile.clubTitle"), function (sub) { renderClubLevelsScreen(sub, p); });
+      openProfileSubscreen(t("profile.clubTitle"), function (sub) { renderClubLevelsScreen(sub, p); }, true);
     });
     return card;
   }
@@ -2144,7 +2147,7 @@
     openProfileSubscreen(t("club.moments.eyebrow"), function (sub) {
       clubMomentsRoot = sub;
       renderClubMomentsContent();
-    });
+    }, true);
   }
 
   // Открывает один пост ленты крупно (из сетки миниатюр) — переиспользует
@@ -2180,12 +2183,18 @@
     return wrap;
   }
 
+  function lbIsMe(entry) {
+    return !!(state.leaderboardMe && entry && String(entry.tg_id) === String(state.leaderboardMe.tg_id));
+  }
+
   function buildLeaderboardRow(entry, rank) {
-    var row = el("div", "leaderboard-row" + (rank === 1 ? " rank-1" : ""));
-    row.appendChild(el("div", "leaderboard-rank", String(rank)));
+    var me = lbIsMe(entry);
+    var row = el("div", "lb-row" + (me ? " me" : ""));
+    row.appendChild(el("div", "lb-rank", String(rank)));
     row.appendChild(buildLeaderboardAvatar(entry.tg_id, entry.name));
     var info = el("div", "leaderboard-info");
-    info.appendChild(el("div", "leaderboard-name", escapeHtml(entry.name || t("profile.noName"))));
+    var nameHtml = escapeHtml(entry.name || t("profile.noName")) + (me ? ' <span class="lb-you">' + escapeHtml(t("club.lb.you")) + '</span>' : "");
+    info.appendChild(el("div", "leaderboard-name", nameHtml));
     var clubLine = el("div", "leaderboard-club");
     clubLine.innerHTML = clubLevelIcon(entry.club.key) + "<span>" + escapeHtml(clubLevelLabel(entry.club.key, entry.club.label)) + "</span>";
     info.appendChild(clubLine);
@@ -2196,45 +2205,81 @@
     return row;
   }
 
-  // root — контейнер открытого по тапу на карточку "Рейтинг" окна (см.
-  // renderClubNowCards); отдельного всегда видимого места под рейтинг на
-  // экране больше нет (раньше был #club-leaderboard, убран по той же
-  // причине, что и старый виджет розыгрыша — повтор с новой карточкой).
+  // Пьедестал топ-3: по центру первое место (выше всех), слева второе,
+  // справа третье. Только оттенки шалфейного цвета страницы Club — без
+  // красного/цветных обводок.
+  function buildLeaderboardPodium(entries) {
+    var podium = el("div", "lb-podium");
+    [1, 0, 2].forEach(function (idx) {
+      var entry = entries[idx];
+      if (!entry) return;
+      var rank = idx + 1;
+      var pod = el("div", "lb-pod lb-pod-" + rank + (lbIsMe(entry) ? " me" : ""));
+      var av = el("div", "lb-pod-avatar");
+      av.appendChild(buildLeaderboardAvatar(entry.tg_id, entry.name));
+      av.appendChild(el("span", "lb-pod-medal", String(rank)));
+      pod.appendChild(av);
+      pod.appendChild(el("div", "lb-pod-name", escapeHtml(entry.name || t("profile.noName"))));
+      pod.appendChild(el("div", "lb-pod-count", '<b>' + entry.order_count + '</b> ' + escapeHtml(t("profile.statOrders"))));
+      pod.appendChild(el("div", "lb-pod-base", '<span>' + rank + '</span>'));
+      podium.appendChild(pod);
+    });
+    return podium;
+  }
+
+  function buildLeaderboardMeBar() {
+    var list = state.leaderboard || [];
+    var me = state.leaderboardMe;
+    if (me && me.rank <= list.length) return null; // уже в топе — строка подсвечена в списке
+    var bar = el("div", "lb-me-bar");
+    if (!me) {
+      bar.classList.add("empty");
+      bar.appendChild(el("div", "lb-me-note", escapeHtml(t("club.lb.noRank"))));
+      return bar;
+    }
+    var row = el("div", "lb-me-row");
+    row.appendChild(el("div", "lb-me-rank", "#" + me.rank));
+    row.appendChild(buildLeaderboardAvatar(me.tg_id, me.name));
+    var info = el("div", "leaderboard-info");
+    info.appendChild(el("div", "leaderboard-name", escapeHtml(t("club.lb.you")) + (state.rankedTotal ? ' <span class="lb-me-of">' + escapeHtml(t("club.lb.of", { n: state.rankedTotal })) + '</span>' : "")));
+    var tenth = list.length >= 10 ? list[9].order_count : 0;
+    var gap = Math.max(1, tenth - me.order_count + 1);
+    if (tenth) info.appendChild(el("div", "lb-me-gap", escapeHtml(t("club.lb.toTop", { n: gap, orders: t("profile.statOrders") }))));
+    row.appendChild(info);
+    row.appendChild(el("div", "lb-me-count", '<b>' + me.order_count + '</b><span>' + escapeHtml(t("profile.statOrders")) + '</span>'));
+    bar.appendChild(row);
+    return bar;
+  }
+
+  // root — контейнер открытого по тапу на карточку "Герои паузы" окна
+  // (см. clubCardTapHandler). Заголовок рисует сам оверлей (serif).
   function renderClubLeaderboard(root) {
     root.innerHTML = "";
     var list = state.leaderboard || [];
+    var page = el("div", "lb-page");
+    root.appendChild(page);
+    page.appendChild(el("div", "lb-subtitle", escapeHtml(t("club.lb.subtitle"))));
     if (!list.length) {
-      root.appendChild(el("div", "profile-section-title", t("club.leaderboardTitle")));
-      root.appendChild(el("div", "empty-note", t("club.leaderboardEmpty")));
+      page.appendChild(el("div", "empty-note", t("club.leaderboardEmpty")));
       return;
     }
-
-    root.appendChild(el("div", "profile-section-title", t("club.leaderboardTitle")));
-
-    var top3 = el("div", "leaderboard-top3");
-    list.slice(0, 3).forEach(function (entry, idx) { top3.appendChild(buildLeaderboardRow(entry, idx + 1)); });
-    root.appendChild(top3);
-
+    page.appendChild(buildLeaderboardPodium(list.slice(0, 3)));
     var rest = list.slice(3);
     if (rest.length) {
-      var restWrap = el("div", "leaderboard-rest" + (state.leaderboardExpanded ? "" : " collapsed"));
-      rest.forEach(function (entry, idx) { restWrap.appendChild(buildLeaderboardRow(entry, idx + 4)); });
-      root.appendChild(restWrap);
-
-      var toggle = el("button", "btn-text leaderboard-toggle", state.leaderboardExpanded ? t("club.leaderboardShowLess") : t("club.leaderboardShowMore"));
-      toggle.addEventListener("click", function () {
-        haptic("select");
-        state.leaderboardExpanded = !state.leaderboardExpanded;
-        renderClubLeaderboard(root);
-      });
-      root.appendChild(toggle);
+      var card = el("div", "lb-list");
+      rest.forEach(function (entry, i) { card.appendChild(buildLeaderboardRow(entry, i + 4)); });
+      page.appendChild(card);
     }
+    var bar = buildLeaderboardMeBar();
+    if (bar) page.appendChild(bar);
   }
 
   function loadClubLeaderboard() {
     api("/api/club/leaderboard").then(function (data) {
       state.leaderboard = data.leaderboard || [];
       state.totalClients = data.total_clients || 0;
+      state.leaderboardMe = data.me || null;
+      state.rankedTotal = data.ranked_total || 0;
       renderClubNowCards();
     }).catch(function () {
       // Карточка "Рейтинг" и так уже отрисована (с 0 человек при первой
@@ -2302,19 +2347,19 @@
       openProfileSubscreen(tx.eyebrow, function (sub) {
         sub.innerHTML = "";
         sub.appendChild(buildGiveawayParticipants((state.giveaway && state.giveaway.participant_names) || []));
-      });
+      }, true);
     };
     if (c.kind === "biggift") return function () {
       openProfileSubscreen(tx.eyebrow, function (sub) {
         sub.innerHTML = "";
         sub.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + t("club.pdayBig.comingSoon") + "</p>"));
-      });
+      }, true);
     };
     if (c.kind === "top") return function () {
-      openProfileSubscreen(t("club.leaderboardTitle"), function (sub) {
+      openProfileSubscreen(tx.heading || t("club.leaderboardTitle"), function (sub) {
         sub.innerHTML = "";
         renderClubLeaderboard(sub);
-      });
+      }, true);
     };
     if (c.kind === "moments") return openClubMoments;
     // Своя карточка — простая страница: фото, заголовок, описание.
@@ -2331,7 +2376,7 @@
         if (tx.heading) page.appendChild(el("h3", "club-card-page-title", escapeHtml(tx.heading)));
         if (tx.desc) page.appendChild(el("div", "club-card-page-desc", escapeHtml(tx.desc).replace(/\n/g, "<br>")));
         sub.appendChild(page);
-      });
+      }, true);
     };
   }
 
@@ -3261,10 +3306,10 @@
   // Открывает содержимое одного раздела профиля в оверлее визарда —
   // loaderFn это уже существующие loadOrders/loadMessages(root), просто
   // теперь вызываются по тапу на строку, а не сразу все разом на экране.
-  function openProfileSubscreen(title, loaderFn) {
+  function openProfileSubscreen(title, loaderFn, serif) {
     openWizard(function (body) {
       wizardPhaseEl.innerHTML = "";
-      body.appendChild(el("h2", "wizard-title", title));
+      body.appendChild(el("h2", "wizard-title" + (serif ? " club-serif" : ""), title));
       var sub = el("div");
       sub.appendChild(el("div", "skeleton-block"));
       body.appendChild(sub);

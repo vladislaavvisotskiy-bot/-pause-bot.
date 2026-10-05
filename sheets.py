@@ -2432,6 +2432,29 @@ def get_club_leaderboard(limit: int = 10) -> list:
     return out
 
 
+def get_club_leaderboard_me(tg_id) -> tuple:
+    """(me, ranked_total) для закреплённой строки "Вы" в рейтинге: me —
+    {"tg_id","name","order_count","club","rank"} (rank — место в том же
+    порядке, что и get_club_leaderboard) либо None, если у человека нет
+    заказов / он не в рейтинге; ranked_total — сколько всего участников
+    в рейтинге."""
+    clients = _load_clients()
+    ranked = [
+        c for c in clients
+        if c["tg_id"] and c["order_count"] > 0 and c["tg_id"] not in config.LEADERBOARD_EXCLUDED_TG_IDS
+    ]
+    ranked.sort(key=lambda c: -c["order_count"])
+    target = str(tg_id)
+    for i, c in enumerate(ranked):
+        if c["tg_id"] == target:
+            level = get_club_level(c["order_count"])
+            return {
+                "tg_id": c["tg_id"], "name": c["name"], "order_count": c["order_count"], "rank": i + 1,
+                "club": {"key": level["key"], "emoji": level["emoji"], "label": level["label"]},
+            }, len(ranked)
+    return None, len(ranked)
+
+
 def get_total_clients_count() -> int:
     """Общее число зарегистрированных клиентов в Sheet1 — для карточки
     "Рейтинг" в PAUSE App ("N человек"), в отличие от get_club_leaderboard

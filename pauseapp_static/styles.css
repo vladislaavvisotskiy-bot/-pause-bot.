@@ -313,21 +313,6 @@ p { margin: 0; color: var(--ink-soft); }
 /* Pause Club — таблица лидеров (топ-10 по числу заказов)               */
 /* ------------------------------------------------------------------ */
 
-.leaderboard-top3 { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
-.leaderboard-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-}
-/* Первое место — единственный цветной акцент, тот же --accent-warm, что
-   уже используется в приложении (метка "Розыгрыш") — не новый цвет. */
-.leaderboard-row.rank-1 { background: var(--accent-warm-soft); border-color: var(--accent-warm); padding: 14px; }
-.leaderboard-rank { flex: 0 0 auto; width: 16px; text-align: center; font-weight: 700; font-size: 13px; color: var(--ink-soft); }
-.leaderboard-row.rank-1 .leaderboard-rank { color: var(--accent-warm); font-size: 15px; }
 
 .leaderboard-avatar {
   flex: 0 0 auto;
@@ -344,25 +329,15 @@ p { margin: 0; color: var(--ink-soft); }
   overflow: hidden;
 }
 .leaderboard-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.leaderboard-row.rank-1 .leaderboard-avatar { width: 54px; height: 54px; font-size: 17px; border: 2px solid var(--accent-warm); }
 
 .leaderboard-info { flex: 1 1 auto; min-width: 0; }
 .leaderboard-name { font-weight: 600; font-size: 14.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.leaderboard-row.rank-1 .leaderboard-name { font-size: 15.5px; }
 .leaderboard-club { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
 
 .leaderboard-count { flex: 0 0 auto; text-align: right; }
 .leaderboard-count-value { font-weight: 700; font-size: 16px; color: var(--ink); }
-.leaderboard-row.rank-1 .leaderboard-count-value { font-size: 19px; color: var(--accent-warm); }
 .leaderboard-count-label { font-size: 10px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
 
-.leaderboard-rest { display: flex; flex-direction: column; margin-top: 4px; }
-.leaderboard-rest.collapsed { display: none; }
-.leaderboard-rest .leaderboard-row { background: none; border: none; border-radius: 0; padding: 9px 2px; border-bottom: 1px solid var(--line); }
-.leaderboard-rest .leaderboard-row:last-child { border-bottom: none; }
-.leaderboard-rest .leaderboard-avatar { width: 32px; height: 32px; font-size: 12px; }
-.leaderboard-rest .leaderboard-name { font-size: 14px; }
-.leaderboard-rest .leaderboard-count-value { font-size: 14px; }
 
 .leaderboard-toggle { width: 100%; text-align: center; margin-top: 2px; }
 
@@ -1770,3 +1745,68 @@ p { margin: 0; color: var(--ink-soft); }
   #bottom-nav { max-width: 480px; margin: 0 auto; left: 50%; transform: translateX(-50%); }
   #bottom-nav.nav-hidden { transform: translate(-50%, 100%); }
 }
+
+
+/* ------------------------------------------------------------------ */
+/* Pause Club — заголовки раздела (serif) и страница "Герои паузы"     */
+/* ------------------------------------------------------------------ */
+
+.club-now-heading, .club-serif {
+  font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.club-now-heading { font-size: 22px; }
+.club-serif { font-size: 30px; line-height: 1.1; margin-bottom: 6px; }
+
+.lb-page { display: flex; flex-direction: column; min-height: calc(100vh - 170px); }
+.lb-subtitle { color: var(--ink-soft); font-size: 14px; margin-bottom: 22px; }
+
+/* Пьедестал — три шалфейных оттенка (цвет карточки статуса), без акцентов */
+.lb-podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; margin-bottom: 20px; }
+.lb-pod { flex: 1 1 0; max-width: 120px; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.lb-pod-avatar { position: relative; margin-bottom: 14px; }
+.lb-pod .leaderboard-avatar { width: 58px; height: 58px; font-size: 18px; box-shadow: 0 0 0 3px var(--ivory), 0 0 0 4px rgba(133, 135, 114, 0.45); }
+.lb-pod-1 .leaderboard-avatar { width: 76px; height: 76px; font-size: 22px; box-shadow: 0 0 0 3px var(--ivory), 0 0 0 5px #858772; }
+.lb-pod-medal {
+  position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%);
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+  background: var(--ink); color: var(--ivory);
+  font-size: 12px; font-weight: 700; line-height: 22px;
+  border: 2px solid var(--ivory); box-sizing: content-box;
+}
+.lb-pod-1 .lb-pod-medal { background: #858772; }
+.lb-pod-name { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.25; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lb-pod-count { font-size: 11.5px; color: var(--ink-soft); margin: 3px 0 10px; }
+.lb-pod-count b { color: var(--ink); font-size: 14px; }
+.lb-pod-base {
+  width: 100%; border-radius: 16px 16px 6px 6px;
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 8px;
+  font-family: 'Cormorant Garamond', Georgia, serif; font-size: 30px; font-weight: 600; color: rgba(255, 253, 245, 0.92);
+}
+.lb-pod-1 .lb-pod-base { height: 96px; background: linear-gradient(180deg, #8d8f79, #767861); }
+.lb-pod-2 .lb-pod-base { height: 70px; background: linear-gradient(180deg, #a3a590, #8f917c); }
+.lb-pod-3 .lb-pod-base { height: 52px; background: linear-gradient(180deg, #b9baa8, #a6a894); }
+
+/* Места 4-10 — одна мягкая карточка со строками */
+.lb-list { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 4px 14px; }
+.lb-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.lb-row:last-child { border-bottom: none; }
+.lb-row .leaderboard-avatar { width: 38px; height: 38px; font-size: 13px; }
+.lb-rank { flex: 0 0 auto; width: 22px; text-align: center; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 20px; font-weight: 600; color: var(--ink-soft); }
+.lb-row.me { margin: 0 -14px; padding: 11px 14px; background: rgba(133, 135, 114, 0.16); border-bottom-color: transparent; }
+.lb-you, .lb-me-of { font-size: 11px; font-weight: 600; color: #fffdf5; background: #858772; border-radius: 999px; padding: 2px 8px; margin-left: 4px; vertical-align: 1px; }
+
+/* Закреплённая внизу строка "Вы", если человека нет в топ-10 */
+.lb-me-bar { margin-top: auto; position: sticky; bottom: 4px; padding-top: 16px; }
+.lb-me-bar::before { content: ""; position: absolute; inset: 0 -18px -40px; z-index: -1; background: linear-gradient(180deg, rgba(242, 235, 220, 0), var(--ivory) 45%); }
+.lb-me-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 20px; background: #858772; color: #fffdf5; box-shadow: 0 8px 24px rgba(43, 40, 35, 0.18); }
+.lb-me-rank { flex: 0 0 auto; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 600; min-width: 36px; }
+.lb-me-row .leaderboard-avatar { width: 38px; height: 38px; font-size: 13px; background: rgba(255, 253, 245, 0.28); color: #fffdf5; }
+.lb-me-row .leaderboard-name { color: #fffdf5; }
+.lb-me-row .lb-me-of { background: rgba(255, 253, 245, 0.25); }
+.lb-me-gap { font-size: 11.5px; color: rgba(255, 253, 245, 0.85); margin-top: 2px; }
+.lb-me-count { flex: 0 0 auto; text-align: right; display: flex; flex-direction: column; }
+.lb-me-count b { font-size: 18px; }
+.lb-me-count span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.8; }
+.lb-me-note { text-align: center; padding: 14px 16px; border-radius: 20px; background: rgba(133, 135, 114, 0.16); color: var(--ink); font-size: 13.5px; }

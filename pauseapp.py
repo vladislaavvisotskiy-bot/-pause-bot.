@@ -1045,7 +1045,8 @@ async def api_messages(request: web.Request):
 async def api_club_leaderboard(request: web.Request):
     leaderboard = await _retry_sheets(sheets.get_club_leaderboard)
     total_clients = await _retry_sheets(sheets.get_total_clients_count)
-    return web.json_response({"leaderboard": leaderboard, "total_clients": total_clients})
+    me, ranked_total = await _retry_sheets(sheets.get_club_leaderboard_me, request["tg_id"])
+    return web.json_response({"leaderboard": leaderboard, "total_clients": total_clients, "me": me, "ranked_total": ranked_total})
 
 
 # ---------------------------------------------------------------------------
