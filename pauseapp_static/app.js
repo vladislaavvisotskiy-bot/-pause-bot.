@@ -195,6 +195,15 @@
       "club.giveaway.showAll": "Показать всех",
       "club.giveaway.showLess": "Свернуть",
       "club.giveaway.loadFailed": "Не удалось загрузить PAUSE GIFT.",
+      "club.gp.eyebrow": "PAUSE DAY · сегодня", "club.gp.countdown": "До розыгрыша", "club.gp.drawAt": "Розыгрыш в {time}", "club.gp.winnerLabel": "Победитель дня",
+      "club.gp.youIn": "Вы в пуле", "club.gp.youInNote": "Удачи! Итоги подводим каждый день в {time}.",
+      "club.gp.youOut": "Вы пока не в пуле", "club.gp.youOutNote": "Оформите заказ — и вы автоматически попадёте в сегодняшний розыгрыш.",
+      "club.gp.locked": "Доступно со статуса «{label}»", "club.gp.lockedNote": "Ещё {left} заказов — и каждый ваш заказ будет попадать в пул автоматически.",
+      "club.gp.howTitle": "Как это работает",
+      "club.gp.step1": "Заказывайте как обычно", "club.gp.step1d": "Начиная со статуса «{label}» каждый заказ автоматически попадает в сегодняшний пул.",
+      "club.gp.step2": "Случайный выбор", "club.gp.step2d": "Каждый день в {time} мы выбираем одного участника случайным образом.",
+      "club.gp.step3": "Сет за наш счёт", "club.gp.step3d": "Победитель получает один сет PAUSE в подарок — мы сообщим сами.",
+      "club.gp.poolTitle": "Участники сегодня",
 
       "club.pday.heading": "Дарим эмоции",
       "club.pday.desc": "Каждый день мы дарим один сет PAUSE тому, кого выберет случай. Участвуй просто своими заказами.",
@@ -473,6 +482,15 @@
       "club.giveaway.showAll": "Barchasini ko'rsatish",
       "club.giveaway.showLess": "Yig'ish",
       "club.giveaway.loadFailed": "PAUSE GIFT'ni yuklab bo'lmadi.",
+      "club.gp.eyebrow": "PAUSE DAY · bugun", "club.gp.countdown": "Qur'agacha", "club.gp.drawAt": "Qur'a {time} da", "club.gp.winnerLabel": "Kun g'olibi",
+      "club.gp.youIn": "Siz pulddasiz", "club.gp.youInNote": "Omad! Natijalarni har kuni soat {time}da e'lon qilamiz.",
+      "club.gp.youOut": "Siz hozircha pulda emassiz", "club.gp.youOutNote": "Buyurtma bering — bugungi qur'aga avtomatik tushasiz.",
+      "club.gp.locked": "«{label}» darajasidan boshlab mavjud", "club.gp.lockedNote": "Yana {left} ta buyurtma — va har bir buyurtmangiz avtomatik pulga tushadi.",
+      "club.gp.howTitle": "Bu qanday ishlaydi",
+      "club.gp.step1": "Odatdagidek buyurtma bering", "club.gp.step1d": "«{label}» darajasidan boshlab har bir buyurtma bugungi pulga avtomatik tushadi.",
+      "club.gp.step2": "Tasodifiy tanlov", "club.gp.step2d": "Har kuni soat {time}da bitta ishtirokchini tasodifan tanlaymiz.",
+      "club.gp.step3": "Set bizdan", "club.gp.step3d": "G'olib bitta PAUSE setini sovg'a qilib oladi — o'zimiz xabar beramiz.",
+      "club.gp.poolTitle": "Bugungi ishtirokchilar",
 
       "club.pday.heading": "His-tuyg'ularni sovg'a qilamiz",
       "club.pday.desc": "Har kuni tasodif tanlagan bitta odamga bitta PAUSE seti sovg'a qilamiz. Shunchaki buyurtma bering.",
@@ -751,6 +769,15 @@
       "club.giveaway.showAll": "Show all",
       "club.giveaway.showLess": "Show less",
       "club.giveaway.loadFailed": "Couldn't load PAUSE GIFT.",
+      "club.gp.eyebrow": "PAUSE DAY · today", "club.gp.countdown": "Until the draw", "club.gp.drawAt": "Draw at {time}", "club.gp.winnerLabel": "Winner of the day",
+      "club.gp.youIn": "You're in the pool", "club.gp.youInNote": "Good luck! We draw the winner every day at {time}.",
+      "club.gp.youOut": "You're not in the pool yet", "club.gp.youOutNote": "Place an order and you'll join today's draw automatically.",
+      "club.gp.locked": "Unlocked from «{label}»", "club.gp.lockedNote": "{left} more orders — and every order after that joins the pool automatically.",
+      "club.gp.howTitle": "How it works",
+      "club.gp.step1": "Order as usual", "club.gp.step1d": "From «{label}» status, every order joins today's pool automatically.",
+      "club.gp.step2": "A random pick", "club.gp.step2d": "Every day at {time} we pick one participant at random.",
+      "club.gp.step3": "A set on us", "club.gp.step3d": "The winner gets one PAUSE set as a gift — we'll let you know.",
+      "club.gp.poolTitle": "Today's participants",
 
       "club.pday.heading": "Gifting good moments",
       "club.pday.desc": "Every day we gift one PAUSE set to someone chosen at random. Just join in with your orders.",
@@ -2344,9 +2371,8 @@
 
   function clubCardTapHandler(c, tx) {
     if (c.kind === "pday") return function () {
-      openProfileSubscreen(tx.eyebrow, function (sub) {
-        sub.innerHTML = "";
-        sub.appendChild(buildGiveawayParticipants((state.giveaway && state.giveaway.participant_names) || []));
+      openProfileSubscreen(tx.heading || tx.eyebrow, function (sub) {
+        buildGiveawayPage(sub);
       }, true);
     };
     if (c.kind === "biggift") return function () {
@@ -2469,30 +2495,103 @@
   // приходят с сервера уже готовыми, здесь только отображение).
   // -------------------------------------------------------------------
 
-  function buildGiveawayParticipants(names) {
-    var wrap = el("div", "giveaway-pool");
-    wrap.appendChild(el("div", "giveaway-pool-title", t("club.giveaway.poolCount", { count: names.length })));
-    if (!names.length) {
-      wrap.appendChild(el("div", "empty-note", t("club.giveaway.empty")));
-      return wrap;
+  // Секунд до ближайшего розыгрыша (HH:MM по Ташкенту — как на сервере).
+  function secondsToDraw(drawTime) {
+    var hm = String(drawTime || "12:00").split(":");
+    var now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent" }));
+    var target = new Date(now.getTime());
+    target.setHours(parseInt(hm[0], 10) || 0, parseInt(hm[1], 10) || 0, 0, 0);
+    var diff = Math.round((target - now) / 1000);
+    return diff > 0 ? diff : 0;
+  }
+
+  function fmtCountdown(sec) {
+    function p(n) { return n < 10 ? "0" + n : "" + n; }
+    return p(Math.floor(sec / 3600)) + ":" + p(Math.floor((sec % 3600) / 60)) + ":" + p(sec % 60);
+  }
+
+  // Страница по тапу на карточку PAUSE DAY: герой со статусом/таймером,
+  // "ваш статус", как это работает, участники.
+  function buildGiveawayPage(root) {
+    root.innerHTML = "";
+    var g = state.giveaway || {};
+    var names = g.participant_names || [];
+    var drawTime = g.draw_time || "12:00";
+    var rl = g.required_level || {};
+    var page = el("div", "gp-page");
+
+    // --- герой
+    var hero = el("div", "gp-hero");
+    hero.appendChild(el("div", "gp-hero-bg", ICON_LEAF));
+    var inner = el("div", "gp-hero-inner");
+    inner.appendChild(el("div", "gp-eyebrow", escapeHtml(t("club.gp.eyebrow"))));
+    if (g.closed && g.winner_name) {
+      inner.appendChild(el("div", "gp-hero-label", escapeHtml(t("club.gp.winnerLabel"))));
+      inner.appendChild(el("div", "gp-hero-main", escapeHtml(g.winner_name)));
+      inner.appendChild(el("div", "gp-hero-note", escapeHtml(t("club.giveaway.winnerNote", { name: g.winner_name }))));
+    } else if (g.closed) {
+      inner.appendChild(el("div", "gp-hero-note", escapeHtml(t("club.giveaway.noWinner"))));
+    } else {
+      inner.appendChild(el("div", "gp-hero-label", escapeHtml(t("club.gp.countdown"))));
+      var clock = el("div", "gp-hero-main gp-clock", fmtCountdown(secondsToDraw(drawTime)));
+      inner.appendChild(clock);
+      var timer = setInterval(function () {
+        if (!document.body.contains(clock)) { clearInterval(timer); return; }
+        clock.textContent = fmtCountdown(secondsToDraw(drawTime));
+      }, 1000);
     }
-    var VISIBLE = 8;
-    var list = el("div", "giveaway-names");
-    var shown = state.giveawayExpanded ? names : names.slice(0, VISIBLE);
-    shown.forEach(function (name) {
-      list.appendChild(el("span", "giveaway-name-pill", escapeHtml(name)));
+    var chips = el("div", "gp-chips");
+    chips.innerHTML =
+      '<span>' + ICON_PDAY_PEOPLE + escapeHtml(t("club.pday.participants", { count: names.length })) + '</span>' +
+      '<span>' + ICON_PDAY_CLOCK + escapeHtml(t("club.gp.drawAt", { time: drawTime })) + '</span>';
+    inner.appendChild(chips);
+    hero.appendChild(inner);
+    page.appendChild(hero);
+
+    // --- ваш статус
+    var me = el("div", "gp-me");
+    var lvlLabel = rl.key ? clubLevelLabel(rl.key, rl.label) : (rl.label || "");
+    var meTitle, meNote, meCls = "";
+    if (g.joined) { meTitle = t("club.gp.youIn"); meNote = t("club.gp.youInNote", { time: drawTime }); meCls = " ok"; }
+    else if (g.eligible) { meTitle = t("club.gp.youOut"); meNote = t("club.gp.youOutNote"); }
+    else { meTitle = t("club.gp.locked", { label: lvlLabel }); meNote = t("club.gp.lockedNote", { left: rl.left || 0 }); meCls = " locked"; }
+    me.className = "gp-me" + meCls;
+    me.innerHTML = '<span class="gp-me-dot"></span><div><div class="gp-me-title">' + escapeHtml(meTitle) + '</div><div class="gp-me-note">' + escapeHtml(meNote) + '</div></div>';
+    page.appendChild(me);
+
+    // --- как это работает
+    page.appendChild(el("h3", "gp-section club-serif-h", escapeHtml(t("club.gp.howTitle"))));
+    var steps = el("div", "gp-steps");
+    [["step1", { label: lvlLabel }], ["step2", { time: drawTime }], ["step3", {}]].forEach(function (st, i) {
+      var row = el("div", "gp-step");
+      row.innerHTML = '<span class="gp-step-n">' + (i + 1) + '</span><div><div class="gp-step-t">' + escapeHtml(t("club.gp." + st[0])) +
+        '</div><div class="gp-step-d">' + escapeHtml(t("club.gp." + st[0] + "d", st[1])) + '</div></div>';
+      steps.appendChild(row);
     });
-    wrap.appendChild(list);
-    if (names.length > VISIBLE) {
-      var toggle = el("button", "btn-text leaderboard-toggle", state.giveawayExpanded ? t("club.giveaway.showLess") : t("club.giveaway.showAll"));
-      toggle.addEventListener("click", function () {
-        haptic("select");
-        state.giveawayExpanded = !state.giveawayExpanded;
-        renderClubGiveaway();
+    page.appendChild(steps);
+
+    // --- участники
+    page.appendChild(el("h3", "gp-section club-serif-h", escapeHtml(t("club.gp.poolTitle")) + ' <span class="gp-count">' + names.length + '</span>'));
+    var pool = el("div", "gp-pool");
+    page.appendChild(pool);
+    function drawPool() {
+      pool.innerHTML = "";
+      if (!names.length) { pool.appendChild(el("div", "gp-empty", escapeHtml(t("club.giveaway.empty")))); return; }
+      var VISIBLE = 12;
+      var shown = state.giveawayExpanded ? names : names.slice(0, VISIBLE);
+      var grid = el("div", "gp-people");
+      shown.forEach(function (name) {
+        grid.appendChild(el("div", "gp-person", '<span class="gp-person-av">' + escapeHtml(initials(name)) + '</span><span class="gp-person-name">' + escapeHtml(name) + '</span>'));
       });
-      wrap.appendChild(toggle);
+      pool.appendChild(grid);
+      if (names.length > VISIBLE) {
+        var toggle = el("button", "btn-text leaderboard-toggle", state.giveawayExpanded ? t("club.giveaway.showLess") : t("club.giveaway.showAll"));
+        toggle.addEventListener("click", function () { haptic("select"); state.giveawayExpanded = !state.giveawayExpanded; drawPool(); });
+        pool.appendChild(toggle);
+      }
     }
-    return wrap;
+    drawPool();
+    root.appendChild(page);
   }
 
   // Старый инлайн-виджет (заголовок "PAUSE DAY" + статус "Вы участвуете"/
