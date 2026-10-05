@@ -1584,19 +1584,36 @@
 
   var homeCarouselTimer = null;
 
+  var HOME_PROMO_ARROW = '<div class="home-promo-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg></div>';
+
+  // Слайды — в том же формате, что и прежняя плашка "Сегодняшнее меню"
+  // (иконка, заголовок, подпись, стрелка).
   function buildHomeMenuSlide(m) {
-    var card = el("div", "pday-card pday-card-menu");
-    var open = m.published && !m.cutoff_passed;
-    var heading = open ? t("home.ordersOpenTitle", { date: m.date || "" })
-      : (m.published ? t("home.cutoffClosed") : t("home.cominSoon"));
+    var card = el("div", "card home-promo");
+    if (m.published && !m.cutoff_passed) {
+      card.innerHTML =
+        '<div class="home-promo-icon">' + ICON_LEAF + '</div>' +
+        '<div><div class="home-promo-title">' + t("home.ordersOpenTitle", { date: escapeHtml(m.date || "") }) + '</div>' +
+        '<div class="home-promo-sub">' + escapeHtml(t("home.todayMenu")) + '</div></div>' + HOME_PROMO_ARROW;
+    } else {
+      card.innerHTML =
+        '<div class="home-promo-icon">' + ICON_CLOCK + '</div>' +
+        '<div><div class="home-promo-title">' + t("home.menuToday") + '</div>' +
+        '<div class="home-promo-sub">' + (m.published ? t("home.cutoffClosed") : t("home.cominSoon")) + '</div></div>';
+    }
+    card.addEventListener("click", function () { showScreen("menu"); });
+    return card;
+  }
+
+  function buildHomeClubSlide(c) {
+    var tx = clubCardTexts(c);
+    var card = el("div", "card home-promo");
     card.innerHTML =
-      '<div class="pday-card-bg">' + ICON_LEAF + '</div>' +
-      '<div class="pday-card-content">' +
-        '<div class="pday-card-eyebrow">' + escapeHtml(t("home.todayMenu")) + '</div>' +
-        '<div class="pday-card-heading">' + escapeHtml(heading) + '</div>' +
-        (open ? '<div class="pday-card-btn">' + escapeHtml(t("home.chooseDishes")) + '</div>' : "") +
-      '</div>';
-    card.addEventListener("click", function () { haptic("select"); showScreen("menu"); });
+      '<div class="home-promo-icon">' + ICON_LEAF + '</div>' +
+      '<div><div class="home-promo-title">' + escapeHtml(tx.heading || tx.eyebrow) + '</div>' +
+      '<div class="home-promo-sub">' + escapeHtml(tx.heading ? tx.eyebrow : "") + '</div></div>' + HOME_PROMO_ARROW;
+    var onTap = clubCardTapHandler(c, tx);
+    card.addEventListener("click", function () { haptic("select"); onTap(); });
     return card;
   }
 
@@ -1614,7 +1631,7 @@
       if (!state.moments) loadMoments();
     }
     var slidesData = [buildHomeMenuSlide(m)];
-    (state.clubCards || DEFAULT_CLUB_CARDS).forEach(function (c) { slidesData.push(buildClubCard(c)); });
+    (state.clubCards || DEFAULT_CLUB_CARDS).forEach(function (c) { slidesData.push(buildHomeClubSlide(c)); });
 
     var carousel = el("div", "pday-carousel home-news");
     var track = el("div", "pday-carousel-track");
