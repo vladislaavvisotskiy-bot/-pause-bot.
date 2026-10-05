@@ -770,6 +770,24 @@ p { margin: 0; color: var(--ink-soft); }
 .checkout-summary-row + .checkout-summary-row { border-top: 1px solid var(--line); }
 .checkout-summary-row.is-ticket-item .checkout-summary-name { color: var(--accent-warm); }
 .checkout-summary-price.is-struck { text-decoration: line-through; opacity: 0.5; }
+
+.checkout-delivery-info-btn {
+  display: inline-flex; vertical-align: -3px;
+  color: var(--ink-soft);
+  background: transparent;
+  padding: 2px;
+  border-radius: 50%;
+}
+.checkout-delivery-info-btn:active { background: var(--ink-soft-bg); }
+
+.delivery-info-list { margin-top: 6px; }
+.delivery-info-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
+.delivery-info-row + .delivery-info-row { border-top: 1px solid var(--line); }
+.delivery-info-row.is-current { color: var(--accent-warm); }
+.delivery-info-row-icon { flex: 0 0 auto; color: inherit; display: flex; }
+.delivery-info-row-name { flex: 1; font-size: 14px; font-weight: 600; color: inherit; min-width: 0; }
+.delivery-info-row-range { display: block; font-size: 12px; font-weight: 400; color: var(--ink-soft); margin-top: 1px; }
+.delivery-info-row-price { flex: 0 0 auto; font-size: 13px; font-weight: 600; color: inherit; text-align: right; }
 .checkout-attach-row { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .checkout-screenshot-ok { color: var(--success); font-weight: 600; font-size: 13.5px; margin-top: 10px; }
 .checkout-screenshot-deferred { color: var(--ink-soft); font-size: 13.5px; margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

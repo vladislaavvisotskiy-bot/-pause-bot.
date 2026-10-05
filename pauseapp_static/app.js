@@ -189,6 +189,8 @@
 
       "checkout.summaryTitle": "Сверка заказа",
       "checkout.deliveryFeeLabel": "Доставка",
+      "checkout.deliveryInfoTitle": "Как считается доставка",
+      "checkout.deliveryInfoText": "Стоимость доставки зависит от вашего статуса Pause Club — чем больше заказов вы уже сделали, тем дешевле (а на верхних уровнях — бесплатно). Статус считается автоматически по количеству заказов.",
       "checkout.paymentTicket": "Билетом 🤎",
       "checkout.paymentTicketHint": "Один билет = один сет бесплатно",
       "checkout.ticketRemainingTotal": "Итого к оплате",
@@ -434,6 +436,8 @@
 
       "checkout.summaryTitle": "Buyurtma tekshiruvi",
       "checkout.deliveryFeeLabel": "Yetkazib berish",
+      "checkout.deliveryInfoTitle": "Yetkazib berish qanday hisoblanadi",
+      "checkout.deliveryInfoText": "Yetkazib berish narxi sizning Pause Club statusingizga bog'liq — qancha ko'p buyurtma bersangiz, shuncha arzon (yuqori darajalarda — bepul). Status buyurtmalar soniga qarab avtomatik hisoblanadi.",
       "checkout.paymentTicket": "Chipta bilan 🤎",
       "checkout.paymentTicketHint": "Bir chipta = bir set bepul",
       "checkout.ticketRemainingTotal": "To'lash uchun jami",
@@ -679,6 +683,8 @@
 
       "checkout.summaryTitle": "Order summary",
       "checkout.deliveryFeeLabel": "Delivery",
+      "checkout.deliveryInfoTitle": "How delivery is calculated",
+      "checkout.deliveryInfoText": "Delivery cost depends on your Pause Club status — the more orders you've placed, the cheaper it gets (free at the top tiers). Status is calculated automatically from your order count.",
       "checkout.paymentTicket": "With a ticket 🤎",
       "checkout.paymentTicketHint": "One ticket = one set, free",
       "checkout.ticketRemainingTotal": "Total to pay",
@@ -2506,8 +2512,14 @@
     if (deliveryFee > 0) {
       var deliveryLine = el("div", "checkout-summary-row");
       deliveryLine.innerHTML =
-        '<span class="checkout-summary-name">' + escapeHtml(t("checkout.deliveryFeeLabel")) + '</span>' +
+        '<span class="checkout-summary-name">' + escapeHtml(t("checkout.deliveryFeeLabel")) +
+          ' <button type="button" class="checkout-delivery-info-btn">' + ICON_CHECKOUT_INFO + '</button></span>' +
         '<span class="checkout-summary-price">' + fmtSum(deliveryFee) + '</span>';
+      deliveryLine.querySelector(".checkout-delivery-info-btn").addEventListener("click", function (e) {
+        e.stopPropagation();
+        haptic("select");
+        showInfo(buildDeliveryInfoHtml());
+      });
       summaryBox.appendChild(deliveryLine);
     }
     var summaryTotalRow = el("div", "summary-total");
@@ -3394,6 +3406,29 @@
   var ICON_OPS_CRM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><circle cx="8" cy="13.5" r="1.6"/><path d="M12.5 13h5M12.5 16.5h5"/></svg>';
   var ICON_OPS_LEADS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16l-6.5 8.5V19l-3 2v-8.5z"/></svg>';
   var ICON_CRM_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/></svg>';
+  var ICON_CHECKOUT_INFO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="8" r="0.6" fill="currentColor" stroke="none"/></svg>';
+
+  // Разъяснение "почему доставка платная" по значку (i) рядом со строкой
+  // "Доставка" в сверке заказа — переиспользует те же данные, что уже
+  // грузит /api/profile для экрана "Pause Club" (state.profile.club.levels,
+  // см. renderClubLevelsScreen), ни одного нового запроса.
+  function buildDeliveryInfoHtml() {
+    var levels = (state.profile && state.profile.club && state.profile.club.levels) || [];
+    var rows = levels.map(function (l) {
+      return '<div class="delivery-info-row' + (l.current ? ' is-current' : '') + '">' +
+        '<span class="delivery-info-row-icon">' + clubLevelIcon(l.key) + '</span>' +
+        '<span class="delivery-info-row-name">' + escapeHtml(clubLevelLabel(l.key, l.label)) +
+          '<span class="delivery-info-row-range">' + escapeHtml(t("profile.clubOrders", { range: l.range_text })) + '</span>' +
+        '</span>' +
+        '<span class="delivery-info-row-price">' + escapeHtml(l.delivery) + '</span>' +
+      '</div>';
+    }).join("");
+    return (
+      '<h3 style="margin-top:0">' + escapeHtml(t("checkout.deliveryInfoTitle")) + '</h3>' +
+      '<p>' + escapeHtml(t("checkout.deliveryInfoText")) + '</p>' +
+      '<div class="delivery-info-list">' + rows + '</div>'
+    );
+  }
   var CRM_STAGE_LABELS = { cold: "Холодный", warm: "Тёплый", dozhim: "Дожим", sale: "Продажа" };
   var ICON_CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>';
 
