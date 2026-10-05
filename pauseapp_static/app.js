@@ -6668,7 +6668,7 @@
   // перерисовывается следом, чтобы точка пропала, не дожидаясь обратного
   // перехода на вкладку.
   // Лепесток — "билет" PAUSE DAY (оплачивает один сет). Заливка currentColor.
-  var ICON_PETAL = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 1.8c4.6 3.9 7.2 7.6 7.2 11.6a7.2 7.2 0 0 1-14.4 0c0-4 2.6-7.7 7.2-11.6z"/><path d="M12 7.5v11.4" stroke="rgba(255,255,255,0.45)" stroke-width="1.1" stroke-linecap="round" fill="none"/></svg>';
+  var ICON_PETAL = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 22.2C10.6 18.6 6 16.4 6 10.6 6 6.2 8.7 2.6 12 2c3.3.6 6 4.2 6 8.6 0 5.8-4.6 8-6 11.6z"/><path d="M12 20V8.6M12 14.6l-2.6-2.6M12 12.2l2.4-2.4" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" fill="none"/></svg>';
 
   function loadNotifications(root) {
     api("/api/notifications").then(function (data) {

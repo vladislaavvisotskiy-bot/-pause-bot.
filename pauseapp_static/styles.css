@@ -1976,27 +1976,26 @@ p { margin: 0; color: var(--ink-soft); }
 
 /* ------------------------------------------------------------------ */
 /* Лепестки (бывшие "билеты" PAUSE DAY): уведомление, раздел бонусов,  */
-/* оплата. Цвет — терракот из палитры (тот же, что у карточки TOP).    */
+/* оплата. Фон — карамель (как у карточки PAUSE MOMENTS), сам лепесток */
+/* — зелёный.                                                          */
 /* ------------------------------------------------------------------ */
+
+:root { --petal-green: #6f8a4e; --petal-green-soft: #eaf0dc; --caramel-grad: radial-gradient(130% 110% at 85% 0%, #c89a5e 0%, #8a5a2e 52%, #3f2512 100%); }
 
 .notif-win, .notif-row { margin-bottom: 12px; }
 .is-clickable { cursor: pointer; }
-.notif-win {
-  position: relative; overflow: hidden; border-radius: 22px; padding: 18px 18px 16px; color: var(--ivory);
-  background: radial-gradient(130% 110% at 85% 0%, #c96a46 0%, #b1442e 52%, #6b2415 100%);
-  box-shadow: 0 10px 26px rgba(177, 68, 46, 0.22);
-}
-.notif-win-bg { position: absolute; right: -14px; bottom: -22px; color: rgba(255, 246, 232, 0.1); transform: rotate(18deg); pointer-events: none; }
+.notif-win { position: relative; overflow: hidden; border-radius: 22px; padding: 18px 18px 16px; color: var(--ivory); background: var(--caramel-grad); box-shadow: 0 10px 26px rgba(138, 90, 46, 0.22); }
+.notif-win-bg { position: absolute; right: -14px; bottom: -22px; color: rgba(190, 214, 150, 0.2); transform: rotate(18deg); pointer-events: none; }
 .notif-win-bg svg { width: 150px; height: 150px; }
 .notif-win-top { position: relative; display: flex; align-items: center; gap: 10px; }
-.notif-win-icon { width: 34px; height: 34px; border-radius: 50%; background: rgba(255, 246, 232, 0.2); display: flex; align-items: center; justify-content: center; }
+.notif-win-icon { width: 34px; height: 34px; border-radius: 50%; background: #fff6e8; color: var(--petal-green); display: flex; align-items: center; justify-content: center; }
 .notif-win-icon svg { width: 18px; height: 18px; }
 .notif-win-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; color: rgba(255, 246, 232, 0.8); }
-.notif-new { margin-left: auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: #fff6e8; color: #b1442e; border-radius: 999px; padding: 3px 9px; }
+.notif-new { margin-left: auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: #fff6e8; color: #7a4f26; border-radius: 999px; padding: 3px 9px; }
 .notif-win-title { position: relative; margin-top: 14px; font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 28px; line-height: 1.1; }
 .notif-win-body { position: relative; margin-top: 8px; font-size: 13.5px; line-height: 1.5; color: rgba(255, 246, 232, 0.88); max-width: 92%; }
 .notif-win-foot { position: relative; display: flex; align-items: center; justify-content: space-between; margin-top: 16px; }
-.notif-win-cta { background: #fff6e8; color: #8f2f1c; font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 999px; }
+.notif-win-cta { background: #fff6e8; color: #6b4220; font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 999px; }
 .notif-win-date { font-size: 11.5px; color: rgba(255, 246, 232, 0.7); }
 
 .notif-row { display: flex; gap: 12px; align-items: flex-start; padding: 13px 14px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
@@ -2006,16 +2005,16 @@ p { margin: 0; color: var(--ink-soft); }
 .notif-row-text { font-size: 13.5px; line-height: 1.45; color: var(--ink); white-space: pre-line; }
 .notif-row-date { margin-top: 5px; font-size: 11.5px; color: var(--ink-soft); }
 
-.petal-hero { position: relative; overflow: hidden; border-radius: 22px; padding: 20px; margin-bottom: 14px; color: var(--ivory); background: radial-gradient(130% 110% at 85% 0%, #c96a46 0%, #b1442e 52%, #6b2415 100%); }
-.petal-hero-bg { position: absolute; right: -10px; top: -14px; color: rgba(255, 246, 232, 0.1); transform: rotate(-14deg); pointer-events: none; }
+.petal-hero { position: relative; overflow: hidden; border-radius: 22px; padding: 20px; margin-bottom: 14px; color: var(--ivory); background: var(--caramel-grad); }
+.petal-hero-bg { position: absolute; right: -10px; top: -14px; color: rgba(190, 214, 150, 0.2); transform: rotate(-14deg); pointer-events: none; }
 .petal-hero-bg svg { width: 150px; height: 150px; }
 .petal-hero-label { position: relative; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 246, 232, 0.78); }
 .petal-hero-count { position: relative; font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 54px; line-height: 1; margin-top: 6px; }
 .petal-hero-hint { position: relative; margin-top: 8px; font-size: 13px; line-height: 1.45; color: rgba(255, 246, 232, 0.85); max-width: 88%; }
 
 .petal-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 10px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); }
-.petal-card.is-available { border-color: rgba(177, 68, 46, 0.35); background: linear-gradient(135deg, #fffdf8 0%, #fbeee6 100%); }
-.petal-card-icon { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff6e8; background: linear-gradient(145deg, #c96a46, #b1442e); }
+.petal-card.is-available { border-color: rgba(200, 154, 94, 0.5); background: linear-gradient(135deg, #fffdf8 0%, #f8eddb 100%); }
+.petal-card-icon { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--petal-green); background: var(--petal-green-soft); }
 .petal-card.is-used .petal-card-icon { background: var(--ink-soft-bg); color: var(--ink-soft); }
 .petal-card-icon svg { width: 22px; height: 22px; }
 .petal-card-main { flex: 1; min-width: 0; }
@@ -2025,27 +2024,27 @@ p { margin: 0; color: var(--ink-soft); }
 .petal-card-status { flex: 0 0 auto; font-size: 12px; color: var(--ink-soft); }
 .petal-card.is-used { opacity: .75; }
 .petal-empty { text-align: center; padding: 40px 20px; color: var(--ink-soft); font-size: 14px; line-height: 1.55; }
-.petal-empty-icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #b1442e; background: rgba(177, 68, 46, 0.1); }
+.petal-empty-icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--petal-green); background: var(--petal-green-soft); }
 .petal-empty-icon svg { width: 30px; height: 30px; }
 
 /* Оплата лепестком в оформлении заказа */
-.petal-pay { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 12px; border-radius: 20px; cursor: pointer; border: 1.5px solid rgba(177, 68, 46, 0.4); background: linear-gradient(135deg, #fffdf8 0%, #fbeee6 100%); transition: background .25s ease, border-color .25s ease, transform .15s ease; }
+.petal-pay { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 12px; border-radius: 20px; cursor: pointer; border: 1.5px solid rgba(200, 154, 94, 0.55); background: linear-gradient(135deg, #fffdf8 0%, #f8eddb 100%); transition: background .25s ease, border-color .25s ease, transform .15s ease; }
 .petal-pay:active { transform: scale(0.99); }
-.petal-pay-icon { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff6e8; background: linear-gradient(145deg, #c96a46, #b1442e); animation: petalSway 3.2s ease-in-out infinite; }
+.petal-pay-icon { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--petal-green); background: var(--petal-green-soft); animation: petalSway 3.2s ease-in-out infinite; }
 .petal-pay-icon svg { width: 21px; height: 21px; }
 .petal-pay-text { flex: 1; min-width: 0; }
-.petal-pay-label { font-weight: 700; font-size: 15px; color: #8f2f1c; }
+.petal-pay-label { font-weight: 700; font-size: 15px; color: #7a4f26; }
 .petal-pay-sub { margin-top: 2px; font-size: 12.5px; color: var(--ink-soft); }
-.petal-pay-check { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid rgba(177, 68, 46, 0.4); display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff6e8; }
-.petal-pay.selected { background: radial-gradient(130% 160% at 85% 0%, #c96a46 0%, #b1442e 55%, #7a2a18 100%); border-color: #b1442e; box-shadow: 0 8px 22px rgba(177, 68, 46, 0.28); }
-.petal-pay.selected .petal-pay-icon { background: rgba(255, 246, 232, 0.22); }
+.petal-pay-check { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid rgba(200, 154, 94, 0.6); display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff6e8; }
+.petal-pay.selected { background: radial-gradient(130% 160% at 85% 0%, #c89a5e 0%, #8a5a2e 58%, #5a3a1c 100%); border-color: #8a5a2e; box-shadow: 0 8px 22px rgba(138, 90, 46, 0.28); }
+.petal-pay.selected .petal-pay-icon { background: #fff6e8; }
 .petal-pay.selected .petal-pay-label { color: #fff6e8; }
-.petal-pay.selected .petal-pay-sub { color: rgba(255, 246, 232, 0.85); }
-.petal-pay.selected .petal-pay-check { background: #fff6e8; color: #b1442e; border-color: #fff6e8; font-weight: 700; }
+.petal-pay.selected .petal-pay-sub { color: rgba(255, 246, 232, 0.88); }
+.petal-pay.selected .petal-pay-check { background: #fff6e8; color: #8a5a2e; border-color: #fff6e8; font-weight: 700; }
 @keyframes petalSway { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
 
 .petal-burst { position: absolute; left: 36px; top: 50%; width: 0; height: 0; pointer-events: none; }
-.petal-burst-p { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; color: #fff6e8; opacity: 0; animation: petalFly 1s ease-out forwards; }
+.petal-burst-p { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; color: #cfe3a8; opacity: 0; animation: petalFly 1s ease-out forwards; }
 .petal-burst-p svg { width: 14px; height: 14px; }
 .petal-burst-p.p0 { --dx: 70px; --dy: -34px; --r: 40deg; }
 .petal-burst-p.p1 { --dx: 120px; --dy: -8px; --r: 120deg; animation-delay: .04s; }
@@ -2055,3 +2054,4 @@ p { margin: 0; color: var(--ink-soft); }
 .petal-burst-p.p5 { --dx: 40px; --dy: -40px; --r: -30deg; animation-delay: .1s; }
 .petal-burst-p.p6 { --dx: 210px; --dy: 4px; --r: 150deg; animation-delay: .05s; }
 @keyframes petalFly { 0% { opacity: 0; transform: translate(0, 0) rotate(0) scale(.6); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scale(1.2); } }
+.notif-win-bg svg path:nth-child(2), .petal-hero-bg svg path:nth-child(2) { display: none; }
