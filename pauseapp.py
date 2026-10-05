@@ -475,32 +475,33 @@ async def api_order_submit(request: web.Request):
     if not zone or not point:
         return web.json_response({"error": "point_required"}, status=400)
 
-    # Билет "Пауза в подарок" — ровно один сет (ровно 1 шт.) из корзины,
-    # выбираемый отдельно от способа оплаты остального — корзина может
-    # содержать и другие сеты, оплачиваемые как обычно (см. app.js:
-    # stepCheckout — переключатель "билетом" поверх наличных/карты, не
-    # вместо них). Без скрина и модерации на саму билетную позицию (билет
-    # сам по себе уже подтверждение, см. sheets.use_ticket). На новую (ещё
-    # не в каталоге) точку билетом не принимаем — такой заказ и так уходит
-    # на модерацию админу, а билет должен списаться сразу и один раз, без
-    # гонки с решением админа по заявке.
+    # Билет "Пауза в подарок" — ровно ОДНА ШТУКА из выбранной позиции
+    # корзины, выбираемый отдельно от способа оплаты остального — корзина
+    # может содержать и другие сеты (или бОльшее количество той же
+    # позиции), оплачиваемые как обычно (см. app.js: stepCheckout —
+    # переключатель "билетом" поверх наличных/карты, не вместо них).
+    # Позиция с qty > 1 ниже делится на две строки заказа — 1 шт. билетом
+    # и остаток обычной оплатой (см. append_orders_batch). Без скрина и
+    # модерации на саму билетную строку (билет сам по себе уже
+    # подтверждение, см. sheets.use_ticket). На новую (ещё не в каталоге)
+    # точку билетом не принимаем — такой заказ и так уходит на модерацию
+    # админу, а билет должен списаться сразу и один раз, без гонки с
+    # решением админа по заявке.
     is_ticket_payment = ticket_item_index is not None
     if is_ticket_payment:
         if is_new_point:
             return web.json_response({"error": "ticket_new_point_not_allowed"}, status=400)
-        if (
-            not isinstance(ticket_item_index, int)
-            or not 0 <= ticket_item_index < len(cart)
-            or int(cart[ticket_item_index].get("qty", 0)) != 1
-        ):
+        if not isinstance(ticket_item_index, int) or not 0 <= ticket_item_index < len(cart):
             return web.json_response({"error": "ticket_single_set_only"}, status=400)
         if not await _retry_sheets(sheets.has_available_ticket, tg_id):
             return web.json_response({"error": "no_ticket"}, status=400)
 
     # Способ оплаты (наличные/карта) обязателен только для той части
     # заказа, что не покрыта билетом — если билет закрывает всю корзину
-    # целиком (один сет), remaining пуст и платить вообще нечем.
-    has_remaining = not is_ticket_payment or len(cart) > 1
+    # целиком (один сет, ровно 1 шт.), remaining пуст и платить вообще
+    # нечем.
+    total_qty = sum(int(item.get("qty", 0)) for item in cart)
+    has_remaining = not is_ticket_payment or total_qty > 1
     if has_remaining and not payment:
         return web.json_response({"error": "payment_required"}, status=400)
 
@@ -554,17 +555,34 @@ async def api_order_submit(request: web.Request):
         return web.json_response({"status": "pending", "pending_id": pending_id, "giveaway": giveaway})
 
     batch_id = uuid.uuid4().hex
-    items = [{"set": item["set"], "qty": int(item["qty"]), "garnish": item.get("garnish", "")} for item in cart]
-    # Билетная позиция пишется с PAYMENT_TICKET, остальные — обычным
-    # payment_value (наличные/карта) для оплаты остатка корзины.
-    payment_values = (
-        [config.PAYMENT_TICKET if i == ticket_item_index else payment_value for i in range(len(items))]
-        if is_ticket_payment else payment_value
-    )
+    # Билетная позиция пишется с PAYMENT_TICKET — если в ней было больше
+    # 1 шт., делим на две строки: 1 шт. билетом + остаток обычной оплатой
+    # (payment_value), т.к. один ряд "Заказы" несёт одно значение payment
+    # сразу на весь qty этой строки. ticket_row_pos — индекс билетной
+    # строки в итоговом списке (нужен ниже, чтобы списать билет на
+    # правильный номер строки, а не row_nums[ticket_item_index] — после
+    # возможного расщепления индексы уже не совпадают 1:1 с cart).
+    items = []
+    payment_values = []
+    ticket_row_pos = None
+    for i, item in enumerate(cart):
+        qty = int(item["qty"])
+        base = {"set": item["set"], "garnish": item.get("garnish", "")}
+        if is_ticket_payment and i == ticket_item_index:
+            ticket_row_pos = len(items)
+            items.append(dict(base, qty=1))
+            payment_values.append(config.PAYMENT_TICKET)
+            if qty > 1:
+                items.append(dict(base, qty=qty - 1))
+                payment_values.append(payment_value)
+        else:
+            items.append(dict(base, qty=qty))
+            payment_values.append(payment_value)
     row_nums = await _retry_sheets(
         sheets.append_orders_batch,
         date_str=date_str, zone=zone, point=point, client_id=client["id"], items=items,
-        payment=payment_values, comment=comment, screenshot=screenshot, batch_id=batch_id,
+        payment=payment_values if is_ticket_payment else payment_value,
+        comment=comment, screenshot=screenshot, batch_id=batch_id,
     )
 
     try:
@@ -574,7 +592,7 @@ async def api_order_submit(request: web.Request):
 
     if is_ticket_payment:
         try:
-            await _retry_sheets(sheets.use_ticket, tg_id, order_row=row_nums[ticket_item_index])
+            await _retry_sheets(sheets.use_ticket, tg_id, order_row=row_nums[ticket_row_pos])
         except Exception:
             logger.exception("PAUSE App: не удалось списать билет 'Пауза в подарок' (tg_id=%s)", tg_id)
 
@@ -582,6 +600,10 @@ async def api_order_submit(request: web.Request):
         try:
             prices = await _retry_sheets(sheets.get_set_prices)
             total = sum(prices.get(i["set"], 0) * int(i.get("qty", 0)) for i in cart)
+            if is_ticket_payment:
+                # Скрин — на остаток ПОСЛЕ вычета 1 шт., закрытой билетом,
+                # иначе админ сверял бы скрин с полной суммой корзины.
+                total -= prices.get(cart[ticket_item_index]["set"], 0)
             items_text = ", ".join(
                 f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
                 for i in cart

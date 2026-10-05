@@ -128,6 +128,9 @@
       "checkout.attachScreenshot": "Прикрепить скрин",
       "checkout.attachLater": "Прикреплю позже",
       "checkout.screenshotAttached": "Скрин приложен ✓",
+      "checkout.screenshotDeferredNote": "Пришлёте скрин позже.",
+      "checkout.screenshotDeferredUndo": "Прикрепить сейчас",
+      "checkout.screenshotStepRequired": "Прикрепите скрин оплаты или нажмите «Прикреплю позже».",
       "checkout.uploading": "Загружаю…",
       "checkout.uploadFailed": "Не удалось загрузить скрин: {msg}",
       "checkout.confirmBtn": "Подтвердить заказ",
@@ -368,6 +371,9 @@
       "checkout.attachScreenshot": "Skrinshot biriktirish",
       "checkout.attachLater": "Keyinroq yuboraman",
       "checkout.screenshotAttached": "Skrinshot biriktirildi ✓",
+      "checkout.screenshotDeferredNote": "Skrinshotni keyinroq yuborasiz.",
+      "checkout.screenshotDeferredUndo": "Hozir biriktirish",
+      "checkout.screenshotStepRequired": "To'lov skrinshotini biriktiring yoki \"Keyinroq yuboraman\"ni bosing.",
       "checkout.uploading": "Yuklanmoqda…",
       "checkout.uploadFailed": "Skrinshotni yuklab bo'lmadi: {msg}",
       "checkout.confirmBtn": "Buyurtmani tasdiqlash",
@@ -608,6 +614,9 @@
       "checkout.attachScreenshot": "Attach screenshot",
       "checkout.attachLater": "I'll send it later",
       "checkout.screenshotAttached": "Screenshot attached ✓",
+      "checkout.screenshotDeferredNote": "You'll send the screenshot later.",
+      "checkout.screenshotDeferredUndo": "Attach now",
+      "checkout.screenshotStepRequired": "Attach a payment screenshot or tap \"I'll send it later\".",
       "checkout.uploading": "Uploading…",
       "checkout.uploadFailed": "Couldn't upload the screenshot: {msg}",
       "checkout.confirmBtn": "Confirm order",
@@ -2271,7 +2280,7 @@
 
   var checkout = {};
   function resetCheckout() {
-    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", payment: "", screenshotFileId: null, useTicket: false, ticketItemIndex: null };
+    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", payment: "", screenshotFileId: null, screenshotDeferred: false, useTicket: false, ticketItemIndex: null };
   }
   resetCheckout();
 
@@ -2431,19 +2440,21 @@
     var cashValue = (state.menu.payment_options || []).filter(function (p) { return !/карт/i.test(p); })[0] || t("checkout.cash");
     var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
 
-    // Билетом — ровно один сет (1 шт.) из корзины, выбираемый отдельно от
-    // способа оплаты остального (см. pauseapp.py: api_order_submit), а не
-    // как раньше — отдельная взаимоисключающая плитка "Билетом" вместо
-    // наличных/карты. Теперь это переключатель: он покрывает ОДИН сет,
-    // остальные сеты в корзине (если есть) всё равно нужно оплатить
+    // Билетом — ровно ОДНА ШТУКА из выбранной позиции корзины, выбираемый
+    // отдельно от способа оплаты остального (см. pauseapp.py:
+    // api_order_submit — делит эту позицию на две строки заказа, если в
+    // ней было больше 1 шт.), а не как раньше — отдельная
+    // взаимоисключающая плитка "Билетом" вместо наличных/карты. Не
+    // требует qty===1 — можно взять билетом одну порцию даже из позиции
+    // "Сет А ×2" (воспроизведено: раньше кнопка пропадала именно в этом
+    // случае, хотя билет логически применим). Остальное в корзине (та же
+    // позиция за вычетом 1 шт. + другие позиции) всё равно нужно оплатить
     // наличными/картой как обычно. Только на уже известную точку (не на
     // новую, ждущую модерации) — то же условие, что проверяет сервер.
-    var eligibleTicketIdxs = [];
-    state.cart.forEach(function (item, idx) { if (item.qty === 1) eligibleTicketIdxs.push(idx); });
-    var ticketAvailable = !!(state.profile && state.profile.has_ticket) && !checkout.isNewPoint && eligibleTicketIdxs.length > 0;
+    var ticketAvailable = !!(state.profile && state.profile.has_ticket) && !checkout.isNewPoint && state.cart.length > 0;
     if (!ticketAvailable) { checkout.useTicket = false; checkout.ticketItemIndex = null; }
-    if (checkout.useTicket && eligibleTicketIdxs.indexOf(checkout.ticketItemIndex) === -1) {
-      checkout.ticketItemIndex = eligibleTicketIdxs[0];
+    if (checkout.useTicket && (checkout.ticketItemIndex == null || checkout.ticketItemIndex < 0 || checkout.ticketItemIndex >= state.cart.length)) {
+      checkout.ticketItemIndex = 0;
     }
     var ticketItemPrice = (checkout.useTicket && checkout.ticketItemIndex != null && state.cart[checkout.ticketItemIndex])
       ? state.cart[checkout.ticketItemIndex].price : 0;
@@ -2462,12 +2473,11 @@
       payField.appendChild(ticketToggle);
     }
 
-    if (checkout.useTicket && eligibleTicketIdxs.length > 1) {
+    if (checkout.useTicket && state.cart.length > 1) {
       var pickerBox = el("div", "card ticket-set-picker");
-      eligibleTicketIdxs.forEach(function (idx) {
-        var item = state.cart[idx];
+      state.cart.forEach(function (item, idx) {
         var pickRow = el("div", "option-row ticket-set-option" + (idx === checkout.ticketItemIndex ? " selected" : ""));
-        pickRow.innerHTML = '<div class="option-row-label">' + escapeHtml(item.display) + '</div><div class="option-row-sub">' + fmtSum(item.price) + '</div>';
+        pickRow.innerHTML = '<div class="option-row-label">' + escapeHtml(item.display) + (item.qty > 1 ? " ×" + item.qty : "") + '</div><div class="option-row-sub">' + fmtSum(item.price) + '</div>';
         pickRow.addEventListener("click", function () {
           haptic("select");
           checkout.ticketItemIndex = idx;
@@ -2482,10 +2492,28 @@
       var summaryBox = el("div", "card checkout-ticket-summary");
       state.cart.forEach(function (item, idx) {
         var isTicketItem = idx === checkout.ticketItemIndex;
-        var line = el("div", "checkout-summary-row" + (isTicketItem ? " is-ticket-item" : ""));
+        if (isTicketItem) {
+          // Билетом берётся РОВНО 1 шт. этой позиции — если их было
+          // больше, остаток (qty - 1) показываем отдельной строкой по
+          // обычной цене, а не перечёркиваем всю позицию целиком.
+          var freeLine = el("div", "checkout-summary-row is-ticket-item");
+          freeLine.innerHTML =
+            '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " (1 шт., билетом)" : "") + '</span>' +
+            '<span class="checkout-summary-price is-struck">' + fmtSum(item.price) + '</span>';
+          summaryBox.appendChild(freeLine);
+          if (item.qty > 1) {
+            var restLine = el("div", "checkout-summary-row");
+            restLine.innerHTML =
+              '<span class="checkout-summary-name">' + escapeHtml(item.display) + " ×" + (item.qty - 1) + '</span>' +
+              '<span class="checkout-summary-price">' + fmtSum(item.price * (item.qty - 1)) + '</span>';
+            summaryBox.appendChild(restLine);
+          }
+          return;
+        }
+        var line = el("div", "checkout-summary-row");
         line.innerHTML =
           '<span class="checkout-summary-name">' + escapeHtml(item.display) + (item.qty > 1 ? " ×" + item.qty : "") + '</span>' +
-          '<span class="checkout-summary-price' + (isTicketItem ? " is-struck" : "") + '">' + fmtSum(item.price * item.qty) + '</span>';
+          '<span class="checkout-summary-price">' + fmtSum(item.price * item.qty) + '</span>';
         summaryBox.appendChild(line);
       });
       var remRow = el("div", "summary-total");
@@ -2506,7 +2534,7 @@
         tile.addEventListener("click", function () {
           haptic("select");
           checkout.payment = opt.value;
-          if (opt.value !== cardValue) checkout.screenshotFileId = null;
+          if (opt.value !== cardValue) { checkout.screenshotFileId = null; checkout.screenshotDeferred = false; }
           wizardReplace(stepCheckout);
         });
         tilesRow.appendChild(tile);
@@ -2520,6 +2548,13 @@
       payField.appendChild(el("div", "requisites-box", escapeHtml(state.menu.card_requisites || "")));
       if (checkout.screenshotFileId) {
         payField.appendChild(el("div", "checkout-screenshot-ok", escapeHtml(t("checkout.screenshotAttached"))));
+      } else if (checkout.screenshotDeferred) {
+        var deferredRow = el("div", "checkout-screenshot-deferred");
+        deferredRow.innerHTML = escapeHtml(t("checkout.screenshotDeferredNote")) + " ";
+        var undoBtn = el("button", "btn-text", t("checkout.screenshotDeferredUndo"));
+        undoBtn.addEventListener("click", function () { checkout.screenshotDeferred = false; wizardReplace(stepCheckout); });
+        deferredRow.appendChild(undoBtn);
+        payField.appendChild(deferredRow);
       } else {
         var attachRow = el("div", "checkout-attach-row");
         var fileInput = el("input");
@@ -2542,7 +2577,7 @@
             toast(t("checkout.uploadFailed", { msg: err.message }));
           });
         });
-        laterBtn.addEventListener("click", function () { checkout.screenshotFileId = null; wizardReplace(stepCheckout); });
+        laterBtn.addEventListener("click", function () { checkout.screenshotFileId = null; checkout.screenshotDeferred = true; wizardReplace(stepCheckout); });
         attachRow.appendChild(fileInput);
         attachRow.appendChild(attachBtn);
         attachRow.appendChild(laterBtn);
@@ -2576,6 +2611,15 @@
     var ticketItem = checkout.useTicket ? state.cart[checkout.ticketItemIndex] : null;
     var remaining = cartTotal() - (ticketItem ? ticketItem.price : 0);
     if (remaining > 0 && !checkout.payment) { toast(t("checkout.needPayment")); return; }
+    var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
+    // Скрин оплаты картой — обязательный шаг: либо прикреплён, либо явно
+    // отложен кнопкой "Прикреплю позже" — раньше оба этих поля были
+    // одинаково "пустыми" по умолчанию, и заказ уходил даже если клиент
+    // вообще ничего не нажал на этом шаге, воспроизведено и подтверждено.
+    if (checkout.payment === cardValue && !checkout.screenshotFileId && !checkout.screenshotDeferred) {
+      toast(t("checkout.screenshotStepRequired"));
+      return;
+    }
     btn.disabled = true;
     btn.textContent = t("checkout.sending");
     api("/api/order", {

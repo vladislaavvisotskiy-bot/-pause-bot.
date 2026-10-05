@@ -772,6 +772,7 @@ p { margin: 0; color: var(--ink-soft); }
 .checkout-summary-price.is-struck { text-decoration: line-through; opacity: 0.5; }
 .checkout-attach-row { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .checkout-screenshot-ok { color: var(--success); font-weight: 600; font-size: 13.5px; margin-top: 10px; }
+.checkout-screenshot-deferred { color: var(--ink-soft); font-size: 13.5px; margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* Подтверждение заказа — тёплая фраза с мягким появлением, затем сама
    сменяется карточкой цифрового послания (см. stepOrderConfirmed/
