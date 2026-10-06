@@ -1007,6 +1007,7 @@ p { margin: 0; color: var(--ink-soft); }
   z-index: 1;
 }
 .care-viewer-close svg { width: 18px; height: 18px; }
+.care-viewer-banner { max-width: 330px; text-align: center; color: var(--ivory); font-size: 15px; line-height: 1.4; margin: 6px 24px 14px; }
 .care-viewer-track {
   width: 100%;
   flex: 1;

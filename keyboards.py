@@ -176,8 +176,10 @@ def cash_confirm_admin_kb(rows_str: str) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def pending_point_admin_kb(pending_id: str) -> InlineKeyboardMarkup:
+def pending_point_admin_kb(pending_id: str, map_url: str = "") -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
+    if map_url:
+        b.button(text=texts.ADMIN_PENDING_MAP_BTN, web_app=WebAppInfo(url=map_url))
     b.button(text=texts.ADMIN_PENDING_APPROVE_BTN, callback_data=f"pendok:{pending_id}")
     b.button(text=texts.ADMIN_PENDING_DENY_BTN, callback_data=f"penddeny:{pending_id}")
     b.adjust(1)

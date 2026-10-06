@@ -382,6 +382,8 @@ MSG_TG_ID = 2      # B
 MSG_NAME = 3       # C
 MSG_DATE = 4       # D
 MSG_TEXT = 5       # E
+MSG_SHOWN = 6      # F — "нет" у послания, ждущего показа окном при открытии приложения
+                   #     (заказ на новую точку, см. sheets.get_unseen_care_message); пусто у остальных.
 CARE_MESSAGE_START_NUMBER = 1019
 CARE_MESSAGE_TOTAL = 1518
 

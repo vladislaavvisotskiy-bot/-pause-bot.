@@ -550,12 +550,19 @@ async def api_order_submit(request: web.Request):
                     f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
                     for i in cart
                 )
+                uname = (client.get("telegram") or "").strip().lstrip("@")
                 alert = texts.ADMIN_PENDING_POINT_ALERT.format(
                     name=client.get("name", ""), client_id=client.get("id", ""),
+                    username=("@" + uname) if uname else "—",
+                    phone=client.get("contact") or "—",
                     zone=zone, point=point, items=items_text,
                     sum=f"{total:,}".replace(",", " "), payment=payment,
                 )
-                markup = kb.pending_point_admin_kb(pending_id)
+                map_url = ""
+                if config.WEBAPP_URL and lat and lon:
+                    map_url = (f"{config.WEBAPP_URL}/pauseapp/point?lat={float(lat):.6f}&lon={float(lon):.6f}"
+                               f"&n={urllib.parse.quote(point)}")
+                markup = kb.pending_point_admin_kb(pending_id, map_url)
                 if screenshot:
                     alert += texts.ADMIN_PENDING_SCREENSHOT_NOTE
                     await notify_admins_photo(bot, screenshot, alert, reply_markup=markup)
@@ -1033,6 +1040,29 @@ async def api_feedback(request: web.Request):
 # ---------------------------------------------------------------------------
 # Мои послания — та же логика, что handlers/profile.py: my_messages.
 # ---------------------------------------------------------------------------
+
+async def api_care_pending(request: web.Request):
+    """Послание, которое ещё не показано (первый заказ на новую точку —
+    выдаётся после подтверждения адреса). Приложение показывает окно."""
+    m = await _retry_sheets(sheets.get_unseen_care_message, request["tg_id"])
+    if not m:
+        return web.json_response({"care": None})
+    return web.json_response({"care": {"number": m["number"], "total": config.CARE_MESSAGE_TOTAL, "phrase": m["text"]}})
+
+
+async def api_care_seen(request: web.Request):
+    body = await request.json()
+    await _retry_sheets(sheets.mark_care_message_seen, request["tg_id"], body.get("number"))
+    return web.json_response({"ok": True})
+
+
+async def point_map_page(request: web.Request):
+    """Страница-карта для админа: где находится новая точка (кнопка в
+    уведомлении о проверке адреса). Статика, без данных — координаты и
+    название берутся из query."""
+    with open(os.path.join(STATIC_DIR, "point.html"), "r", encoding="utf-8") as f:
+        return web.Response(text=f.read(), content_type="text/html")
+
 
 async def api_messages(request: web.Request):
     tg_id = request["tg_id"]
@@ -2350,6 +2380,7 @@ def create_app(bot=None) -> web.Application:
     app = web.Application(middlewares=[error_middleware, admin_auth_middleware])
     app["bot"] = bot
     app.router.add_get("/", index_page)
+    app.router.add_get("/point", point_map_page)
     app.router.add_static("/static/", STATIC_DIR, show_index=False)
 
     app.router.add_get("/api/me", api_me)
@@ -2372,6 +2403,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/favorites/toggle", api_favorites_toggle)
     app.router.add_post("/api/feedback", api_feedback)
     app.router.add_get("/api/messages", api_messages)
+    app.router.add_get("/api/care/pending", api_care_pending)
+    app.router.add_post("/api/care/seen", api_care_seen)
     app.router.add_get("/api/club/leaderboard", api_club_leaderboard)
     app.router.add_get("/api/club/giveaway", api_club_giveaway)
     app.router.add_get("/api/club/cards", api_club_cards)

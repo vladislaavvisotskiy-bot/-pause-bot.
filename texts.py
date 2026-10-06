@@ -196,7 +196,10 @@ ORDER_PENDING_NEW_POINT = (
     "☘️ Заказ принят! Новая точка доставки сейчас проверяется координатором — "
     "обычно это быстро.\n\nЕсли хотите ускорить — можете написать напрямую {support}."
 )
-ORDER_POINT_APPROVED = "Точка подтверждена, ваш заказ принят в работу ☘️"
+ORDER_POINT_APPROVED = (
+    "Точка подтверждена, ваш заказ принят в работу ☘️\n\n"
+    "Откройте приложение PAUSE — для вас приготовлено послание 🌿"
+)
 ORDER_POINT_DENIED = (
     "К сожалению, пока не можем доставить по этому адресу. "
     "Напишите {support}, разберёмся."
@@ -205,6 +208,8 @@ ORDER_POINT_DENIED = (
 ADMIN_PENDING_POINT_ALERT = (
     "📍 Новый адрес — нужна проверка\n\n"
     "Клиент: {name} (ID {client_id})\n"
+    "Telegram: {username}\n"
+    "Телефон: {phone}\n"
     "Куда: {zone}, {point}\n"
     "Заказ: {items}\n"
     "Сумма: {sum} сум\n"
@@ -215,6 +220,7 @@ ADMIN_PENDING_SCREENSHOT_NOTE = (
     "\n\n💳 Приложен скрин оплаты — «Подтвердить» разом одобрит и точку, и оплату."
 )
 ADMIN_PENDING_APPROVE_BTN = "✅ Подтвердить"
+ADMIN_PENDING_MAP_BTN = "🗺 Посмотреть на карте"
 ADMIN_PENDING_DENY_BTN = "❌ Отклонить"
 ADMIN_PENDING_APPROVED_TOAST = "Подтверждено, заказ ушёл в «Заказы» ✓"
 ADMIN_PENDING_DENIED_TOAST = "Отклонено ✓"

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Точка на карте</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="/pauseapp/static/vendor/leaflet/leaflet.css">
+<style>
+html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f2ebdc}
+#map{position:absolute;inset:0}
+.card{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:1000;background:#fffdf8;border-radius:20px;padding:14px 16px;box-shadow:0 8px 30px rgba(43,40,35,.28)}
+.card b{display:block;font-size:16px;color:#2b2823}
+.card small{display:block;color:#7d7769;margin:3px 0 10px;font-size:12.5px}
+.row{display:flex;gap:8px}
+.row a{flex:1;text-align:center;padding:11px 8px;border-radius:999px;background:#2b2823;color:#f2ebdc;text-decoration:none;font-weight:600;font-size:13.5px}
+.row a.alt{background:#ece4d2;color:#2b2823}
+</style></head><body>
+<div id="map"></div>
+<div class="card"><b id="n"></b><small id="c"></small>
+<div class="row"><a id="ya" href="#">Яндекс Карты</a><a id="gg" class="alt" href="#">Google Maps</a></div></div>
+<script src="/pauseapp/static/vendor/leaflet/leaflet.js"></script>
+<script>
+(function(){
+  var q=new URLSearchParams(location.search);
+  var lat=parseFloat(q.get("lat")),lon=parseFloat(q.get("lon")),name=q.get("n")||"Новая точка";
+  var tg=window.Telegram&&window.Telegram.WebApp; if(tg){tg.ready();tg.expand();}
+  document.getElementById("n").textContent=name;
+  document.getElementById("c").textContent=isNaN(lat)?"Координаты не переданы":lat.toFixed(5)+", "+lon.toFixed(5);
+  var ya="https://yandex.ru/maps/?pt="+lon+","+lat+"&z=17&l=map", gg="https://www.google.com/maps?q="+lat+","+lon;
+  function open(u){return function(e){e.preventDefault(); if(tg&&tg.openLink)tg.openLink(u); else window.open(u,"_blank");};}
+  var a=document.getElementById("ya");a.href=ya;a.onclick=open(ya);
+  var b=document.getElementById("gg");b.href=gg;b.onclick=open(gg);
+  if(isNaN(lat)||isNaN(lon)||typeof L==="undefined")return;
+  var map=L.map("map",{zoomControl:false}).setView([lat,lon],17);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap"}).addTo(map);
+  map.attributionControl.setPrefix(false);
+  L.marker([lat,lon]).addTo(map);
+})();
+</script></body></html>

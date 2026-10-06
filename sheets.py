@@ -2319,9 +2319,44 @@ def get_next_message_number() -> int:
     return next_number
 
 
-def save_care_message(number: int, tg_id, name: str, date_str: str, phrase: str):
+def save_care_message(number: int, tg_id, name: str, date_str: str, phrase: str, popup: bool = False):
+    """popup=True — послание ещё НЕ показано клиенту (первый заказ на новую
+    точку: карточка выдаётся только после подтверждения адреса админом) —
+    приложение покажет его окном при следующем открытии."""
     ws = _ws(config.SHEET_MESSAGES)
-    ws.append_row([number, str(tg_id), name, date_str, phrase], value_input_option="RAW")
+    row = [number, str(tg_id), name, date_str, phrase]
+    if popup:
+        row.append("нет")
+    ws.append_row(row, value_input_option="RAW")
+
+
+def get_unseen_care_message(tg_id):
+    """Первое ещё не показанное послание клиента (см. save_care_message(popup=True))
+    или None."""
+    ws = _ws(config.SHEET_MESSAGES)
+    rows = ws.get_all_values()
+    target = str(tg_id)
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.MSG_DATA_START_ROW or len(row) < config.MSG_SHOWN:
+            continue
+        if row[config.MSG_TG_ID - 1].strip() == target and row[config.MSG_SHOWN - 1].strip() == "нет":
+            return {"row": r, "number": row[config.MSG_NUMBER - 1].strip(), "text": row[config.MSG_TEXT - 1].strip()}
+    return None
+
+
+def mark_care_message_seen(tg_id, number) -> bool:
+    ws = _ws(config.SHEET_MESSAGES)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.MSG_DATA_START_ROW or len(row) < config.MSG_SHOWN:
+            continue
+        if (row[config.MSG_TG_ID - 1].strip() == str(tg_id) and row[config.MSG_NUMBER - 1].strip() == str(number)
+                and row[config.MSG_SHOWN - 1].strip() == "нет"):
+            ws.update_cell(r, config.MSG_SHOWN, "да")
+            return True
+    return False
 
 
 def get_client_messages(tg_id) -> list:

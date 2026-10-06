@@ -146,6 +146,7 @@
       "checkout.donePendingText": "Новая точка — координатор уточнит адрес и подтвердит заказ. Мы напишем, как только всё готово.",
       "checkout.doneBtn": "Готово",
       "care.numberLabel": "Послание № {number} из {total}",
+      "care.firstOrder": "Поздравляем с первым заказом! Пусть он будет ещё приятнее с этими пожеланиями от нас 🌿",
       "care.thankYou1": "Спасибо, что сделал паузу.",
       "care.thankYou2": "Ты важен.",
 
@@ -446,6 +447,7 @@
       "checkout.donePendingText": "Yangi nuqta — koordinator manzilni aniqlab, buyurtmani tasdiqlaydi. Hammasi tayyor bo'lganda yozamiz.",
       "checkout.doneBtn": "Tayyor",
       "care.numberLabel": "Xabar № {number} / {total}",
+      "care.firstOrder": "Birinchi buyurtma bilan tabriklaymiz! Bizning tilaklarimiz bilan u yanada yoqimli bo'lsin 🌿",
       "care.thankYou1": "Pauza qilganingiz uchun rahmat.",
       "care.thankYou2": "Siz muhimsiz.",
 
@@ -746,6 +748,7 @@
       "checkout.donePendingText": "New point — the coordinator will confirm the address and the order. We'll let you know once it's ready.",
       "checkout.doneBtn": "Done",
       "care.numberLabel": "Message № {number} of {total}",
+      "care.firstOrder": "Congratulations on your first order! May it be even nicer with these wishes from us 🌿",
       "care.thankYou1": "Thank you for taking a pause.",
       "care.thankYou2": "You matter.",
 
@@ -3620,7 +3623,16 @@
   var careViewerDots = document.getElementById("care-viewer-dots");
   var careViewerScrollTimer = null;
 
-  function openCareViewer(messages, total, startIndex) {
+  var careViewerOnClose = null;
+  function openCareViewer(messages, total, startIndex, opts) {
+    opts = opts || {};
+    careViewerOnClose = opts.onClose || null;
+    var oldBanner = careViewerEl.querySelector(".care-viewer-banner");
+    if (oldBanner) oldBanner.remove();
+    if (opts.banner) {
+      var banner = el("div", "care-viewer-banner", escapeHtml(opts.banner));
+      careViewerEl.insertBefore(banner, careViewerTrack);
+    }
     careViewerTrack.innerHTML = "";
     messages.forEach(function (m) {
       var slide = el("div", "care-viewer-slide");
@@ -3648,6 +3660,9 @@
   function closeCareViewer() {
     careViewerEl.hidden = true;
     careViewerTrack.innerHTML = "";
+    var cb = careViewerOnClose;
+    careViewerOnClose = null;
+    if (cb) cb();
     if (tg && tg.BackButton) {
       tg.BackButton.offClick(closeCareViewer);
       tg.BackButton.hide();
@@ -7367,6 +7382,21 @@
     if (state.profile) renderProfileScreen();
   }
 
+  // Послание за первый заказ на новую точку выдаётся не сразу, а после
+  // подтверждения адреса — показываем окном поверх приложения при открытии.
+  function checkPendingCare() {
+    api("/api/care/pending").then(function (data) {
+      var c = data && data.care;
+      if (!c) return;
+      openCareViewer([{ number: c.number, text: c.phrase }], c.total, 0, {
+        banner: t("care.firstOrder"),
+        onClose: function () {
+          api("/api/care/seen", { method: "POST", body: { number: c.number } }).catch(function () {});
+        },
+      });
+    }).catch(function () {});
+  }
+
   function init() {
     applyStaticI18n();
     maybeShowSplash();
@@ -7381,6 +7411,7 @@
       state.paDebtors = !!me.pa_debtors;
       state.paMenu = !!me.pa_menu;
       showScreen("home");
+      checkPendingCare();
     }).catch(function (err) {
       var root = document.getElementById("home-root");
       root.innerHTML = "";

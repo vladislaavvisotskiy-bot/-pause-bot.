@@ -808,9 +808,20 @@ async def pending_point_approved(callback: CallbackQuery, bot: Bot):
     except Exception:
         pass
 
+    # Электронное послание за этот заказ — клиент получит его окном при
+    # открытии приложения (при заказе на новую точку сразу оно не выдаётся).
     if client and client.get("tg_id"):
         try:
-            await bot.send_message(int(client["tg_id"]), texts.ORDER_POINT_APPROVED)
+            from care_phrases import CARE_PHRASES
+            import random
+            number = sheets.get_next_message_number()
+            sheets.save_care_message(number, client["tg_id"], client.get("name", ""),
+                                     sheets.today_date_str(), random.choice(CARE_PHRASES), popup=True)
+        except Exception:
+            pass
+        try:
+            kb_app = kb.open_pauseapp_kb() if config.WEBAPP_URL else None
+            await bot.send_message(int(client["tg_id"]), texts.ORDER_POINT_APPROVED, reply_markup=kb_app)
         except Exception:
             pass
 
