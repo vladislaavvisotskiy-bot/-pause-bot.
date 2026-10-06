@@ -7103,9 +7103,12 @@
     if (window.ResizeObserver) new ResizeObserver(function () { wrap.style.setProperty("--sheet-h", (sheet.offsetHeight + 22) + "px"); }).observe(sheet);
 
     var map = L.map(mapWrap, { zoomControl: false, attributionControl: true }).setView([41.311081, 69.240562], 12);
-    L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
-      maxZoom: 19,
-      attribution: "Tiles &copy; Esri",
+    // OpenStreetMap — самая подробная бесплатная карта по Ташкенту (улицы,
+    // номера домов, здания до 19 зума). Esri на больших приближениях
+    // теряла улицы.
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, maxNativeZoom: 19,
+      attribution: "&copy; OpenStreetMap",
     }).addTo(map);
     setTimeout(function () { map.invalidateSize(); }, 0);
     map.attributionControl.setPrefix(false);
