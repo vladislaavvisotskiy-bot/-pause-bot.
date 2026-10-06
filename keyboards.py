@@ -284,6 +284,21 @@ def admin_back_kb(target: str = "panel") -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def share_contact_kb():
+    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=texts.SHARE_CONTACT_BTN, request_contact=True)]],
+        resize_keyboard=True, one_time_keyboard=True,
+    )
+
+
+def open_pauseapp_kb():
+    """Приглашение войти в PAUSE App после регистрации (обычный клиент)."""
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.OPEN_PAUSE_APP_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
+    return b.as_markup()
+
+
 def pauseapp_test_kb() -> InlineKeyboardMarkup:
     """ВРЕМЕННО, по прямой просьбе пользователя: единственная кнопка
     запуска PAUSE App — для аккаунтов из config.PAUSEAPP_TEST_CLIENT_IDS

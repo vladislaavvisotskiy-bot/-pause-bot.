@@ -111,13 +111,23 @@ async def admin_auth_middleware(request: web.Request, handler):
             request["pa_menu"] = False
         else:
             pa = await _retry_sheets(sheets.get_pause_admin, tg_id)
-            if not pa:
-                return web.json_response({"error": "forbidden"}, status=403)
-            request["tg_id"] = tg_id
-            request["is_main_admin"] = False
-            request["pa_finance"] = pa["finance"]
-            request["pa_debtors"] = pa["debtors"]
-            request["pa_menu"] = pa["menu"]
+            if pa:
+                request["tg_id"] = tg_id
+                request["is_main_admin"] = False
+                request["pa_finance"] = pa["finance"]
+                request["pa_debtors"] = pa["debtors"]
+                request["pa_menu"] = pa["menu"]
+            else:
+                # Обычный клиент: любой, кто прошёл регистрацию в боте
+                # (есть в Sheet1) — без единой админской привилегии.
+                client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+                if not client:
+                    return web.json_response({"error": "forbidden"}, status=403)
+                request["tg_id"] = tg_id
+                request["is_main_admin"] = False
+                request["pa_finance"] = False
+                request["pa_debtors"] = False
+                request["pa_menu"] = False
     return await handler(request)
 
 

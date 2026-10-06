@@ -33,15 +33,28 @@ async def got_name(message: Message, state: FSMContext):
         await message.answer(texts.ASK_NAME)
         return
     await state.update_data(reg_name=name)
-    await message.answer(texts.ASK_PHONE)
+    await message.answer(texts.ASK_PHONE.format(name=name), reply_markup=kb.share_contact_kb())
     await state.set_state(Registration.waiting_phone)
 
 
 @router.message(Registration.waiting_phone)
 async def got_phone(message: Message, state: FSMContext):
-    phone = sheets.format_uz_phone(message.text or "")
+    contact = message.contact
+    if contact:
+        # "Поделиться контактом" — принимаем только СВОЙ контакт.
+        if contact.user_id and contact.user_id != message.from_user.id:
+            await message.answer(texts.ASK_PHONE.format(name=(await state.get_data()).get("reg_name", "")), reply_markup=kb.share_contact_kb())
+            return
+        raw = contact.phone_number or ""
+        phone = sheets.format_uz_phone(raw)
+        if not phone:
+            # Иностранный номер из Telegram — записываем как есть, с "+"
+            digits = "".join(ch for ch in raw if ch.isdigit())
+            phone = ("+" + digits) if 7 <= len(digits) <= 15 else None
+    else:
+        phone = sheets.format_uz_phone(message.text or "")
     if not phone:
-        await message.answer(texts.PHONE_INVALID)
+        await message.answer(texts.PHONE_INVALID, reply_markup=kb.share_contact_kb())
         return
     data = await state.get_data()
     name = data.get("reg_name", message.from_user.full_name)
@@ -64,7 +77,9 @@ async def got_phone(message: Message, state: FSMContext):
         )
         greeting_name = name
     await state.clear()
-    await message.answer(texts.REGISTERED.format(name=greeting_name))
+    app_kb = kb.open_pauseapp_kb() if config.WEBAPP_URL else None
+    await message.answer("Спасибо, номер записан ✅", reply_markup=ReplyKeyboardRemove())
+    await message.answer(texts.REGISTERED.format(name=greeting_name), reply_markup=app_kb)
     await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(message.from_user.id))
 
 

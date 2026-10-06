@@ -309,7 +309,7 @@
       "address.title": "Адрес доставки",
       "address.locate": "Моё местоположение", "address.locateFail": "Не удалось определить местоположение",
       "address.noResults": "Ничего не найдено — попробуйте иначе или сдвиньте карту", "address.edit": "Изменить адрес и район",
-      "address.point": "Точка доставки", "address.setPoint": "Указать точку",
+      "address.point": "Точка доставки", "address.setPoint": "Указать адрес", "address.notChosen": "Пока не выбрано",
       "address.save": "Сохранить", "address.saved": "Сохранено",
       "address.pickFirst": "Сначала выберите точку",
       "address.saveFailed": "Не удалось сохранить: {msg}",
@@ -609,7 +609,7 @@
       "address.title": "Yetkazib berish manzili",
       "address.locate": "Mening joylashuvim", "address.locateFail": "Joylashuvni aniqlab bo'lmadi",
       "address.noResults": "Hech narsa topilmadi — boshqacha yozing yoki xaritani suring", "address.edit": "Manzil va tumanni o'zgartirish",
-      "address.point": "Yetkazib berish nuqtasi", "address.setPoint": "Nuqtani belgilash",
+      "address.point": "Yetkazib berish nuqtasi", "address.setPoint": "Manzilni belgilash", "address.notChosen": "Hozircha tanlanmagan",
       "address.save": "Saqlash", "address.saved": "Saqlandi",
       "address.pickFirst": "Avval nuqtani tanlang",
       "address.saveFailed": "Saqlab bo'lmadi: {msg}",
@@ -909,7 +909,7 @@
       "address.title": "Delivery address",
       "address.locate": "My location", "address.locateFail": "Couldn't get your location",
       "address.noResults": "Nothing found — try another query or move the map", "address.edit": "Edit address and area",
-      "address.point": "Delivery point", "address.setPoint": "Set a point",
+      "address.point": "Delivery point", "address.setPoint": "Set an address", "address.notChosen": "Not chosen yet",
       "address.save": "Save", "address.saved": "Saved",
       "address.pickFirst": "Choose a point first",
       "address.saveFailed": "Couldn't save: {msg}",
@@ -3254,7 +3254,7 @@
       deliveryField.appendChild(change);
     } else {
       var setBtn = el("div", "card option-row");
-      setBtn.appendChild(el("div", "option-row-label", t("address.setPoint")));
+      setBtn.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(t("address.notChosen")) + '</div><div class="option-row-sub">' + escapeHtml(t("address.setPoint")) + ' ›</div></div>';
       setBtn.addEventListener("click", function () { wizardStep(function (b) { renderDeliveryMapPicker(b, applyCheckoutPoint); }); });
       deliveryField.appendChild(setBtn);
     }
@@ -3829,7 +3829,9 @@
       var pointField = el("div", "field");
       pointField.innerHTML = '<label>' + escapeHtml(t("address.point")) + '</label>';
       var pointBtn = el("div", "card option-row selected");
-      pointBtn.innerHTML = '<div class="option-row-label">' + escapeHtml((curZone && curPoint) ? (curZone + ", " + curPoint) : t("address.setPoint")) + '</div>';
+      pointBtn.innerHTML = (curZone && curPoint)
+        ? '<div class="option-row-label">' + escapeHtml(curZone + ", " + curPoint) + '</div>'
+        : '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(t("address.notChosen")) + '</div><div class="option-row-sub">' + escapeHtml(t("address.setPoint")) + ' ›</div></div>';
       pointBtn.addEventListener("click", function () {
         wizardStep(function (b) { renderDeliveryMapPicker(b, applyEditPoint); });
       });
