@@ -3300,6 +3300,8 @@
     syncCartBar();
   }
 
+  function cartCount() { return state.cart.reduce(function (s, i) { return s + (i.qty || 0); }, 0); }
+
   function cartTotal() { return state.cart.reduce(function (s, i) { return s + i.price * i.qty; }, 0); }
 
   // Плавающая панель над нижней навигацией — появляется, как только в
@@ -3316,7 +3318,7 @@
       return;
     }
     bar.innerHTML =
-      '<div class="cart-bar-info"><span class="cart-bar-count">' + escapeHtml(t("cart.barLabel", { count: state.cart.length })) + '</span><span class="cart-bar-total">' + fmtSum(cartTotal()) + '</span></div>' +
+      '<div class="cart-bar-info"><span class="cart-bar-count">' + escapeHtml(t("cart.barLabel", { count: cartCount() })) + '</span><span class="cart-bar-total">' + fmtSum(cartTotal()) + '</span></div>' +
       '<button class="cart-bar-btn">' + escapeHtml(t("cart.barButton")) + '</button>';
     bar.hidden = false;
     bar.onclick = openCartScreen;
