@@ -307,13 +307,15 @@
       "editProfile.phoneInvalid": "Введите номер полностью — 9 цифр после +998",
 
       "address.title": "Адрес доставки",
+      "address.locate": "Моё местоположение", "address.locateFail": "Не удалось определить местоположение",
+      "address.noResults": "Ничего не найдено — попробуйте иначе или сдвиньте карту", "address.edit": "Изменить адрес и район",
       "address.point": "Точка доставки", "address.setPoint": "Указать точку",
       "address.save": "Сохранить", "address.saved": "Сохранено",
       "address.pickFirst": "Сначала выберите точку",
       "address.saveFailed": "Не удалось сохранить: {msg}",
       "address.newPoint": "Новая точка", "address.newPointField": "Адрес / название точки",
       "address.newZoneField": "Район", "address.done": "Готово", "address.fillBoth": "Заполните район и точку",
-      "address.searchPlaceholder": "Введите адрес — например, Malika Plaza",
+      "address.searchPlaceholder": "Адрес или название места",
       "address.mapHint": "Нажмите на метку — чтобы выбрать место, где уже заказывали, или в любую точку карты — чтобы указать новое",
       "address.mapUnavailable": "Карта сейчас недоступна — проверьте соединение и попробуйте снова.",
       "address.confirmHere": "Мне сюда доставлять",
@@ -604,13 +606,15 @@
       "editProfile.phoneInvalid": "Raqamni to'liq kiriting — +998 dan keyin 9 ta raqam",
 
       "address.title": "Yetkazib berish manzili",
+      "address.locate": "Mening joylashuvim", "address.locateFail": "Joylashuvni aniqlab bo'lmadi",
+      "address.noResults": "Hech narsa topilmadi — boshqacha yozing yoki xaritani suring", "address.edit": "Manzil va tumanni o'zgartirish",
       "address.point": "Yetkazib berish nuqtasi", "address.setPoint": "Nuqtani belgilash",
       "address.save": "Saqlash", "address.saved": "Saqlandi",
       "address.pickFirst": "Avval nuqtani tanlang",
       "address.saveFailed": "Saqlab bo'lmadi: {msg}",
       "address.newPoint": "Yangi nuqta", "address.newPointField": "Manzil / nuqta nomi",
       "address.newZoneField": "Tuman", "address.done": "Tayyor", "address.fillBoth": "Tuman va nuqtani to'ldiring",
-      "address.searchPlaceholder": "Manzilni kiriting — masalan, Malika Plaza",
+      "address.searchPlaceholder": "Manzil yoki joy nomi",
       "address.mapHint": "Allaqachon buyurtma qilingan joyni tanlash uchun metkaga bosing, yoki yangi joyni belgilash uchun xaritaning istalgan nuqtasiga bosing",
       "address.mapUnavailable": "Xarita hozir mavjud emas — aloqani tekshirib, qayta urinib ko'ring.",
       "address.confirmHere": "Menga shu yerga yetkazib bering",
@@ -901,13 +905,15 @@
       "editProfile.phoneInvalid": "Enter the full number — 9 digits after +998",
 
       "address.title": "Delivery address",
+      "address.locate": "My location", "address.locateFail": "Couldn't get your location",
+      "address.noResults": "Nothing found — try another query or move the map", "address.edit": "Edit address and area",
       "address.point": "Delivery point", "address.setPoint": "Set a point",
       "address.save": "Save", "address.saved": "Saved",
       "address.pickFirst": "Choose a point first",
       "address.saveFailed": "Couldn't save: {msg}",
       "address.newPoint": "New point", "address.newPointField": "Address / point name",
       "address.newZoneField": "Area", "address.done": "Done", "address.fillBoth": "Fill in the area and the point",
-      "address.searchPlaceholder": "Type an address — e.g. Malika Plaza",
+      "address.searchPlaceholder": "Address or place name",
       "address.mapHint": "Tap a pin to pick a place others already order from, or tap anywhere on the map to set a new one",
       "address.mapUnavailable": "The map isn't available right now — check your connection and try again.",
       "address.confirmHere": "Deliver here",
@@ -6962,47 +6968,74 @@
     wizardPhaseEl.innerHTML = "";
     body.appendChild(el("h2", "wizard-title", t("address.title")));
 
-    var searchInput = el("input", "map-search-input");
-    searchInput.type = "text";
-    searchInput.placeholder = t("address.searchPlaceholder");
-    body.appendChild(searchInput);
-    var resultsList = el("div", "map-search-results");
-    body.appendChild(resultsList);
-
-    var mapWrap = el("div", "map-picker-map");
-    body.appendChild(mapWrap);
-    body.appendChild(el("p", "map-picker-hint", t("address.mapHint")));
-
-    var sheet = el("div", "map-confirm-sheet");
-    sheet.hidden = true;
-    body.appendChild(sheet);
+    var wrap = el("div", "map-picker-wrap");
+    body.appendChild(wrap);
 
     if (typeof L === "undefined") {
-      // Leaflet не подгрузился (нет связи с CDN) — без карты пикер
-      // бесполезен, честно говорим об этом вместо пустого серого блока.
-      mapWrap.outerHTML = '<p class="menu-set-closed-note">' + escapeHtml(t("address.mapUnavailable")) + '</p>';
+      wrap.outerHTML = '<p class="menu-set-closed-note">' + escapeHtml(t("address.mapUnavailable")) + '</p>';
       return;
     }
 
+    var mapWrap = el("div", "map-picker-map");
+    wrap.appendChild(mapWrap);
+
+    // Поиск поверх карты, как в Яндекс Картах
+    var searchBox = el("div", "map-search-box");
+    searchBox.innerHTML = '<span class="map-search-icon">' + ICON_MAP_PIN + '</span>';
+    var searchInput = el("input", "map-search-input");
+    searchInput.type = "text";
+    searchInput.placeholder = t("address.searchPlaceholder");
+    searchInput.setAttribute("enterkeyhint", "search");
+    searchBox.appendChild(searchInput);
+    var clearBtn = el("button", "map-search-clear", "×");
+    clearBtn.hidden = true;
+    searchBox.appendChild(clearBtn);
+    wrap.appendChild(searchBox);
+    var resultsList = el("div", "map-search-results");
+    resultsList.hidden = true;
+    wrap.appendChild(resultsList);
+
+    // Неподвижная метка по центру: двигаем карту — адрес под меткой
+    var centerPin = el("div", "map-center-pin");
+    centerPin.innerHTML = '<svg viewBox="0 0 32 42" width="32" height="42"><path d="M16 41C16 41 3 27 3 15a13 13 0 1 1 26 0c0 12-13 26-13 26Z" fill="#2b2823"/><circle cx="16" cy="15" r="5" fill="#fffdf8"/></svg><i></i>';
+    wrap.appendChild(centerPin);
+
+    var locateBtn = el("button", "map-locate-btn");
+    locateBtn.setAttribute("aria-label", t("address.locate"));
+    locateBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>';
+    wrap.appendChild(locateBtn);
+
+    var sheet = el("div", "map-confirm-sheet");
+    wrap.appendChild(sheet);
+    if (window.ResizeObserver) new ResizeObserver(function () { wrap.style.setProperty("--sheet-h", (sheet.offsetHeight + 22) + "px"); }).observe(sheet);
+
     var map = L.map(mapWrap, { zoomControl: false, attributionControl: true }).setView([41.311081, 69.240562], 12);
-    L.tileLayer(
-      "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 18, attribution: "Tiles &copy; Esri" }
-    ).addTo(map);
-    L.tileLayer(
-      "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 18 }
-    ).addTo(map);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      subdomains: "abcd", maxZoom: 19,
+      attribution: "&copy; OpenStreetMap &copy; CARTO",
+    }).addTo(map);
     setTimeout(function () { map.invalidateSize(); }, 0);
+    map.attributionControl.setPrefix(false);
 
     var allPoints = [];
-    var newPinMarker = null;
+    var current = null;       // { kind: "new"|"existing", place|point }
+    var reverseSeq = 0;
+    var holdUntil = 0;        // после выбора подсказки не перезатираем адрес обратным геокодингом
+
+    function lift(on) { centerPin.classList.toggle("lifted", !!on); }
+
+    function renderSheetLoading() {
+      sheet.innerHTML = '<div class="map-sheet-skel"></div><div class="map-sheet-skel short"></div>';
+      sheet.classList.add("show");
+    }
 
     function renderSheetExisting(p) {
+      current = { kind: "existing", point: p };
       sheet.innerHTML = "";
-      sheet.hidden = false;
+      sheet.classList.add("show");
       sheet.appendChild(el("div", "map-confirm-title", escapeHtml(p.name)));
-      if (p.address && p.address !== p.name) sheet.appendChild(el("div", "map-confirm-address", escapeHtml(p.address)));
+      var sub = [p.address && p.address !== p.name ? p.address : "", p.zone].filter(Boolean).join(" · ");
+      if (sub) sheet.appendChild(el("div", "map-confirm-address", escapeHtml(sub)));
       var confirmBtn = el("button", "btn-primary", t("address.confirmHere"));
       confirmBtn.addEventListener("click", function () {
         haptic("success");
@@ -7011,76 +7044,140 @@
       sheet.appendChild(confirmBtn);
     }
 
-    function renderSheetNew(lat, lon, addressGuess) {
-      var zoneGuess = nearestZoneFor(allPoints, lat, lon);
+    function renderSheetNew(place) {
+      current = { kind: "new", place: place };
+      var lat = parseFloat(place.lat), lon = parseFloat(place.lon);
+      var district = place.district || nearestZoneFor(allPoints, lat, lon);
+      var label = place.label || place.title || "";
       sheet.innerHTML = "";
-      sheet.hidden = false;
-      sheet.appendChild(el("div", "map-confirm-title", t("address.newPoint")));
+      sheet.classList.add("show");
+      sheet.appendChild(el("div", "map-confirm-title", escapeHtml(place.title || t("address.newPoint"))));
+      var subTxt = [place.subtitle].filter(Boolean).join("");
+      if (!place.district && district) subTxt = [subTxt, district].filter(Boolean).join(", ");
+      if (subTxt) sheet.appendChild(el("div", "map-confirm-address", escapeHtml(subTxt)));
 
-      var field = el("div", "field");
-      field.innerHTML = '<label>' + escapeHtml(t("address.newPointField")) + '</label><input type="text" id="map-point-name">';
-      sheet.appendChild(field);
-      var pointInput = field.querySelector("input");
-      pointInput.value = addressGuess || "";
+      var editBox = el("div", "map-edit-box");
+      editBox.hidden = !!(label && district);
+      editBox.innerHTML =
+        '<div class="field"><label>' + escapeHtml(t("address.newPointField")) + '</label><input type="text" class="mp-name"></div>' +
+        '<div class="field"><label>' + escapeHtml(t("address.newZoneField")) + '</label><input type="text" class="mp-zone"></div>';
+      var nameInput = editBox.querySelector(".mp-name");
+      var zoneInput = editBox.querySelector(".mp-zone");
+      nameInput.value = label;
+      zoneInput.value = district;
+      sheet.appendChild(editBox);
 
-      var zf = el("div", "field");
-      zf.innerHTML = '<label>' + escapeHtml(t("address.newZoneField")) + '</label><input type="text" id="map-zone-name">';
-      sheet.appendChild(zf);
-      var zoneInput = zf.querySelector("input");
-      zoneInput.value = zoneGuess;
+      var editLink = el("button", "map-edit-link", t("address.edit"));
+      editLink.hidden = !editBox.hidden;
+      editLink.addEventListener("click", function () { editBox.hidden = false; editLink.hidden = true; });
+      sheet.appendChild(editLink);
 
       var confirmBtn = el("button", "btn-primary", t("address.confirmHere"));
       confirmBtn.addEventListener("click", function () {
-        var pointVal = pointInput.value.trim();
+        var pointVal = nameInput.value.trim();
         var zoneVal = zoneInput.value.trim();
-        if (!pointVal || !zoneVal) { toast(t("address.fillBoth")); return; }
+        if (!pointVal || !zoneVal) { editBox.hidden = false; editLink.hidden = true; toast(t("address.fillBoth")); return; }
         haptic("success");
         onPicked({ zone: zoneVal, point: pointVal, isNewPoint: true, lat: lat, lon: lon });
       });
       sheet.appendChild(confirmBtn);
     }
 
-    function placeNewPin(lat, lon) {
-      if (newPinMarker) map.removeLayer(newPinMarker);
-      newPinMarker = L.marker([lat, lon], { icon: mapMarkerIcon("new") }).addTo(map);
-      map.setView([lat, lon], 16);
+    function lookupCenter() {
+      var c = map.getCenter();
+      var seq = ++reverseSeq;
+      renderSheetLoading();
+      api("/api/reverse?lat=" + c.lat + "&lon=" + c.lng).then(function (data) {
+        if (seq !== reverseSeq) return;
+        var place = data && data.place;
+        if (!place) place = { title: "", subtitle: "", label: "", district: "", lat: c.lat, lon: c.lng };
+        renderSheetNew(place);
+      }).catch(function () {
+        if (seq !== reverseSeq) return;
+        renderSheetNew({ title: "", subtitle: "", label: "", district: "", lat: c.lat, lon: c.lng });
+      });
+    }
+
+    function focusPlace(place) {
+      var lat = parseFloat(place.lat), lon = parseFloat(place.lon);
+      reverseSeq++;
+      holdUntil = Date.now() + 1800;
+      renderSheetNew(place);
+      map.setView([lat, lon], 17, { animate: true });
     }
 
     loadDeliveryPoints().then(function (points) {
       allPoints = points;
       points.forEach(function (p) {
         var marker = L.marker([p.lat, p.lon], { icon: mapMarkerIcon("existing") }).addTo(map);
-        marker.on("click", function () { haptic("select"); renderSheetExisting(p); });
+        marker.on("click", function (e) {
+          if (e.originalEvent) L.DomEvent.stopPropagation(e);
+          haptic("select");
+          reverseSeq++;
+          holdUntil = Date.now() + 1800;
+          renderSheetExisting(p);
+          map.setView([p.lat, p.lon], Math.max(map.getZoom(), 16), { animate: true });
+        });
       });
     });
 
-    map.on("click", function (e) {
-      haptic("select");
-      placeNewPin(e.latlng.lat, e.latlng.lng);
-      renderSheetNew(e.latlng.lat, e.latlng.lng, "");
+    map.on("dragstart", function () { holdUntil = 0; lift(true); resultsList.hidden = true; searchInput.blur(); });
+    map.on("movestart", function () { lift(true); });
+    map.on("moveend", function () {
+      lift(false);
+      if (Date.now() < holdUntil) return;
+      if (map.getZoom() < 13) { sheet.classList.remove("show"); current = null; return; }
+      lookupCenter();
     });
 
-    var searchTimer = null;
+    // Подсказки при вводе
+    var searchTimer = null, searchSeq = 0;
+    function showResults(items, emptyText) {
+      resultsList.innerHTML = "";
+      resultsList.hidden = false;
+      if (!items.length) { resultsList.appendChild(el("div", "map-search-empty", escapeHtml(emptyText))); return; }
+      items.forEach(function (r) {
+        var row = el("button", "map-search-result");
+        row.innerHTML = '<span class="map-search-result-ico">' + ICON_MAP_PIN + '</span><span class="map-search-result-txt"><b>' +
+          escapeHtml(r.title) + '</b>' + (r.subtitle ? '<small>' + escapeHtml(r.subtitle) + '</small>' : '') + '</span>';
+        row.addEventListener("click", function () {
+          haptic("select");
+          resultsList.hidden = true;
+          searchInput.value = r.title;
+          clearBtn.hidden = false;
+          searchInput.blur();
+          focusPlace(r);
+        });
+        resultsList.appendChild(row);
+      });
+    }
     searchInput.addEventListener("input", function () {
       clearTimeout(searchTimer);
       var q = searchInput.value.trim();
-      if (q.length < 3) { resultsList.innerHTML = ""; return; }
+      clearBtn.hidden = !searchInput.value;
+      if (q.length < 3) { resultsList.hidden = true; return; }
+      var seq = ++searchSeq;
       searchTimer = setTimeout(function () {
         api("/api/geocode?q=" + encodeURIComponent(q)).then(function (data) {
-          resultsList.innerHTML = "";
-          (data.results || []).forEach(function (r) {
-            var row = el("div", "map-search-result", escapeHtml(r.display_name));
-            row.addEventListener("click", function () {
-              haptic("select");
-              resultsList.innerHTML = "";
-              var lat = parseFloat(r.lat), lon = parseFloat(r.lon);
-              placeNewPin(lat, lon);
-              renderSheetNew(lat, lon, r.display_name);
-            });
-            resultsList.appendChild(row);
-          });
+          if (seq !== searchSeq) return;
+          showResults(data.results || [], t("address.noResults"));
         }).catch(function () {});
-      }, 400);
+      }, 350);
+    });
+    clearBtn.addEventListener("click", function () {
+      searchInput.value = "";
+      clearBtn.hidden = true;
+      resultsList.hidden = true;
+      searchInput.focus();
+    });
+
+    locateBtn.addEventListener("click", function () {
+      haptic("select");
+      if (!navigator.geolocation) { toast(t("address.locateFail")); return; }
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        holdUntil = 0;
+        map.setView([pos.coords.latitude, pos.coords.longitude], 17, { animate: true });
+      }, function () { toast(t("address.locateFail")); }, { enableHighAccuracy: true, timeout: 8000 });
     });
   }
 
