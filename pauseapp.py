@@ -35,6 +35,7 @@ from aiohttp import web
 from aiogram.types import BufferedInputFile
 
 import config
+import geo
 import sheets
 import texts
 import keyboards as kb
@@ -355,104 +356,20 @@ async def api_delivery_points(request: web.Request):
     return web.json_response({"points": out})
 
 
-# Ташкент — примерная рамка города (юго-запад/северо-восток), чтобы
-# Nominatim не путал местные названия с похожими в других странах.
-_TASHKENT_VIEWBOX = "68.9,41.45,69.6,41.15"
-_NOMINATIM_USER_AGENT = "PauseAppTashkent/1.0 (lunch delivery mini app; Telegram bot)"
-_GEO_CACHE: dict = {}
-_GEO_CACHE_TTL = 6 * 3600
-_GEO_LOCK = asyncio.Lock()
-_GEO_LAST_CALL = [0.0]
-
-
-def _format_place(d: dict) -> dict:
-    """Nominatim-ответ -> то, что показывает приложение (как подсказка в
-    Яндекс Картах): title — крупно (название места или "улица, дом"),
-    subtitle — мелко (улица/район), district — настоящий район города
-    (city_district/suburb из OSM), label — одной строкой для названия точки."""
-    a = d.get("address") or {}
-    road = a.get("road") or a.get("pedestrian") or a.get("footway") or a.get("residential") or ""
-    house = a.get("house_number") or ""
-    street = (road + (", " + house if house else "")).strip(", ")
-    district = a.get("city_district") or a.get("suburb") or a.get("borough") or a.get("neighbourhood") or ""
-    name = (d.get("name") or "").strip()
-    if not name:
-        name = (a.get(d.get("type") or "") or "") if d.get("category") in ("amenity", "shop", "tourism", "building", "office", "leisure") else ""
-    if name and name == road:
-        name = ""
-    if name and street:
-        title, label = name, name + " (" + street + ")"
-    elif name:
-        title = label = name
-    elif street:
-        title = label = street
-    else:
-        parts = [x.strip() for x in (d.get("display_name") or "").split(",") if x.strip()]
-        title = label = ", ".join(parts[:2])
-    sub = [x for x in ((street if name else ""), district) if x]
-    return {
-        "title": title, "subtitle": ", ".join(sub), "label": label, "district": district,
-        "lat": d.get("lat"), "lon": d.get("lon"),
-    }
-
-
-async def _nominatim(path: str, params: dict):
-    """Один общий вызов Nominatim: кэш + не чаще 1 запроса/сек (политика
-    сервиса), чтобы подсказки при вводе не приводили к бану."""
-    url = "https://nominatim.openstreetmap.org/" + path + "?" + urllib.parse.urlencode(params)
-    now = time.time()
-    hit = _GEO_CACHE.get(url)
-    if hit and now - hit[0] < _GEO_CACHE_TTL:
-        return hit[1]
-    async with _GEO_LOCK:
-        wait = 1.0 - (time.time() - _GEO_LAST_CALL[0])
-        if wait > 0:
-            await asyncio.sleep(wait)
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=6)) as session:
-                async with session.get(url, headers={"User-Agent": _NOMINATIM_USER_AGENT}) as resp:
-                    data = await resp.json(content_type=None)
-        except Exception:
-            logger.exception("PAUSE App: геокодер недоступен (%s)", path)
-            return None
-        finally:
-            _GEO_LAST_CALL[0] = time.time()
-    if len(_GEO_CACHE) > 500:
-        _GEO_CACHE.clear()
-    _GEO_CACHE[url] = (time.time(), data)
-    return data
-
-
 async def api_geocode(request: web.Request):
-    """Подсказки адреса при вводе (бесплатный OSM Nominatim, без ключа)."""
+    """Подсказки адреса/места при вводе — см. geo.search."""
     q = (request.query.get("q") or "").strip()
-    if len(q) < 3:
-        return web.json_response({"results": []})
-    data = await _nominatim("search", {
-        "format": "jsonv2", "q": q, "limit": "6", "addressdetails": "1",
-        "viewbox": _TASHKENT_VIEWBOX, "bounded": "1",
-        "countrycodes": "uz", "accept-language": "ru",
-    })
-    out = [_format_place(d) for d in (data or []) if d.get("lat") and d.get("lon")]
-    return web.json_response({"results": out})
+    return web.json_response({"results": await geo.search(q) if len(q) >= 2 else []})
 
 
 async def api_reverse_geocode(request: web.Request):
-    """Настоящий адрес и район по точке на карте."""
+    """Настоящий адрес и район по точке на карте — см. geo.reverse."""
     try:
         lat = float(request.query.get("lat", ""))
         lon = float(request.query.get("lon", ""))
     except ValueError:
         return web.json_response({"place": None})
-    data = await _nominatim("reverse", {
-        "format": "jsonv2", "lat": "%.5f" % lat, "lon": "%.5f" % lon,
-        "zoom": "18", "addressdetails": "1", "accept-language": "ru",
-    })
-    if not isinstance(data, dict) or data.get("error"):
-        return web.json_response({"place": None})
-    place = _format_place(data)
-    place["lat"], place["lon"] = lat, lon
-    return web.json_response({"place": place})
+    return web.json_response({"place": await geo.reverse(lat, lon)})
 
 
 def _payment_value(payment: str, has_screenshot: bool) -> str:

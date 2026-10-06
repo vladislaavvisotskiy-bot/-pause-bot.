@@ -10,6 +10,7 @@ from aiogram.types import Message, CallbackQuery, BufferedInputFile, InputMediaP
 from aiogram.fsm.context import FSMContext
 
 import sheets
+import geo
 import texts
 import keyboards as kb
 import config
@@ -782,6 +783,20 @@ async def pending_point_approved(callback: CallbackQuery, bot: Bot):
     client = sheets.get_client_by_id(pending["client_id"])
     if client:
         sheets.update_client_point(client["row"], pending["zone"], pending["point"])
+
+    # Координаты новой точки — автоматически (раньше вписывали руками в
+    # "Точки доставки"): если такой точки с координатами ещё нет, ищем по названию.
+    try:
+        known = {p["name"] for p in sheets.get_delivery_points() if p.get("lat") and p.get("lon")}
+        if pending["point"] not in known:
+            found = await geo.geocode_point(pending["point"])
+            if found:
+                sheets.create_or_update_delivery_point(
+                    pending["point"], found.get("label") or pending["point"],
+                    float(found["lat"]), float(found["lon"]),
+                )
+    except Exception:
+        pass
 
     if pending["screenshot"]:
         sheets.confirm_card_payment(row_nums)

@@ -7242,7 +7242,14 @@
           searchInput.value = r.title;
           clearBtn.hidden = false;
           searchInput.blur();
-          focusPlace(r);
+          if (r.existing) {
+            reverseSeq++;
+            holdUntil = Date.now() + 1800;
+            renderSheetExisting(r.existing);
+            map.setView([r.existing.lat, r.existing.lon], 17, { animate: true });
+          } else {
+            focusPlace(r);
+          }
         });
         resultsList.appendChild(row);
       });
@@ -7253,10 +7260,29 @@
       clearBtn.hidden = !searchInput.value;
       if (q.length < 3) { resultsList.hidden = true; return; }
       var seq = ++searchSeq;
+      // Свои сохранённые точки (БЦ, места, куда уже возим) — сразу и выше
+      // всего, пока грузятся внешние подсказки; одноимённые внешние
+      // (могут быть устаревшими) отбрасываем.
+      var tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+      var local = allPoints.filter(function (p) {
+        var hay = ((p.name || "") + " " + (p.address || "") + " " + (p.zone || "")).toLowerCase();
+        return tokens.every(function (tk) { return hay.indexOf(tk) !== -1; });
+      }).sort(function (a, b) {
+        var as = a.name.toLowerCase().indexOf(tokens[0]) === 0 ? 0 : 1;
+        var bs = b.name.toLowerCase().indexOf(tokens[0]) === 0 ? 0 : 1;
+        return as - bs;
+      }).slice(0, 4).map(function (p) {
+        return { title: p.name, subtitle: [p.address && p.address !== p.name ? p.address : "", p.zone].filter(Boolean).join(", "), existing: p };
+      });
+      var normName = function (x) { return (x || "").toLowerCase().replace(/[^0-9a-zа-яё]+/g, ""); };
+      if (local.length) showResults(local, "");
       searchTimer = setTimeout(function () {
         api("/api/geocode?q=" + encodeURIComponent(q)).then(function (data) {
           if (seq !== searchSeq) return;
-          showResults(data.results || [], t("address.noResults"));
+          var names = {};
+          local.forEach(function (l) { names[normName(l.title)] = true; });
+          var ext = (data.results || []).filter(function (r) { return !names[normName(r.title)]; });
+          showResults(local.concat(ext), t("address.noResults"));
         }).catch(function () {});
       }, 350);
     });
