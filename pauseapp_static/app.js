@@ -1200,6 +1200,10 @@
     return (n || 0).toLocaleString("ru-RU") + " " + t("common.currency");
   }
 
+  function fmtSumComma(n) {
+    return (n || 0).toLocaleString("en-US") + " " + t("common.currency");
+  }
+
   function initials(name) {
     var parts = (name || "").trim().split(/\s+/).filter(Boolean);
     if (!parts.length) return "?";
@@ -1931,9 +1935,9 @@
 
     // Цена, выбор варианта/гарнира, количество и "Добавить" — общий блок для
     // обычной (render) и широкой (renderDetails) карточки.
-    function appendSelectors(body, rerender) {
+    function appendSelectors(body, rerender, noPrice) {
       var effSet = currentEffSet();
-      body.appendChild(el("div", "menu-set-card-price", fmtSum(effSet.price)));
+      if (!noPrice) body.appendChild(el("div", "menu-set-card-price", fmtSum(effSet.price)));
 
       if (s.is_variant_group) {
         var variantRow = el("div", "menu-set-chip-row");
@@ -2021,8 +2025,8 @@
       var info = el("div", "menu-wide-info");
       info.appendChild(el("div", "menu-wide-name", escapeHtml(localizedName)));
       var priceText = s.is_variant_group
-        ? t("menu.from", { sum: fmtSum(Math.min.apply(null, s.variants.map(function (v) { return v.price; }))) })
-        : fmtSum(s.price);
+        ? t("menu.from", { sum: fmtSumComma(Math.min.apply(null, s.variants.map(function (v) { return v.price; }))) })
+        : fmtSumComma(s.price);
       info.appendChild(el("div", "menu-wide-price", priceText));
       foot.appendChild(info);
       var plus = el("div", "menu-wide-plus", "+");
@@ -2060,7 +2064,7 @@
           s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
           inner.appendChild(list);
         }
-        appendSelectors(inner, renderDetails);
+        appendSelectors(inner, renderDetails, true);
       }
       inner.addEventListener("click", function (e) { e.stopPropagation(); });
 
