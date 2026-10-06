@@ -1756,8 +1756,8 @@
     // позиций), той же самой карточкой (см. buildMenuSetCard).
     if (m.published && m.sets && m.sets.length) {
       root.appendChild(el("div", "profile-section-title", t("home.inMenuToday")));
-      var list = el("div", "menu-set-grid");
-      m.sets.forEach(function (s) { list.appendChild(buildHomeStoryCard(s)); });
+      var list = el("div", "home-mini-row");
+      m.sets.forEach(function (s) { list.appendChild(buildHomeMiniCard(s)); });
       root.appendChild(list);
     }
   }
@@ -1853,6 +1853,28 @@
 
   // Карточка Главной: фото, название (без цены), превью истории; по тапу вниз
   // раскрывается полный текст и кнопка "Заказать" (ведёт на эту карточку в Меню).
+  // Компактная карточка "Сегодня в меню": фото с названием, тап — в Меню на эту карточку.
+  function buildHomeMiniCard(s) {
+    var card = el("button", "home-mini-card");
+    var photo = el("div", "home-mini-photo");
+    if (s.photo_url) {
+      var img = el("img");
+      img.alt = ""; img.loading = "lazy";
+      img.addEventListener("error", function () { img.remove(); photo.innerHTML = ICON_LEAF; photo.classList.add("empty"); });
+      setPhotoSrc(img, s.photo_url);
+      photo.appendChild(img);
+    } else { photo.classList.add("empty"); photo.innerHTML = ICON_LEAF; }
+    card.appendChild(photo);
+    card.appendChild(el("div", "home-mini-name", escapeHtml(localizedSetName(s.display_name))));
+    card.addEventListener("click", function () {
+      haptic("select");
+      state.menuCategory = "all";
+      state.menuFocusKey = s.key;
+      showScreen("menu");
+    });
+    return card;
+  }
+
   function buildHomeStoryCard(s) {
     var card = el("div", "card home-story-card");
     var photo = el("div", "home-story-photo");
@@ -1950,7 +1972,6 @@
     root.appendChild(grid);
     if (focusCard) {
       state.menuFocusKey = "";
-      if (focusCard._open) focusCard._open();
       setTimeout(function () { focusCard.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60);
     }
   }
