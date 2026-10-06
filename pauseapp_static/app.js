@@ -7155,6 +7155,7 @@
     var allPoints = [];
     var current = null;       // { kind: "new"|"existing", place|point }
     var reverseSeq = 0;
+    var sheetLocked = false;  // идёт правка названия в шторке — не обновляем её
     var holdUntil = 0;        // после выбора подсказки не перезатираем адрес обратным геокодингом
 
     function lift(on) { centerPin.classList.toggle("lifted", !!on); }
@@ -7164,23 +7165,19 @@
       sheet.classList.add("show");
     }
 
+    // Уже известная точка: можно выбрать как есть, а можно поправить
+    // название/район — тогда локация остаётся прежней, а сохраняется то
+    // название, что ввёл клиент.
     function renderSheetExisting(p) {
-      current = { kind: "existing", point: p };
-      sheet.innerHTML = "";
-      sheet.classList.add("show");
-      sheet.appendChild(el("div", "map-confirm-title", escapeHtml(p.name)));
-      var sub = [p.address && p.address !== p.name ? p.address : "", p.zone].filter(Boolean).join(" · ");
-      if (sub) sheet.appendChild(el("div", "map-confirm-address", escapeHtml(sub)));
-      var confirmBtn = el("button", "btn-primary", t("address.confirmHere"));
-      confirmBtn.addEventListener("click", function () {
-        haptic("success");
-        onPicked({ zone: p.zone || "", point: p.name, isNewPoint: false, lat: null, lon: null });
-      });
-      sheet.appendChild(confirmBtn);
+      renderSheetNew({
+        title: p.name, subtitle: p.address && p.address !== p.name ? p.address : "",
+        label: p.name, district: p.zone || "", lat: p.lat, lon: p.lon,
+      }, p);
     }
 
-    function renderSheetNew(place) {
-      current = { kind: "new", place: place };
+    function renderSheetNew(place, origin) {
+      sheetLocked = false;
+      current = { kind: origin ? "existing" : "new", place: place };
       var lat = parseFloat(place.lat), lon = parseFloat(place.lon);
       var district = place.district || nearestZoneFor(allPoints, lat, lon);
       var label = place.label || place.title || "";
@@ -7191,8 +7188,8 @@
       if (!place.district && district) subTxt = [subTxt, district].filter(Boolean).join(", ");
       if (subTxt) sheet.appendChild(el("div", "map-confirm-address", escapeHtml(subTxt)));
 
+      // Название и район всегда можно поправить прямо здесь.
       var editBox = el("div", "map-edit-box");
-      editBox.hidden = !!(label && district);
       editBox.innerHTML =
         '<div class="field"><label>' + escapeHtml(t("address.newPointField")) + '</label><input type="text" class="mp-name"></div>' +
         '<div class="field"><label>' + escapeHtml(t("address.newZoneField")) + '</label><input type="text" class="mp-zone"></div>';
@@ -7200,18 +7197,21 @@
       var zoneInput = editBox.querySelector(".mp-zone");
       nameInput.value = label;
       zoneInput.value = district;
+      // Пока клиент печатает — карта не должна перерисовывать/перекидывать
+      // шторку (клавиатура меняет размер карты и вызывает moveend).
+      editBox.addEventListener("focusin", function () { sheetLocked = true; });
       sheet.appendChild(editBox);
-
-      var editLink = el("button", "map-edit-link", t("address.edit"));
-      editLink.hidden = !editBox.hidden;
-      editLink.addEventListener("click", function () { editBox.hidden = false; editLink.hidden = true; });
-      sheet.appendChild(editLink);
 
       var confirmBtn = el("button", "btn-primary", t("address.confirmHere"));
       confirmBtn.addEventListener("click", function () {
         var pointVal = nameInput.value.trim();
         var zoneVal = zoneInput.value.trim();
-        if (!pointVal || !zoneVal) { editBox.hidden = false; editLink.hidden = true; toast(t("address.fillBoth")); return; }
+        if (origin && pointVal === origin.name && zoneVal === (origin.zone || "")) {
+          haptic("success");
+          onPicked({ zone: origin.zone || "", point: origin.name, isNewPoint: false, lat: null, lon: null });
+          return;
+        }
+        if (!pointVal || !zoneVal) { toast(t("address.fillBoth")); return; }
         haptic("success");
         onPicked({ zone: zoneVal, point: pointVal, isNewPoint: true, lat: lat, lon: lon });
       });
@@ -7236,6 +7236,7 @@
     function focusPlace(place) {
       var lat = parseFloat(place.lat), lon = parseFloat(place.lon);
       reverseSeq++;
+      sheetLocked = false;
       holdUntil = Date.now() + 1800;
       renderSheetNew(place);
       map.setView([lat, lon], 17, { animate: true });
@@ -7256,11 +7257,11 @@
       });
     });
 
-    map.on("dragstart", function () { holdUntil = 0; lift(true); resultsList.hidden = true; searchInput.blur(); });
+    map.on("dragstart", function () { sheetLocked = false; holdUntil = 0; lift(true); resultsList.hidden = true; searchInput.blur(); });
     map.on("movestart", function () { lift(true); });
     map.on("moveend", function () {
       lift(false);
-      if (Date.now() < holdUntil) return;
+      if (sheetLocked || Date.now() < holdUntil) return;
       if (map.getZoom() < 13) { sheet.classList.remove("show"); current = null; return; }
       lookupCenter();
     });

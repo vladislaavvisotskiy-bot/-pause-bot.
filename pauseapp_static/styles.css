@@ -923,10 +923,12 @@ p { margin: 0; color: var(--ink-soft); }
   display: inline-flex; vertical-align: -3px;
   color: var(--ink-soft);
   background: transparent;
+  border: 0;
   padding: 2px;
-  border-radius: 50%;
+  border-radius: 0;
+  -webkit-tap-highlight-color: transparent;
 }
-.checkout-delivery-info-btn:active { background: var(--ink-soft-bg); }
+.checkout-delivery-info-btn:active { background: transparent; opacity: .6; }
 
 .delivery-info-list { margin-top: 6px; }
 .delivery-info-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
