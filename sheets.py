@@ -293,6 +293,21 @@ def _id_value(client_id):
     return int(s) if s.isdigit() else s
 
 
+def _row_pay_method(row: list) -> str:
+    return row[config.O_PAY_METHOD - 1].strip() if len(row) >= config.O_PAY_METHOD else ""
+
+
+def _row_screenshot(row: list) -> str:
+    return row[config.O_SCREENSHOT - 1].strip() if len(row) >= config.O_SCREENSHOT else ""
+
+
+def _is_review_row(row: list) -> bool:
+    """Клиент выбрал карту, прислал скрин, админ ещё не подтвердил:
+    в K "В долг", но клиенту это "Оплата на проверке", не долг."""
+    return (row[config.O_PAYMENT - 1].strip() == "В долг" if len(row) >= config.O_PAYMENT else False) \
+        and _row_pay_method(row) == "Карта" and bool(_row_screenshot(row))
+
+
 def _row_delivery_fee(row: list) -> int:
     """Стоимость доставки, записанная на строку заказа (O_DELIVERY_FEE), 0 —
     если её нет. Доставка живёт на ОДНОЙ строке заказа ("строка-носитель",
@@ -497,7 +512,7 @@ def get_client_debt_from_orders(orders: list) -> int:
     prices = get_set_prices()
     total = 0
     for o in orders:
-        if o["payment"].strip() != "В долг" or o["canceled"]:
+        if o["payment"].strip() != "В долг" or o["canceled"] or o.get("review"):
             continue
         try:
             qty = int(str(o["qty"]).strip() or 0)
@@ -1058,6 +1073,8 @@ def get_client_orders(client_id, limit=10) -> list:
                 "batch": row[config.O_ORDER_BATCH - 1].strip() if len(row) >= config.O_ORDER_BATCH else "",
                 "sum": row[config.O_SUM - 1] if len(row) >= config.O_SUM else "",
                 "delivery_fee": _row_delivery_fee(row),
+                "review": _is_review_row(row),
+                "pay_method": _row_pay_method(row),
             })
     return out[-limit:][::-1]
 
@@ -1101,9 +1118,12 @@ def get_client_order_groups(client_id, limit=10, rows=None) -> list:
                 "paid": True,
                 "delivery_fee": 0,
                 "delivery_payment": "",
+                "review": False,
             }
             order.append(key)
         g = groups[key]
+        if r.get("review") and r["status"].strip().upper() != "ОПЛАЧЕНО":
+            g["review"] = True
         if r.get("delivery_fee"):
             g["delivery_fee"] += r["delivery_fee"]
             g["delivery_payment"] = r["payment"].strip()
@@ -1219,7 +1239,7 @@ def _next_empty_order_row() -> int:
 
 def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
                   qty: int, garnish: str, payment: str, comment: str = "",
-                  screenshot: str = "", batch_id: str = "") -> int:
+                  screenshot: str = "", batch_id: str = "", pay_method: str = "") -> int:
     """Добавляет строку заказа, возвращает номер строки (нужен для подтверждения оплаты картой).
 
     batch_id — метка одного оформления (см. config.O_ORDER_BATCH): все
@@ -1245,6 +1265,9 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
         updates.append((config.O_SCREENSHOT, screenshot))
     if batch_id:
         updates.append((config.O_ORDER_BATCH, batch_id))
+    if pay_method:
+        _ensure_sheet_columns(ws, config.O_PAY_METHOD)
+        updates.append((config.O_PAY_METHOD, pay_method))
     cells = [gspread.Cell(row_num, col, value) for col, value in updates]
     ws.update_cells(cells)
     return row_num
@@ -1252,7 +1275,7 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
 
 def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: list,
                          payment, comment: str = "", screenshot: str = "", batch_id: str = "",
-                         delivery_fee: int = 0, fee_payment: str = "") -> list:
+                         delivery_fee: int = 0, fee_payment: str = "", pay_method: str = "") -> list:
     """Как append_order, но для ВСЕЙ корзины ОДНИМ запросом к Sheets, а не
     по одному на каждую позицию. items — [{"set","qty","garnish"}, ...].
 
@@ -1280,6 +1303,8 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
     ws = _ws(config.SHEET_ORDERS)
     if delivery_fee:
         _ensure_sheet_columns(ws, config.O_DELIVERY_FEE)
+    if pay_method:
+        _ensure_sheet_columns(ws, config.O_PAY_METHOD)
     # Строка-носитель доставки — первая позиция, НЕ оплаченная билетом:
     # доставка делит статус оплаты (К) со своей строкой, а у билетной строки
     # статус "Билетом" — доставка осталась бы вне долга/подтверждений. Если
@@ -1330,6 +1355,8 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
         # позициям (один заказ = одна доставка, см. api_order_submit).
         if delivery_fee and i == fee_index:
             updates.append((config.O_DELIVERY_FEE, str(delivery_fee)))
+        if pay_method and payments[i] != config.PAYMENT_TICKET:
+            updates.append((config.O_PAY_METHOD, pay_method))
         cells.extend(gspread.Cell(row_num, col, value) for col, value in updates)
     if cells:
         ws.update_cells(cells)
@@ -1421,7 +1448,10 @@ def mark_screenshot_sent(row_nums: list):
     (confirm_card_payment)."""
     ws = _ws(config.SHEET_ORDERS)
     for r in row_nums:
-        ws.update_cell(r, config.O_PAYMENT, "На проверке")
+        # Заказ из PAUSE App (способ "Карта" в AE) держится в "В долг" до
+        # подтверждения, остальные — "На проверке", как и раньше.
+        method = ws.cell(r, config.O_PAY_METHOD).value or ""
+        ws.update_cell(r, config.O_PAYMENT, "В долг" if method.strip() == "Карта" else "На проверке")
 
 
 def get_order_rows(row_nums: list) -> list:
@@ -1467,7 +1497,8 @@ def get_unconfirmed_card_orders(date_str: str) -> list:
         if row[config.O_DATE - 1].strip() != date_str:
             continue
         payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
-        if payment != "":
+        # Бот: K пуст. PAUSE App: "В долг" + способ "Карта" и ещё без скрина.
+        if not (payment == "" or (payment == "В долг" and _row_pay_method(row) == "Карта" and not _row_screenshot(row))):
             continue
         comment = row[config.O_COMMENT - 1].strip()
         if is_canceled(comment):
@@ -1534,14 +1565,15 @@ def get_payments_for_date(date_str: str) -> list:
         screenshot = row[config.O_SCREENSHOT - 1].strip() if len(row) >= config.O_SCREENSHOT else ""
         client_id = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
 
+        app_pending = payment == "В долг" and _row_pay_method(row)
         if screenshot:
-            if payment not in ("На проверке", "Картой"):
+            if payment not in ("На проверке", "Картой") and app_pending != "Карта":
                 continue
             method = "card"
             confirmed = payment == "Картой"
             key = (client_id, "card", screenshot)
         else:
-            if payment not in ("На проверке", "Наличными"):
+            if payment not in ("На проверке", "Наличными") and app_pending != "Наличные":
                 continue
             method = "cash"
             confirmed = payment == "Наличными"
@@ -3019,8 +3051,8 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
         r = i + 1
         if r < config.ORDERS_DATA_START_ROW:
             continue
-        if len(row) < config.O_ORDER_BATCH:
-            row = row + [""] * (config.O_ORDER_BATCH - len(row))
+        if len(row) < config.O_PAY_METHOD:
+            row = row + [""] * (config.O_PAY_METHOD - len(row))
         date_cell = row[config.O_DATE - 1].strip()
         try:
             d = dt.datetime.strptime(date_cell, "%d.%m.%Y")
@@ -3042,7 +3074,7 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
         payment_raw = row[config.O_PAYMENT - 1].strip()
         if payment_raw in ("Картой", "Наличными"):
             pay_status = "paid"
-        elif payment_raw == "На проверке":
+        elif payment_raw == "На проверке" or _is_review_row(row):
             pay_status = "review"
         else:
             pay_status = "unpaid"
@@ -3102,7 +3134,7 @@ def get_delivery_overview(date_from: str, date_to: str) -> dict:
         pay = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
         if pay in ("Картой", "Наличными"):
             state = "paid"
-        elif pay == "На проверке":
+        elif pay == "На проверке" or _is_review_row(row):
             state = "review"
         elif pay == "В долг":
             state = "debt"
@@ -4811,7 +4843,9 @@ def record_cash_collection(date_str: str, courier_tg_id, courier_name: str, poin
         payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
         if payment in ("Картой", "Наличными"):
             continue  # уже оплачено — не трогаем
-        was_debt = payment == "В долг"
+        # Строки из PAUSE App (способ в AE) — это "ждёт подтверждения", а не
+        # настоящий долг: не помечаем их как "долг погашен".
+        was_debt = payment == "В долг" and not _row_pay_method(row)
         cur_comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
         cells.append(gspread.Cell(r, config.O_PAYMENT, "Наличными"))
         new_comment = cur_comment

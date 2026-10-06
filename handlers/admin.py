@@ -774,9 +774,10 @@ async def pending_point_approved(callback: CallbackQuery, bot: Bot):
             set_name=item["set"],
             qty=item["qty"],
             garnish=item.get("garnish", ""),
-            payment=pending["payment"],
+            payment=pending["payment"].partition("|")[0],
             comment=pending["comment"],
             batch_id=batch_id,
+            pay_method=pending["payment"].partition("|")[2],
         )
         row_nums.append(row_num)
 

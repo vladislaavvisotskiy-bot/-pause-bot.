@@ -334,6 +334,7 @@
       "orders.canceled": "Отменён", "orders.complete": "Завершён", "orders.preparing": "Готовится",
       "orders.paid": "Оплачено", "orders.unpaid": "Не оплачено", "orders.all": "Все",
       "orders.debtTag": " (в долг)",
+      "orders.payChecking": "Оплата на проверке",
       "orders.delivery": "Доставка", "orders.dlv.paid": "оплачена", "orders.dlv.review": "ждёт подтверждения", "orders.dlv.debt": "в долг", "orders.dlv.unpaid": "не оплачена",
       "orders.cancel": "Отменить",
       "orders.cancelConfirm": "Отменить заказ на {date}?",
@@ -639,6 +640,7 @@
       "orders.canceled": "Bekor qilindi", "orders.complete": "Yakunlandi", "orders.preparing": "Tayyorlanmoqda",
       "orders.paid": "To'langan", "orders.unpaid": "To'lanmagan", "orders.all": "Barchasi",
       "orders.debtTag": " (nasiya)",
+      "orders.payChecking": "To'lov tekshirilmoqda",
       "orders.delivery": "Yetkazib berish", "orders.dlv.paid": "to'langan", "orders.dlv.review": "tasdiqlash kutilmoqda", "orders.dlv.debt": "nasiya", "orders.dlv.unpaid": "to'lanmagan",
       "orders.cancel": "Bekor qilish",
       "orders.cancelConfirm": "{date} sanasidagi buyurtmani bekor qilasizmi?",
@@ -944,6 +946,7 @@
       "orders.canceled": "Canceled", "orders.complete": "Completed", "orders.preparing": "Preparing",
       "orders.paid": "Paid", "orders.unpaid": "Unpaid", "orders.all": "All",
       "orders.debtTag": " (on credit)",
+      "orders.payChecking": "Payment under review",
       "orders.delivery": "Delivery", "orders.dlv.paid": "paid", "orders.dlv.review": "awaiting confirmation", "orders.dlv.debt": "on credit", "orders.dlv.unpaid": "unpaid",
       "orders.cancel": "Cancel",
       "orders.cancelConfirm": "Cancel the order for {date}?",
@@ -4215,7 +4218,9 @@
           var statusPill = g.canceled
             ? '<span class="pill muted">' + t("orders.canceled") + '</span>'
             : g.complete ? '<span class="pill">' + t("orders.complete") + '</span>' : '<span class="pill gold">' + t("orders.preparing") + '</span>';
-          var payPill = '<span class="pill ' + (g.paid ? "paid" : "unpaid") + '">' + (g.paid ? t("orders.paid") : t("orders.unpaid")) + '</span>';
+          var payPill = g.review && !g.paid
+            ? '<span class="pill gold">' + t("orders.payChecking") + '</span>'
+            : '<span class="pill ' + (g.paid ? "paid" : "unpaid") + '">' + (g.paid ? t("orders.paid") : t("orders.unpaid")) + '</span>';
           card.innerHTML =
             '<div class="order-card-head"><span class="order-card-date">' + g.date + '</span>' +
             '<span class="order-card-pills">' + payPill + statusPill + '</span></div>' +

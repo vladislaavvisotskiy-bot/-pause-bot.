@@ -378,11 +378,19 @@ def _payment_value(payment: str, has_screenshot: bool) -> str:
     card_decision/card_now/card_later по шагам), здесь то же самое решается
     сразу по двум полям, которые приложение прислало одним запросом
     (payment + был ли реально загружен скрин)."""
-    if "карт" in payment.lower():
-        return "На проверке" if has_screenshot else ""
-    if payment.strip() == "Наличными":
-        return "На проверке"
+    # Пока админ/курьер не подтвердил оплату, в таблице стоит "В долг"
+    # (способ — в скрытом столбце O_PAY_METHOD, см. _pay_method).
+    if "карт" in payment.lower() or payment.strip() == "Наличными":
+        return "В долг"
     return payment
+
+
+def _pay_method(payment: str) -> str:
+    if "карт" in payment.lower():
+        return "Карта"
+    if payment.strip() == "Наличными":
+        return "Наличные"
+    return ""
 
 
 async def api_upload_screenshot(request: web.Request):
@@ -546,7 +554,8 @@ async def api_order_submit(request: web.Request):
             date_str=date_str, zone=zone, point=point,
             client_id=client["id"], client_name=client.get("name", ""),
             client_phone=client.get("contact", ""), cart=cart,
-            payment=payment_value, comment=comment, screenshot=screenshot,
+            payment=(payment_value + "|" + _pay_method(payment)) if _pay_method(payment) else payment_value,
+            comment=comment, screenshot=screenshot,
         )
         if bot and config.ADMIN_IDS:
             try:
@@ -608,7 +617,7 @@ async def api_order_submit(request: web.Request):
         date_str=date_str, zone=zone, point=point, client_id=client["id"], items=items,
         payment=payment_values if is_ticket_payment else payment_value,
         comment=comment, screenshot=screenshot, batch_id=batch_id, delivery_fee=delivery_fee,
-        fee_payment=payment_value,
+        fee_payment=payment_value, pay_method=_pay_method(payment),
     )
 
     try:
@@ -912,6 +921,7 @@ async def api_orders(request: web.Request):
             not g["canceled"]
             and not sheets.is_after_cancel_cutoff(g["date"])
             and not _card_pending_status(g["payment"])
+            and not g.get("review")
         )
         # Клиенту — только клиентские названия (те же, что на карточках в
         # Меню), техническое имя столбца G "Заказы" наружу не уходит.
@@ -920,15 +930,16 @@ async def api_orders(request: web.Request):
             for i in g["items"]
         ]
         groups_out.append({
+            "review": bool(g.get("review")),
             "date": g["date"],
             "items": display_items,
             "payment": g["payment"],
             "canceled": g["canceled"],
-            "is_debt": g["payment"] == "В долг",
+            "is_debt": g["payment"] == "В долг" and not g.get("review"),
             "delivery_fee": g.get("delivery_fee", 0),
             "delivery_state": (
                 "paid" if g.get("delivery_payment") in ("Картой", "Наличными")
-                else "review" if g.get("delivery_payment") == "На проверке"
+                else "review" if g.get("delivery_payment") == "На проверке" or (g.get("delivery_payment") == "В долг" and g.get("review"))
                 else "debt" if g.get("delivery_payment") == "В долг"
                 else "unpaid"
             ) if g.get("delivery_fee") else "",
@@ -953,7 +964,7 @@ async def api_orders_cancel(request: web.Request):
     g = groups[0]
     if await _retry_sheets(sheets.is_after_cancel_cutoff, g["date"]):
         return web.json_response({"error": "too_late", "cutoff": config.CANCEL_CUTOFF_TIME}, status=409)
-    card_status = _card_pending_status(g["payment"])
+    card_status = _card_pending_status(g["payment"]) or ("на проверке" if g.get("review") else "")
     if card_status:
         return web.json_response({"error": "card_pending", "status": card_status}, status=409)
 
