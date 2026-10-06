@@ -2162,7 +2162,7 @@ p { margin: 0; color: var(--ink-soft); }
 /* ------------------------------------------------------------------ */
 /* Корзина и сверка заказа (stepCart / stepCheckout)                    */
 /* ------------------------------------------------------------------ */
-.ck-serif { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; letter-spacing: .01em; font-size: 30px; }
+.ck-serif { }
 .ck-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .ck-head .wizard-title { margin: 0; }
 .ck-head-count {
@@ -2181,7 +2181,7 @@ p { margin: 0; color: var(--ink-soft); }
 .ck-cart-ico {
   flex: none; width: 52px; height: 52px; border-radius: 16px;
   display: flex; align-items: center; justify-content: center;
-  color: #fffdf8; background: linear-gradient(145deg, #8f9279, #6e7160);
+  color: #fffdf8; background: var(--caramel-grad);
 }
 .ck-cart-ico svg { width: 24px; height: 24px; }
 .ck-cart-mid { flex: 1; min-width: 0; }
@@ -2202,19 +2202,18 @@ p { margin: 0; color: var(--ink-soft); }
 .ck-total-card {
   margin-top: 14px; padding: 18px 20px; border-radius: 22px;
   display: flex; justify-content: space-between; align-items: baseline;
-  background: linear-gradient(145deg, #8f9279, #6e7160); color: #fffdf8;
-  box-shadow: 0 8px 22px rgba(110, 113, 96, .3);
+  background: var(--caramel-grad); color: #fffdf8;
+  box-shadow: 0 8px 22px rgba(138, 90, 46, .32);
 }
 .ck-total-card span { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
-.ck-total-card b { font-family: "Cormorant Garamond", Georgia, serif; font-size: 32px; font-weight: 600; }
+.ck-total-card b { font-size: 26px; font-weight: 700; }
 .ck-cta { border-radius: 999px; padding: 17px; font-size: 16px; box-shadow: 0 8px 20px rgba(43, 40, 35, .22); }
 
 /* Сверка заказа: секции с аккуратными заголовками, чек-карточка */
 .ck-sec { margin-bottom: 20px; }
 .ck-sec > label {
-  font-family: "Cormorant Garamond", Georgia, serif;
-  text-transform: none; letter-spacing: .01em;
-  font-size: 20px; font-weight: 600; color: var(--ink); margin-bottom: 10px;
+  text-transform: none; letter-spacing: 0;
+  font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 10px;
 }
 .ck-point { justify-content: flex-start; gap: 12px; margin-bottom: 4px; border-radius: 20px; }
 .ck-point-ico {
@@ -2231,7 +2230,7 @@ p { margin: 0; color: var(--ink-soft); }
 .ck-receipt .checkout-summary-row { padding: 10px 0; }
 .ck-receipt .checkout-summary-row + .checkout-summary-row { border-top: 1px dotted rgba(43, 40, 35, .2); }
 .ck-receipt .summary-total { border-top: 1px dashed rgba(43, 40, 35, .3); margin-top: 6px; padding-top: 14px; }
-.ck-receipt .summary-total-value { font-family: "Cormorant Garamond", Georgia, serif; font-size: 30px; font-weight: 600; }
+.ck-receipt .summary-total-value { font-size: 24px; font-weight: 700; }
 .ck-sec .payment-tile {
   padding: 16px 10px; border-radius: 18px; font-weight: 600; transition: all .2s ease;
 }
