@@ -2225,3 +2225,20 @@ p { margin: 0; color: var(--ink-soft); }
 .menu-wide-card.expanded .menu-wide-inner { opacity: 1; padding: 0 16px 18px; border-top: 1px solid rgba(43, 40, 35, 0.08); padding-top: 14px; }
 .menu-wide-fav { position: absolute; top: 8px; right: 12px; }
 .menu-wide-inner .menu-set-card-desc { padding-right: 36px; }
+
+/* Главная: карточки с историей блюда */
+.home-story-card { padding: 0; overflow: hidden; border-radius: 22px; }
+.home-story-top { display: flex; gap: 14px; padding: 12px; cursor: pointer; align-items: flex-start; }
+.home-story-photo { flex: none; width: 96px; height: 96px; border-radius: 16px; overflow: hidden; background: var(--ivory-deep); display: flex; align-items: center; justify-content: center; }
+.home-story-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.home-story-photo.empty { background: rgba(133, 135, 114, 0.14); color: #858772; }
+.home-story-photo.empty svg { width: 26px; height: 26px; }
+.home-story-info { flex: 1; min-width: 0; }
+.home-story-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.home-story-name { font-weight: 700; font-size: 16px; line-height: 1.25; color: var(--ink); }
+.home-story-preview { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
+.home-story-card.expanded .menu-wide-chev svg { transform: rotate(-90deg); }
+.home-story-card .menu-wide-inner { padding-left: 14px; padding-right: 14px; }
+.home-story-card.expanded .menu-wide-inner { padding: 14px 14px 16px; }
+.home-story-text { font-size: 14.5px; line-height: 1.6; color: var(--ink); }
+.home-story-order { width: 100%; margin-top: 14px; }

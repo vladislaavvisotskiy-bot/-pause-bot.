@@ -1965,6 +1965,39 @@ def get_set_extra() -> dict:
     return out
 
 
+_SS_HEADER = ["Сет", "История"]
+_set_stories_lock = threading.Lock()
+
+
+def get_set_stories() -> dict:
+    """{имя сета или группы: текст истории} — для карточек на Главной."""
+    now = time.time()
+    if _cache.get("set_stories") is not None and now - _cache.get("set_stories_ts", 0) < _CACHE_TTL:
+        return _cache["set_stories"]
+    ws = _ws_or_create(config.SHEET_SET_STORIES, _SS_HEADER)
+    out = {}
+    for r in ws.get_all_values()[1:]:
+        if r and r[0].strip():
+            out[r[0].strip()] = (r[1] if len(r) > 1 else "").strip()
+    _cache["set_stories"] = out
+    _cache["set_stories_ts"] = now
+    return out
+
+
+def set_set_story(key: str, text: str):
+    key = key.strip()
+    with _set_stories_lock:
+        ws = _ws_or_create(config.SHEET_SET_STORIES, _SS_HEADER)
+        rows = ws.get_all_values()
+        for i, r in enumerate(rows):
+            if i and r and r[0].strip() == key:
+                ws.update_cells([gspread.Cell(i + 1, 2, text)], value_input_option="RAW")
+                break
+        else:
+            ws.append_row([key, text], value_input_option="RAW")
+        _cache["set_stories"] = None
+
+
 def get_garnishes() -> list:
     """Полный список всех возможных гарниров — справочник на будущее."""
     ws = _ws(config.SHEET_REFERENCE)

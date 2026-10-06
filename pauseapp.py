@@ -202,7 +202,7 @@ def _split_description(raw: str) -> list:
     return [line.strip() for line in (raw or "").splitlines() if line.strip()]
 
 
-def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extra: dict = None, garnish_map: dict = None) -> list:
+def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extra: dict = None, garnish_map: dict = None, stories: dict = None) -> list:
     """Тот же порядок веток, что и в keyboards.set_kb/handlers/order.py:
     _proceed_after_set_choice — группа переменной цены (config.SET_VARIANTS)
     одной карточкой с вариантами, обычный сет — карточкой с ценой и (если
@@ -225,6 +225,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
     один чип категории, кроме "Все"."""
     extra = extra or {}
     garnish_map = garnish_map or {}
+    stories = stories or {}
     items = []
     seen_groups = set()
     for name in sets_today:
@@ -265,6 +266,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
                 "category": first_extra.get("category", ""),
                 "photo_url": _resolve_photo_url(first_extra.get("photo_url", "")),
                 "description": _split_description(first_extra.get("description", "")),
+                "story": stories.get(group, ""),
             })
         else:
             has_garnish = clean.lower() in sets_with_garnish
@@ -284,6 +286,7 @@ def _serialize_sets(sets_today: list, prices: dict, sets_with_garnish: set, extr
                 "category": clean_extra.get("category", ""),
                 "photo_url": _resolve_photo_url(clean_extra.get("photo_url", "")),
                 "description": _split_description(clean_extra.get("description", "")),
+                "story": stories.get(clean, ""),
             })
     return items
 
@@ -304,6 +307,11 @@ async def api_menu(request: web.Request):
     sets_with_garnish = await _retry_sheets(sheets.get_sets_with_garnish)
     sets_extra = await _retry_sheets(sheets.get_set_extra)
     garnish_map = await _retry_sheets(sheets.get_today_garnishes_for_all_sets)
+    try:
+        stories = await _retry_sheets(sheets.get_set_stories)
+    except Exception:
+        logger.exception("PAUSE App: не удалось прочитать истории блюд")
+        stories = {}
     payment_options = [
         o for o in await _retry_sheets(sheets.get_payment_options)
         if "долг" not in o.lower() and "проверке" not in o.lower()
@@ -316,7 +324,7 @@ async def api_menu(request: web.Request):
         "can_order": published and not cutoff_passed,
         "cutoff_passed": cutoff_passed,
         "cutoff_time": config.ORDER_CUTOFF_TIME,
-        "sets": _serialize_sets(sets_today, prices, sets_with_garnish, sets_extra, garnish_map),
+        "sets": _serialize_sets(sets_today, prices, sets_with_garnish, sets_extra, garnish_map, stories),
         "payment_options": payment_options,
         "card_requisites": texts.REQUISITES_TEXT,
     })
@@ -1995,6 +2003,10 @@ async def _catalog_overview() -> list:
     sets_with_garnish = await _retry_sheets(sheets.get_sets_with_garnish)
     extra = await _retry_sheets(sheets.get_set_extra)
     overrides = await _retry_sheets(sheets.get_set_display_name_overrides)
+    try:
+        stories = await _retry_sheets(sheets.get_set_stories)
+    except Exception:
+        stories = {}
 
     def _name(n):
         return overrides.get(n) or texts.SET_DISPLAY_NAMES.get(n, n)
@@ -2016,6 +2028,7 @@ async def _catalog_overview() -> list:
                 "has_garnish": technicals[0].strip().lower() in sets_with_garnish,
                 "photo_url": _resolve_photo_url(first_extra.get("photo_url", "")),
                 "description": first_extra.get("description", ""),
+                "story": stories.get(group, ""),
             })
         else:
             e = extra.get(name, {})
@@ -2026,6 +2039,7 @@ async def _catalog_overview() -> list:
                 "has_garnish": name.strip().lower() in sets_with_garnish,
                 "photo_url": _resolve_photo_url(e.get("photo_url", "")),
                 "description": e.get("description", ""),
+                "story": stories.get(name, ""),
             })
     return items
 
@@ -2085,6 +2099,18 @@ async def api_ops_menu_set_description(request: web.Request):
     body = await request.json()
     description = (body.get("description") or "").strip()
     await _retry_sheets(sheets.set_set_description, set_key, description)
+    return web.json_response({"ok": True})
+
+
+async def api_ops_menu_set_story(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_key = request.match_info.get("set_key", "")
+    if not set_key:
+        return web.json_response({"error": "set_required"}, status=400)
+    body = await request.json()
+    story = (body.get("story") or "").strip()[:4000]
+    await _retry_sheets(sheets.set_set_story, set_key, story)
     return web.json_response({"ok": True})
 
 
@@ -2559,6 +2585,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/ops/menu/catalog", api_ops_menu_catalog)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/photo", api_ops_menu_set_photo)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/description", api_ops_menu_set_description)
+    app.router.add_post("/api/ops/menu/catalog/{set_key}/story", api_ops_menu_set_story)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/garnish-flag", api_ops_menu_set_garnish_flag)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/display-name", api_ops_menu_set_display_name)
     app.router.add_get("/api/ops/menu/draft", api_ops_menu_draft)

@@ -335,7 +335,7 @@
       "orders.paid": "Оплачено", "orders.unpaid": "Не оплачено", "orders.all": "Все",
       "orders.debtTag": " (в долг)",
       "orders.payChecking": "Оплата на проверке",
-      "orders.method": "Способ оплаты", "orders.method.card": "Карта", "orders.method.cash": "Наличные", "orders.method.ticket": "Билет", "pay.title": "Оплата за сегодня", "pay.total": "Сумма к оплате", "pay.send": "Отправить оплату", "pay.sent": "Скриншот отправлен. Мы проверим оплату и подтвердим заказ.", "pay.nothing": "Сейчас оплата не требуется.", "orders.setsSum": "Сеты", "orders.pay": "Оплатить {sum}", "orders.payHint": "Выберите дни, за которые хотите оплатить, и прикрепите скриншот оплаты — мы проверим и подтвердим.",
+      "orders.method": "Способ оплаты", "orders.method.card": "Карта", "orders.method.cash": "Наличные", "orders.method.ticket": "Билет", "pay.title": "Оплата за сегодня", "pay.total": "Сумма к оплате", "pay.send": "Отправить оплату", "pay.sent": "Скриншот отправлен. Мы проверим оплату и подтвердим заказ.", "pay.nothing": "Сейчас оплата не требуется.", "home.storyOrder": "Заказать", "orders.setsSum": "Сеты", "orders.pay": "Оплатить {sum}", "orders.payHint": "Выберите дни, за которые хотите оплатить, и прикрепите скриншот оплаты — мы проверим и подтвердим.",
       "orders.delivery": "Доставка", "orders.dlv.paid": "оплачена", "orders.dlv.review": "ждёт подтверждения", "orders.dlv.debt": "в долг", "orders.dlv.unpaid": "не оплачена",
       "orders.cancel": "Отменить",
       "orders.cancelConfirm": "Отменить заказ на {date}?",
@@ -642,7 +642,7 @@
       "orders.paid": "To'langan", "orders.unpaid": "To'lanmagan", "orders.all": "Barchasi",
       "orders.debtTag": " (nasiya)",
       "orders.payChecking": "To'lov tekshirilmoqda",
-      "orders.method": "To'lov usuli", "orders.method.card": "Karta", "orders.method.cash": "Naqd", "orders.method.ticket": "Chipta", "pay.title": "Bugungi to'lov", "pay.total": "To'lov summasi", "pay.send": "To'lovni yuborish", "pay.sent": "Skrinshot yuborildi. To'lovni tekshirib, buyurtmani tasdiqlaymiz.", "pay.nothing": "Hozir to'lov talab qilinmaydi.", "orders.setsSum": "Setlar", "orders.pay": "To'lash {sum}", "orders.payHint": "To'lamoqchi bo'lgan kunlarni tanlang va to'lov skrinshotini biriktiring — tekshirib tasdiqlaymiz.",
+      "orders.method": "To'lov usuli", "orders.method.card": "Karta", "orders.method.cash": "Naqd", "orders.method.ticket": "Chipta", "pay.title": "Bugungi to'lov", "pay.total": "To'lov summasi", "pay.send": "To'lovni yuborish", "pay.sent": "Skrinshot yuborildi. To'lovni tekshirib, buyurtmani tasdiqlaymiz.", "pay.nothing": "Hozir to'lov talab qilinmaydi.", "home.storyOrder": "Buyurtma berish", "orders.setsSum": "Setlar", "orders.pay": "To'lash {sum}", "orders.payHint": "To'lamoqchi bo'lgan kunlarni tanlang va to'lov skrinshotini biriktiring — tekshirib tasdiqlaymiz.",
       "orders.delivery": "Yetkazib berish", "orders.dlv.paid": "to'langan", "orders.dlv.review": "tasdiqlash kutilmoqda", "orders.dlv.debt": "nasiya", "orders.dlv.unpaid": "to'lanmagan",
       "orders.cancel": "Bekor qilish",
       "orders.cancelConfirm": "{date} sanasidagi buyurtmani bekor qilasizmi?",
@@ -949,7 +949,7 @@
       "orders.paid": "Paid", "orders.unpaid": "Unpaid", "orders.all": "All",
       "orders.debtTag": " (on credit)",
       "orders.payChecking": "Payment under review",
-      "orders.method": "Payment method", "orders.method.card": "Card", "orders.method.cash": "Cash", "orders.method.ticket": "Ticket", "pay.title": "Today's payment", "pay.total": "Total due", "pay.send": "Send payment", "pay.sent": "Screenshot sent. We'll check the payment and confirm your order.", "pay.nothing": "No payment needed right now.", "orders.setsSum": "Sets", "orders.pay": "Pay {sum}", "orders.payHint": "Choose the days you want to pay for and attach a payment screenshot — we'll check and confirm it.",
+      "orders.method": "Payment method", "orders.method.card": "Card", "orders.method.cash": "Cash", "orders.method.ticket": "Ticket", "pay.title": "Today's payment", "pay.total": "Total due", "pay.send": "Send payment", "pay.sent": "Screenshot sent. We'll check the payment and confirm your order.", "pay.nothing": "No payment needed right now.", "home.storyOrder": "Order", "orders.setsSum": "Sets", "orders.pay": "Pay {sum}", "orders.payHint": "Choose the days you want to pay for and attach a payment screenshot — we'll check and confirm it.",
       "orders.delivery": "Delivery", "orders.dlv.paid": "paid", "orders.dlv.review": "awaiting confirmation", "orders.dlv.debt": "on credit", "orders.dlv.unpaid": "unpaid",
       "orders.cancel": "Cancel",
       "orders.cancelConfirm": "Cancel the order for {date}?",
@@ -1757,7 +1757,7 @@
     if (m.published && m.sets && m.sets.length) {
       root.appendChild(el("div", "profile-section-title", t("home.inMenuToday")));
       var list = el("div", "menu-set-grid");
-      m.sets.slice(0, 3).forEach(function (s) { list.appendChild(buildMenuSetCard(s)); });
+      m.sets.forEach(function (s) { list.appendChild(buildHomeStoryCard(s)); });
       root.appendChild(list);
     }
   }
@@ -1842,6 +1842,64 @@
     renderMenuSetCards(root);
   }
 
+  // Первые два предложения истории — превью на карточке Главной.
+  function storyPreview(text) {
+    var flat = (text || "").replace(/\s+/g, " ").trim();
+    if (!flat) return "";
+    var parts = flat.match(/[^.!?…]+[.!?…]+(\s|$)/g);
+    if (!parts || parts.length <= 2) return parts && parts.join("").trim().length >= flat.length - 1 ? flat : flat.length > 160 ? flat.slice(0, 160).trim() + "…" : flat;
+    return parts.slice(0, 2).join("").trim() + " (...)";
+  }
+
+  // Карточка Главной: фото, название (без цены), превью истории; по тапу вниз
+  // раскрывается полный текст и кнопка "Заказать" (ведёт на эту карточку в Меню).
+  function buildHomeStoryCard(s) {
+    var card = el("div", "card home-story-card");
+    var top = el("div", "home-story-top");
+    var photo = el("div", "home-story-photo");
+    if (s.photo_url) {
+      var img = el("img");
+      img.alt = ""; img.loading = "lazy";
+      img.addEventListener("error", function () { img.remove(); photo.innerHTML = ICON_LEAF; photo.classList.add("empty"); });
+      setPhotoSrc(img, s.photo_url);
+      photo.appendChild(img);
+    } else { photo.classList.add("empty"); photo.innerHTML = ICON_LEAF; }
+    top.appendChild(photo);
+    var info = el("div", "home-story-info");
+    var head = el("div", "home-story-head");
+    head.appendChild(el("div", "home-story-name", escapeHtml(localizedSetName(s.display_name))));
+    head.appendChild(el("div", "menu-wide-chev", ICON_CHEVRON));
+    info.appendChild(head);
+    var prev = storyPreview(s.story);
+    var prevEl = el("div", "home-story-preview", escapeHtml(prev));
+    if (prev) info.appendChild(prevEl);
+    top.appendChild(info);
+    card.appendChild(top);
+
+    var details = el("div", "menu-wide-details");
+    var inner = el("div", "menu-wide-inner");
+    if (s.story) inner.appendChild(el("div", "home-story-text", escapeHtml(s.story).replace(/\n/g, "<br>")));
+    var go = el("button", "btn-primary home-story-order", t("home.storyOrder"));
+    go.addEventListener("click", function () {
+      haptic("select");
+      state.menuCategory = "all";
+      state.menuFocusKey = s.key;
+      showScreen("menu");
+    });
+    inner.appendChild(go);
+    inner.addEventListener("click", function (e) { e.stopPropagation(); });
+    details.appendChild(inner);
+    card.appendChild(details);
+
+    top.addEventListener("click", function () {
+      haptic("select");
+      var open = !card.classList.contains("expanded");
+      card.classList.toggle("expanded", open);
+      prevEl.hidden = open;
+    });
+    return card;
+  }
+
   function menuCategoriesInUse() {
     var seen = {};
     var result = [];
@@ -1879,8 +1937,18 @@
       return;
     }
     var grid = el("div", "menu-set-grid");
-    sets.forEach(function (s) { grid.appendChild(buildMenuSetCard(s, true)); });
+    var focusCard = null;
+    sets.forEach(function (s) {
+      var c = buildMenuSetCard(s, true);
+      if (state.menuFocusKey && s.key === state.menuFocusKey) focusCard = c;
+      grid.appendChild(c);
+    });
     root.appendChild(grid);
+    if (focusCard) {
+      state.menuFocusKey = "";
+      if (focusCard._open) focusCard._open();
+      setTimeout(function () { focusCard.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60);
+    }
   }
 
   var ICON_CHEVRON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>';
@@ -2114,6 +2182,7 @@
 
       foot.addEventListener("click", toggle);
       photo.addEventListener("click", toggle);
+      card._open = function () { if (!expanded) toggle(); };
       function toggle() {
         haptic("select");
         expanded = !expanded;
@@ -5434,6 +5503,26 @@
       });
     });
     body.appendChild(descSaveBtn);
+
+    var storyField = el("div", "field");
+    storyField.innerHTML = '<label>История блюда (показывается на Главной: интересные факты, происхождение)</label><textarea rows="6"></textarea>';
+    body.appendChild(storyField);
+    var storyInput = storyField.querySelector("textarea");
+    storyInput.value = c.story || "";
+    var storySaveBtn = el("button", "btn-ghost", "Сохранить историю");
+    storySaveBtn.addEventListener("click", function () {
+      storySaveBtn.disabled = true;
+      api(_menuCatalogUrl(c.key, "story"), { method: "POST", body: { story: storyInput.value } }).then(function () {
+        haptic("success");
+        c.story = storyInput.value;
+        storySaveBtn.disabled = false;
+        toast("История сохранена");
+      }).catch(function (err) {
+        storySaveBtn.disabled = false;
+        toast("Не удалось сохранить: " + err.message);
+      });
+    });
+    body.appendChild(storySaveBtn);
 
     var garnishCard = el("div", "card");
     garnishCard.appendChild(buildToggleRow("Гарнир доступен", "Можно ли вообще выбирать гарнир к этому сету", c.has_garnish, function (next) {
