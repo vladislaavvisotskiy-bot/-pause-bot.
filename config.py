@@ -432,6 +432,10 @@ CLUB_BENEFITS = {
 # осталась. Когда будем переводить в бой — убрать это ограничение здесь
 # и подключить к боту, по отдельной просьбе.
 CLUB_DELIVERY_FEES = {"guest": 0, "regular": 10000, "circle": 5000, "ambassador": 0}
+# Платная доставка в PAUSE App включена для ВСЕХ клиентов. Аварийный
+# выключатель: PAUSEAPP_DELIVERY_FEES=0 в окружении — тогда она остаётся
+# только у PAUSEAPP_TEST_CLIENT_IDS (как было на этапе тестирования).
+DELIVERY_FEES_ENABLED = os.getenv("PAUSEAPP_DELIVERY_FEES", "1").strip() != "0"
 
 # --- PDF-отчёт для кухни ---
 PDF_FONT_REGULAR = os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans.ttf")

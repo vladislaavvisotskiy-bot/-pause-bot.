@@ -329,6 +329,7 @@
       "orders.canceled": "Отменён", "orders.complete": "Завершён", "orders.preparing": "Готовится",
       "orders.paid": "Оплачено", "orders.unpaid": "Не оплачено", "orders.all": "Все",
       "orders.debtTag": " (в долг)",
+      "orders.delivery": "Доставка", "orders.dlv.paid": "оплачена", "orders.dlv.review": "ждёт подтверждения", "orders.dlv.debt": "в долг", "orders.dlv.unpaid": "не оплачена",
       "orders.cancel": "Отменить",
       "orders.cancelConfirm": "Отменить заказ на {date}?",
       "orders.cancelYes": "Да, отменить",
@@ -628,6 +629,7 @@
       "orders.canceled": "Bekor qilindi", "orders.complete": "Yakunlandi", "orders.preparing": "Tayyorlanmoqda",
       "orders.paid": "To'langan", "orders.unpaid": "To'lanmagan", "orders.all": "Barchasi",
       "orders.debtTag": " (nasiya)",
+      "orders.delivery": "Yetkazib berish", "orders.dlv.paid": "to'langan", "orders.dlv.review": "tasdiqlash kutilmoqda", "orders.dlv.debt": "nasiya", "orders.dlv.unpaid": "to'lanmagan",
       "orders.cancel": "Bekor qilish",
       "orders.cancelConfirm": "{date} sanasidagi buyurtmani bekor qilasizmi?",
       "orders.cancelYes": "Ha, bekor qilish",
@@ -927,6 +929,7 @@
       "orders.canceled": "Canceled", "orders.complete": "Completed", "orders.preparing": "Preparing",
       "orders.paid": "Paid", "orders.unpaid": "Unpaid", "orders.all": "All",
       "orders.debtTag": " (on credit)",
+      "orders.delivery": "Delivery", "orders.dlv.paid": "paid", "orders.dlv.review": "awaiting confirmation", "orders.dlv.debt": "on credit", "orders.dlv.unpaid": "unpaid",
       "orders.cancel": "Cancel",
       "orders.cancelConfirm": "Cancel the order for {date}?",
       "orders.cancelYes": "Yes, cancel",
@@ -4175,7 +4178,8 @@
           card.innerHTML =
             '<div class="order-card-head"><span class="order-card-date">' + g.date + '</span>' +
             '<span class="order-card-pills">' + payPill + statusPill + '</span></div>' +
-            '<div class="order-card-items">' + itemsText(g.items) + (g.is_debt ? t("orders.debtTag") : "") + '</div>';
+            '<div class="order-card-items">' + itemsText(g.items) + (g.is_debt ? t("orders.debtTag") : "") + '</div>' +
+            (g.delivery_fee ? '<div class="order-card-delivery dlv-' + g.delivery_state + '"><span>' + escapeHtml(t("orders.delivery")) + ' · ' + fmtSum(g.delivery_fee) + '</span><b>' + escapeHtml(t("orders.dlv." + (g.canceled ? "unpaid" : g.delivery_state))) + '</b></div>' : "");
           if (g.can_cancel || (!g.canceled && g.row_for_feedback)) {
             var actions = el("div", "order-card-actions");
             if (g.can_cancel) {
@@ -4327,6 +4331,7 @@
 
   var ICON_OPS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10M12 19V5M20 19v-6"/></svg>';
   var ICON_OPS_FINANCE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1.4 1.1-2.5 2.5-2.5s2.5 1 2.5 2.2c0 2.8-5 1.6-5 4.4 0 1.2 1.1 2.2 2.5 2.2s2.5-1.1 2.5-2.5"/></svg>';
+  var ICON_OPS_DELIVERY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg>';
   var ICON_OPS_DEBTORS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0.9-3.6 3.2-5.4 6-5.4s5.1 1.8 6 5.4"/><path d="M17 4.5c1.6 0.4 2.8 1.8 2.8 3.5s-1.2 3.1-2.8 3.5M21 20c-0.6-2.4-1.8-4-3.5-4.8"/></svg>';
   var ICON_OPS_ADMINS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-2.9 8-7 10-4.1-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>';
   var ICON_OPS_GIVEAWAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M3 12h18"/><path d="M12 8v12"/><path d="M12 8c-1.8 0-3.2-1.3-3.2-2.8S9.2 3 10.5 3c1.3 0 1.8 1.6 1.5 2.8M12 8c1.8 0 3.2-1.3 3.2-2.8S14.8 3 13.5 3c-1.3 0-1.8 1.6-1.5 2.8"/></svg>';
@@ -4378,6 +4383,17 @@
           sub.appendChild(el("div", "skeleton-block"));
           body.appendChild(sub);
           loadOpsFinance(sub);
+        });
+      }));
+    }
+    if (state.isMainAdmin || state.paFinance || state.paDebtors) {
+      rows.appendChild(buildProfileRow(ICON_OPS_DELIVERY, "Доставки", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "Доставки");
+          var sub = el("div");
+          sub.appendChild(el("div", "skeleton-block"));
+          body.appendChild(sub);
+          loadOpsDelivery(sub);
         });
       }));
     }
@@ -5796,6 +5812,80 @@
     render();
   }
 
+  // --- Операционный центр → Доставки ----------------------------------------
+  // Платная доставка (см. sheets.get_delivery_overview): сколько начислено,
+  // оплачено, ждёт подтверждения и висит в долге — за выбранный период.
+  var DLV_STATE_LABEL = { paid: "Оплачена", review: "Ждёт подтверждения", debt: "В долг", unpaid: "Не оплачена" };
+
+  function loadOpsDelivery(root) {
+    var days = 0; // 0 = сегодня
+    function load() {
+      root.innerHTML = "";
+      root.appendChild(el("div", "skeleton-block"));
+      var to = new Date(), from = new Date();
+      from.setDate(from.getDate() - days);
+      api("/api/ops/delivery?from=" + _opsFmtDate(from) + "&to=" + _opsFmtDate(to)).then(function (data) {
+        root.innerHTML = "";
+        var chips = el("div", "feed-filters");
+        [[0, "Сегодня"], [6, "7 дней"], [29, "30 дней"]].forEach(function (f) {
+          var chip = el("button", "filter-chip" + (days === f[0] ? " active" : ""), f[1]);
+          chip.addEventListener("click", function () { days = f[0]; load(); });
+          chips.appendChild(chip);
+        });
+        root.appendChild(chips);
+
+        var sm = data.summary || {};
+        var hero = el("div", "dlv-hero");
+        hero.innerHTML =
+          '<div class="dlv-hero-label">Начислено за доставку</div>' +
+          '<div class="dlv-hero-value">' + fmtSum(sm.accrued || 0) + '</div>' +
+          '<div class="dlv-hero-sub">' + (sm.count || 0) + ' заказов с платной доставкой</div>';
+        root.appendChild(hero);
+
+        var grid = el("div", "dlv-grid");
+        [["paid", "Оплачено", sm.paid], ["review", "Ждёт подтверждения", sm.review],
+         ["debt", "В долг", sm.debt], ["unpaid", "Не оплачено", sm.unpaid]].forEach(function (c) {
+          var tile = el("div", "dlv-tile dlv-" + c[0]);
+          tile.innerHTML = '<div class="dlv-tile-value">' + fmtSum(c[2] || 0) + '</div><div class="dlv-tile-label">' + c[1] + '</div>';
+          grid.appendChild(tile);
+        });
+        root.appendChild(grid);
+
+        if (!data.items.length) {
+          root.appendChild(el("div", "empty-note", "За этот период платных доставок нет."));
+          return;
+        }
+        root.appendChild(el("h3", "ops-section-title", "Заказы с доставкой"));
+        data.items.forEach(function (it) {
+          var card = el("div", "card dlv-row");
+          card.innerHTML =
+            '<div class="dlv-row-main"><div class="dlv-row-name">' + escapeHtml(it.name) + '</div>' +
+            '<div class="dlv-row-sub">' + escapeHtml(it.date) + (it.point ? " · " + escapeHtml(it.point) : "") + '</div></div>' +
+            '<div class="dlv-row-right"><div class="dlv-row-fee">' + fmtSum(it.fee) + '</div>' +
+            '<span class="dlv-badge dlv-' + it.state + '">' + DLV_STATE_LABEL[it.state] + '</span></div>';
+          if (it.state === "debt" && it.client_id && (state.isMainAdmin || state.paDebtors)) {
+            card.classList.add("dlv-row-click");
+            card.addEventListener("click", function () {
+              haptic("select");
+              wizardStep(function (body) {
+                opsStepHeader(body, it.name);
+                var sub = el("div");
+                sub.appendChild(el("div", "skeleton-block"));
+                body.appendChild(sub);
+                loadOpsDebtorDetail(sub, it.client_id);
+              });
+            });
+          }
+          root.appendChild(card);
+        });
+      }).catch(function (err) {
+        root.innerHTML = "";
+        root.appendChild(el("div", "empty-note", "Не удалось загрузить доставки: " + err.message));
+      });
+    }
+    load();
+  }
+
   // --- Операционный центр → Должники ----------------------------------------
   // Сам долг по-прежнему считается на сервере из "Заказы" (не дублируем
   // подсчёт на фронте) — здесь только отображение + комментарии/
@@ -5926,7 +6016,8 @@
           }
           var info = el("div", "ops-debt-line-info");
           info.innerHTML =
-            '<div class="ops-breakdown-name">' + l.date + ' — ' + escapeHtml(l.display_name) + (l.qty ? ' ×' + l.qty : '') + '</div>';
+            '<div class="ops-breakdown-name">' + l.date + ' — ' + escapeHtml(l.display_name) + (l.qty && l.qty !== "0" ? ' ×' + l.qty : '') + '</div>' +
+            (l.delivery ? '<div class="ops-debt-line-dlv">в т.ч. доставка ' + fmtSum(l.delivery) + '</div>' : '');
           var sumBtn = el("button", "ops-debt-line-sum", fmtSum(l.sum));
           if (l.resolved) {
             sumBtn.disabled = true;

@@ -2158,3 +2158,34 @@ p { margin: 0; color: var(--ink-soft); }
 .home-news { margin-bottom: 20px; }
 .home-news .home-promo { margin-bottom: 0; }
 .home-news .pday-carousel-slide { padding: 0 1px; }
+
+/* Платная доставка: клиентская строка в заказе + экран "Доставки" */
+.order-card-delivery { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 8px 12px; border-radius: 12px; font-size: 12.5px; background: var(--ivory-deep); color: var(--ink-soft); }
+.order-card-delivery b { font-weight: 700; }
+.order-card-delivery.dlv-paid b { color: var(--success); }
+.order-card-delivery.dlv-debt b, .order-card-delivery.dlv-unpaid b { color: #9a5b1c; }
+.order-card-delivery.dlv-review b { color: #8a6a2e; }
+.ops-debt-line-dlv { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+
+.dlv-hero { margin: 14px 0 10px; padding: 18px 20px; border-radius: 22px; color: #fffdf8; background: var(--caramel-grad); box-shadow: 0 8px 22px rgba(138, 90, 46, .28); }
+.dlv-hero-label { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.dlv-hero-value { font-size: 30px; font-weight: 700; margin: 4px 0 2px; }
+.dlv-hero-sub { font-size: 12.5px; opacity: .85; }
+.dlv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
+.dlv-tile { padding: 12px 14px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); border-left-width: 4px; }
+.dlv-tile.dlv-paid { border-left-color: var(--petal-green); }
+.dlv-tile.dlv-review { border-left-color: #c89a5e; }
+.dlv-tile.dlv-debt { border-left-color: #8a5a2e; }
+.dlv-tile.dlv-unpaid { border-left-color: #b9ad98; }
+.dlv-tile-value { font-weight: 700; font-size: 16px; color: var(--ink); }
+.dlv-tile-label { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.dlv-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; padding: 12px 14px; }
+.dlv-row-click { cursor: pointer; }
+.dlv-row-name { font-weight: 600; font-size: 14.5px; color: var(--ink); }
+.dlv-row-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.dlv-row-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.dlv-row-fee { font-weight: 700; font-size: 14.5px; color: var(--ink); }
+.dlv-badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--ivory-deep); color: var(--ink-soft); }
+.dlv-badge.dlv-paid { background: var(--petal-green-soft); color: var(--petal-green); }
+.dlv-badge.dlv-review { background: #f6ead2; color: #8a6a2e; }
+.dlv-badge.dlv-debt { background: #f1e0cb; color: #8a5a2e; }

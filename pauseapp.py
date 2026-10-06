@@ -311,6 +311,12 @@ async def api_menu(request: web.Request):
     })
 
 
+def _delivery_enabled(tg_id) -> bool:
+    """Платная доставка по статусу клиента (config.CLUB_DELIVERY_FEES) —
+    для всех, пока config.DELIVERY_FEES_ENABLED; иначе только тестовые."""
+    return config.DELIVERY_FEES_ENABLED or tg_id in config.PAUSEAPP_TEST_CLIENT_IDS
+
+
 async def api_zones(request: web.Request):
     return web.json_response({"zones": await _retry_sheets(sheets.get_zones)})
 
@@ -549,7 +555,7 @@ async def api_order_submit(request: web.Request):
     # туда пока не добавляем.
     delivery_fee = (
         sheets.get_client_delivery_fee(client.get("order_count", 0))
-        if tg_id in config.PAUSEAPP_TEST_CLIENT_IDS and not is_new_point else 0
+        if _delivery_enabled(tg_id) and not is_new_point else 0
     )
 
     # Билет "Пауза в подарок" — ровно ОДНА ШТУКА из выбранной позиции
@@ -662,6 +668,7 @@ async def api_order_submit(request: web.Request):
         date_str=date_str, zone=zone, point=point, client_id=client["id"], items=items,
         payment=payment_values if is_ticket_payment else payment_value,
         comment=comment, screenshot=screenshot, batch_id=batch_id, delivery_fee=delivery_fee,
+        fee_payment=payment_value,
     )
 
     try:
@@ -692,7 +699,7 @@ async def api_order_submit(request: web.Request):
                 name=client.get("name", ""), client_id=client.get("id", ""),
                 items=items_text, sum=f"{total:,}".replace(",", " "),
             )
-            rows_str = ",".join(str(r) for r in row_nums)
+            rows_str = ",".join(str(r) for i, r in enumerate(row_nums) if not (is_ticket_payment and i == ticket_row_pos))
             await notify_admins_photo(bot, screenshot, caption, reply_markup=kb.card_confirm_admin_kb(rows_str))
         except Exception:
             logger.exception("PAUSE App: не удалось уведомить админов о скрине оплаты")
@@ -737,7 +744,7 @@ async def api_profile(request: web.Request):
     # нужно различать "доставка для этого клиента вообще считается,
     # просто сейчас бесплатно" от "доставка для этого клиента не
     # включена вовсе" (обычные клиенты, не из тестового списка).
-    delivery_enabled = tg_id in config.PAUSEAPP_TEST_CLIENT_IDS
+    delivery_enabled = _delivery_enabled(tg_id)
     delivery_fee = sheets.get_client_delivery_fee(order_count) if delivery_enabled else 0
     return web.json_response({
         "registered": True,
@@ -978,6 +985,13 @@ async def api_orders(request: web.Request):
             "payment": g["payment"],
             "canceled": g["canceled"],
             "is_debt": g["payment"] == "В долг",
+            "delivery_fee": g.get("delivery_fee", 0),
+            "delivery_state": (
+                "paid" if g.get("delivery_payment") in ("Картой", "Наличными")
+                else "review" if g.get("delivery_payment") == "На проверке"
+                else "debt" if g.get("delivery_payment") == "В долг"
+                else "unpaid"
+            ) if g.get("delivery_fee") else "",
             "paid": g["paid"],
             "complete": sheets.is_order_complete(g["date"]) if not g["canceled"] else False,
             "can_cancel": can_cancel,
@@ -1672,6 +1686,18 @@ async def api_ops_debtors(request: web.Request):
     return web.json_response({"debtors": debtors})
 
 
+async def api_ops_delivery(request: web.Request):
+    """Экран "Доставки": начислено/оплачено/в долге по платной доставке
+    за период (по умолчанию — сегодня) и список заказов с доставкой."""
+    if not (request["is_main_admin"] or request["pa_finance"] or request["pa_debtors"]):
+        return web.json_response({"error": "forbidden"}, status=403)
+    today = sheets.today_date_str()
+    d_from = (request.query.get("from") or today).strip()
+    d_to = (request.query.get("to") or d_from).strip()
+    data = await _retry_sheets(sheets.get_delivery_overview, d_from, d_to)
+    return web.json_response(data)
+
+
 async def api_ops_debtor_detail(request: web.Request):
     if not request["pa_debtors"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -1685,7 +1711,7 @@ async def api_ops_debtor_detail(request: web.Request):
         {
             "row": l["row"], "date": l["date"], "set": l["set"],
             "display_name": sheets.display_set_name(l["set"]), "qty": l["qty"],
-            "sum": l["sum"], "resolved": l["resolved"],
+            "sum": l["sum"], "delivery": l.get("delivery", 0), "resolved": l["resolved"],
         }
         for l in lines
     ]
@@ -2457,6 +2483,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/moments/{post_id}/comments", api_moment_comment_add)
     app.router.add_get("/api/ops/summary", api_ops_summary)
     app.router.add_get("/api/ops/orders", api_ops_orders)
+    app.router.add_get("/api/ops/delivery", api_ops_delivery)
     app.router.add_get("/api/ops/debtors", api_ops_debtors)
     app.router.add_get("/api/ops/debtors/{client_id}", api_ops_debtor_detail)
     app.router.add_post("/api/ops/debtors/{client_id}/comment", api_ops_debtor_comment)

@@ -293,6 +293,18 @@ def _id_value(client_id):
     return int(s) if s.isdigit() else s
 
 
+def _row_delivery_fee(row: list) -> int:
+    """Стоимость доставки, записанная на строку заказа (O_DELIVERY_FEE), 0 —
+    если её нет. Доставка живёт на ОДНОЙ строке заказа ("строка-носитель",
+    см. append_orders_batch) и делит состояние оплаты (столбец K) с ней."""
+    if len(row) < config.O_DELIVERY_FEE:
+        return 0
+    try:
+        return int(str(row[config.O_DELIVERY_FEE - 1]).replace(" ", "").strip() or 0)
+    except ValueError:
+        return 0
+
+
 def _row_amount(row: list, prices: dict) -> int:
     """Сумма по строке заказа — считаем сами по цене сета, а не полагаемся на
     формулу в таблице (она может быть не протянута на новые строки). Плюс
@@ -497,7 +509,7 @@ def get_client_debt_from_orders(orders: list) -> int:
                 amount = int(str(o["sum"]).replace(" ", "").replace(",", "") or 0)
             except ValueError:
                 amount = 0
-        total += amount
+        total += amount + int(o.get("delivery_fee") or 0)
     return total
 
 
@@ -582,6 +594,7 @@ def get_debtor_lines(client_id) -> list:
             "set": row[config.O_SET - 1].strip(),
             "qty": row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else "",
             "sum": _row_amount(row, prices),
+            "delivery": _row_delivery_fee(row),
             "resolved": resolved,
         })
     out.sort(key=lambda o: dt.datetime.strptime(o["date"], "%d.%m.%Y") if _is_valid_date(o["date"]) else dt.datetime.min, reverse=True)
@@ -1044,6 +1057,7 @@ def get_client_orders(client_id, limit=10) -> list:
                 "canceled": is_canceled(comment),
                 "batch": row[config.O_ORDER_BATCH - 1].strip() if len(row) >= config.O_ORDER_BATCH else "",
                 "sum": row[config.O_SUM - 1] if len(row) >= config.O_SUM else "",
+                "delivery_fee": _row_delivery_fee(row),
             })
     return out[-limit:][::-1]
 
@@ -1085,9 +1099,20 @@ def get_client_order_groups(client_id, limit=10, rows=None) -> list:
                 "comment": r["comment"],
                 "canceled": r["canceled"],
                 "paid": True,
+                "delivery_fee": 0,
+                "delivery_payment": "",
             }
             order.append(key)
         g = groups[key]
+        if r.get("delivery_fee"):
+            g["delivery_fee"] += r["delivery_fee"]
+            g["delivery_payment"] = r["payment"].strip()
+        if str(r["qty"]).strip() == "0":
+            # строка-носитель доставки без позиций — в составе не показываем
+            g["rows"].append(r["row"])
+            if r["status"].strip().upper() != "ОПЛАЧЕНО":
+                g["paid"] = False
+            continue
         g["items"].append({"set": r["set"], "qty": r["qty"]})
         g["rows"].append(r["row"])
         # "Оплачено" на весь заказ — только если ОПЛАЧЕНО во всех его
@@ -1227,7 +1252,7 @@ def append_order(date_str: str, zone: str, point: str, client_id, set_name: str,
 
 def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: list,
                          payment, comment: str = "", screenshot: str = "", batch_id: str = "",
-                         delivery_fee: int = 0) -> list:
+                         delivery_fee: int = 0, fee_payment: str = "") -> list:
     """Как append_order, но для ВСЕЙ корзины ОДНИМ запросом к Sheets, а не
     по одному на каждую позицию. items — [{"set","qty","garnish"}, ...].
 
@@ -1255,6 +1280,22 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
     ws = _ws(config.SHEET_ORDERS)
     if delivery_fee:
         _ensure_sheet_columns(ws, config.O_DELIVERY_FEE)
+    # Строка-носитель доставки — первая позиция, НЕ оплаченная билетом:
+    # доставка делит статус оплаты (К) со своей строкой, а у билетной строки
+    # статус "Билетом" — доставка осталась бы вне долга/подтверждений. Если
+    # билетом закрыта вся корзина, а доставка платная, пишем отдельную
+    # строку-носитель с количеством 0 (на кухню/счётчики заказов не влияет).
+    fee_index = None
+    if delivery_fee:
+        for i in range(len(items)):
+            if payments[i] != config.PAYMENT_TICKET:
+                fee_index = i
+                break
+        if fee_index is None:
+            items = list(items) + [{"set": items[0]["set"], "qty": 0, "garnish": items[0].get("garnish", "")}]
+            fee_pay = fee_payment
+            payments = list(payments) + [fee_pay]
+            fee_index = len(items) - 1
     start_row = _next_empty_order_row()
     cells = []
     row_nums = []
@@ -1285,9 +1326,9 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
             updates.append((config.O_SCREENSHOT, screenshot))
         if batch_id:
             updates.append((config.O_ORDER_BATCH, batch_id))
-        # Доставка — одной суммой на ПЕРВУЮ строку батча, не размазана по
+        # Доставка — одной суммой на строку-носитель, не размазана по
         # позициям (один заказ = одна доставка, см. api_order_submit).
-        if delivery_fee and i == 0:
+        if delivery_fee and i == fee_index:
             updates.append((config.O_DELIVERY_FEE, str(delivery_fee)))
         cells.extend(gspread.Cell(row_num, col, value) for col, value in updates)
     if cells:
@@ -2987,6 +3028,64 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
             "batch": row[config.O_ORDER_BATCH - 1].strip(),
         })
     return out
+
+
+def get_delivery_overview(date_from: str, date_to: str) -> dict:
+    """Доставки за период для экрана "Доставки" в Операционном центре:
+    список заказов, у которых есть платная доставка (O_DELIVERY_FEE), и
+    сводка — начислено / оплачено / ждёт подтверждения / в долге / не
+    оплачено. Состояние доставки = состояние оплаты её строки-носителя
+    (столбец K, см. append_orders_batch): "Картой"/"Наличными" — оплачена,
+    "На проверке" — ждёт подтверждения, "В долг" — в долге, остальное —
+    не оплачена. Отменённые заказы не считаются."""
+    try:
+        d_from = dt.datetime.strptime(date_from, "%d.%m.%Y")
+        d_to = dt.datetime.strptime(date_to, "%d.%m.%Y")
+    except ValueError:
+        return {"items": [], "summary": {}}
+    rows = _orders_raw_rows()
+    clients = _clients_index()
+    items = []
+    summary = {"accrued": 0, "paid": 0, "review": 0, "debt": 0, "unpaid": 0, "count": 0}
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        fee = _row_delivery_fee(row)
+        if not fee:
+            continue
+        date_cell = row[config.O_DATE - 1].strip() if len(row) >= config.O_DATE else ""
+        try:
+            d = dt.datetime.strptime(date_cell, "%d.%m.%Y")
+        except ValueError:
+            continue
+        if not (d_from <= d <= d_to):
+            continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
+            continue
+        pay = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
+        if pay in ("Картой", "Наличными"):
+            state = "paid"
+        elif pay == "На проверке":
+            state = "review"
+        elif pay == "В долг":
+            state = "debt"
+        else:
+            state = "unpaid"
+        cid = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
+        name = (clients.get(cid) or {}).get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or cid or "—"
+        summary["accrued"] += fee
+        summary[state] += fee
+        summary["count"] += 1
+        items.append({
+            "row": r, "date": date_cell, "client_id": cid, "name": name,
+            "zone": row[config.O_ZONE - 1].strip() if len(row) >= config.O_ZONE else "",
+            "point": row[config.O_POINT - 1].strip() if len(row) >= config.O_POINT else "",
+            "fee": fee, "state": state, "payment": pay,
+        })
+    items.sort(key=lambda x: (dt.datetime.strptime(x["date"], "%d.%m.%Y"), x["row"]), reverse=True)
+    return {"items": items, "summary": summary}
 
 
 # ---------------------------------------------------------------------------
