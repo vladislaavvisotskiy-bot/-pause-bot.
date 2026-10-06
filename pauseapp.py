@@ -510,7 +510,7 @@ async def api_order_submit(request: web.Request):
     # туда пока не добавляем.
     delivery_fee = (
         sheets.get_client_delivery_fee(client.get("order_count", 0))
-        if _delivery_enabled(tg_id) and not is_new_point else 0
+        if _delivery_enabled(tg_id) else 0
     )
 
     # Билет "Пауза в подарок" — ровно ОДНА ШТУКА из выбранной позиции
@@ -575,13 +575,14 @@ async def api_order_submit(request: web.Request):
             date_str=date_str, zone=zone, point=point,
             client_id=client["id"], client_name=client.get("name", ""),
             client_phone=client.get("contact", ""), cart=cart,
-            payment=(payment_value + "|" + _pay_method(payment)) if _pay_method(payment) else payment_value,
+            # "значение|способ|доставка" — доставка применяется при подтверждении точки админом
+            payment=f"{payment_value}|{_pay_method(payment)}|{delivery_fee}" if (_pay_method(payment) or delivery_fee) else payment_value,
             comment=comment, screenshot=screenshot,
         )
         if bot and config.ADMIN_IDS:
             try:
                 prices = await _retry_sheets(sheets.get_set_prices)
-                total = sum(prices.get(i["set"], 0) * int(i.get("qty", 0)) for i in cart)
+                total = sum(prices.get(i["set"], 0) * int(i.get("qty", 0)) for i in cart) + delivery_fee
                 items_text = ", ".join(
                     f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
                     for i in cart

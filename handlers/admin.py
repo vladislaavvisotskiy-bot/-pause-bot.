@@ -764,22 +764,17 @@ async def pending_point_approved(callback: CallbackQuery, bot: Bot):
     # Одна метка на ВСЮ корзину этого подтверждения — тот же приём, что и
     # для обычного оформления (см. config.O_ORDER_BATCH/handlers/order.py).
     batch_id = uuid.uuid4().hex
-    row_nums = []
-    for item in pending["cart"]:
-        row_num = sheets.append_order(
-            date_str=pending["date"],
-            zone=pending["zone"],
-            point=pending["point"],
-            client_id=pending["client_id"],
-            set_name=item["set"],
-            qty=item["qty"],
-            garnish=item.get("garnish", ""),
-            payment=pending["payment"].partition("|")[0],
-            comment=pending["comment"],
-            batch_id=batch_id,
-            pay_method=pending["payment"].partition("|")[2],
-        )
-        row_nums.append(row_num)
+    # payment хранится как "значение|способ|доставка" (см. pauseapp.api_order_submit)
+    pay_parts = (pending["payment"].split("|") + ["", ""])[:3]
+    pay_value, pay_method, fee_raw = pay_parts
+    fee = int(fee_raw) if fee_raw.strip().isdigit() else 0
+    row_nums = sheets.append_orders_batch(
+        date_str=pending["date"], zone=pending["zone"], point=pending["point"],
+        client_id=pending["client_id"],
+        items=[{"set": i["set"], "qty": i["qty"], "garnish": i.get("garnish", "")} for i in pending["cart"]],
+        payment=pay_value, comment=pending["comment"], screenshot=pending["screenshot"] or "",
+        batch_id=batch_id, delivery_fee=fee, fee_payment=pay_value, pay_method=pay_method,
+    )
 
     client = sheets.get_client_by_id(pending["client_id"])
     if client:
