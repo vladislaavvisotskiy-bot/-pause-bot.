@@ -2137,17 +2137,14 @@
       }
       card.appendChild(photo);
 
-      var foot = el("div", "menu-wide-foot");
-      var info = el("div", "menu-wide-info");
-      info.appendChild(el("div", "menu-wide-name", escapeHtml(localizedName)));
       var priceText = s.is_variant_group
         ? t("menu.from", { sum: fmtSumComma(Math.min.apply(null, s.variants.map(function (v) { return v.price; }))) })
         : fmtSumComma(s.price);
-      info.appendChild(el("div", "menu-wide-price", priceText));
-      foot.appendChild(info);
-      var plus = el("div", "menu-wide-chev", ICON_CHEVRON);
-      foot.appendChild(plus);
-      card.appendChild(foot);
+      var cap = el("div", "menu-wide-caption");
+      cap.appendChild(el("div", "menu-wide-name", escapeHtml(localizedName)));
+      cap.appendChild(el("div", "menu-wide-price", priceText));
+      photo.appendChild(cap);
+      photo.appendChild(el("div", "menu-wide-chev menu-wide-chev-photo", ICON_CHEVRON));
 
       var details = el("div", "menu-wide-details");
       var inner = el("div", "menu-wide-inner");
@@ -2184,7 +2181,6 @@
       }
       inner.addEventListener("click", function (e) { e.stopPropagation(); });
 
-      foot.addEventListener("click", toggle);
       photo.addEventListener("click", toggle);
       card._open = function () { if (!expanded) toggle(); };
       function toggle() {
