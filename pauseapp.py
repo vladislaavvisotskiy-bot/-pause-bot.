@@ -57,7 +57,7 @@ MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024
 # там config.ORDER_CUTOFF_TIME по-прежнему действует как обычно, затронуты
 # только api_menu/api_order_submit ниже. Когда понадобится вернуть
 # отсечку в PAUSE App — поставьте False.
-PAUSEAPP_IGNORE_CUTOFF = True
+PAUSEAPP_IGNORE_CUTOFF = False  # отсечка приёма заказов в приложении включена (config.ORDER_CUTOFF_TIME)
 
 
 @web.middleware

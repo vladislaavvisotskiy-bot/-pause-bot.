@@ -106,7 +106,7 @@
       "menu.garnishNextStep": "Гарнир выбирается на следующем шаге",
       "menu.order": "Заказать",
       "menu.orderUnavailable": "Сейчас недоступно для заказа",
-      "menu.orderClosedNote": "Приём заказов на сегодня закрыт",
+      "menu.orderClosedNote": "Приём заказов закрыт",
       "menu.addToCart": "Добавить в заказ",
       "menu.pickGarnishFirst": "Выберите гарнир",
       "menu.addedToCart": "Добавлено в заказ",
@@ -3800,7 +3800,7 @@
         ticket_single_set_only: "checkout.ticketSingleSetOnly",
         ticket_new_point_not_allowed: "checkout.ticketNewPointNotAllowed",
       };
-      toast(TICKET_ERROR_KEYS[err.code] ? t(TICKET_ERROR_KEYS[err.code]) : t("checkout.submitFailed"));
+      toast(err.code === "cutoff_closed" ? t("menu.orderClosedNote") : TICKET_ERROR_KEYS[err.code] ? t(TICKET_ERROR_KEYS[err.code]) : t("checkout.submitFailed"));
     });
   }
 
