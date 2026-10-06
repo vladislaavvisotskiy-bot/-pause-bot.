@@ -982,6 +982,54 @@ async def api_orders(request: web.Request):
     return web.json_response({"pending": pending_out, "orders": groups_out, "debt": debt, "debt_days": debt_days})
 
 
+async def api_pay_today(request: web.Request):
+    """Страница оплаты за сегодня (по кнопке из напоминания): состав и сумма
+    заказа, по которому ещё нужен скрин."""
+    client = await _retry_sheets(sheets.find_client_by_tg_id, request["tg_id"])
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    date_str = await _retry_sheets(sheets.get_active_menu_date)
+    p = await _retry_sheets(sheets.get_client_pending_screenshot, client["id"], date_str)
+    return web.json_response({
+        "date": date_str, "total": p["total"],
+        "items": [{"set": sheets.display_set_name(i["set"]), "qty": i["qty"]} for i in p["items"]],
+    })
+
+
+async def api_pay_today_submit(request: web.Request):
+    """"Отправить оплату": скрин (уже загружен через /api/order/screenshot)
+    привязывается к сегодняшнему заказу, статус остаётся "В долг" до подтверждения."""
+    client = await _retry_sheets(sheets.find_client_by_tg_id, request["tg_id"])
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    file_id = (body.get("file_id") or "").strip()
+    if not file_id:
+        return web.json_response({"error": "photo_required"}, status=400)
+    date_str = await _retry_sheets(sheets.get_active_menu_date)
+    p = await _retry_sheets(sheets.get_client_pending_screenshot, client["id"], date_str)
+    if not p["rows"]:
+        return web.json_response({"error": "nothing_to_pay"}, status=409)
+    await _retry_sheets(sheets.mark_screenshot_sent, p["rows"])
+    await _retry_sheets(sheets.set_order_screenshot, p["rows"], file_id)
+    bot = request.app.get("bot")
+    if bot and config.ADMIN_IDS:
+        try:
+            items_text = ", ".join(f"{i['qty']}× {sheets.display_set_name(i['set'])}" for i in p["items"])
+            caption = texts.ADMIN_LATE_SCREENSHOT_ALERT.format(
+                name=client.get("name", ""), client_id=client.get("id", ""),
+                items=items_text, sum=f"{p['total']:,}".replace(",", " "),
+            )
+            await notify_admins_photo(bot, file_id, caption,
+                                      reply_markup=kb.card_confirm_admin_kb(",".join(str(r) for r in p["rows"])))
+        except Exception:
+            logger.exception("PAUSE App: не удалось уведомить админов о позднем скрине")
+    return web.json_response({"status": "ok"})
+
+
 async def api_debt_pay(request: web.Request):
     """Оплата долга скрином из "Мои заказы": все строки "В долг" клиента
     уходят на проверку админу (скрин уже загружен через /api/order/screenshot)."""
@@ -2487,6 +2535,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/orders", api_orders)
     app.router.add_post("/api/orders/cancel", api_orders_cancel)
     app.router.add_post("/api/debt/pay", api_debt_pay)
+    app.router.add_get("/api/pay/today", api_pay_today)
+    app.router.add_post("/api/pay/today", api_pay_today_submit)
     app.router.add_get("/api/favorites", api_favorites)
     app.router.add_post("/api/favorites/toggle", api_favorites_toggle)
     app.router.add_post("/api/feedback", api_feedback)

@@ -66,7 +66,7 @@ CANCEL_CUTOFF_TIME = os.getenv("CANCEL_CUTOFF_TIME", "09:00")
 ORDER_COMPLETE_TIME = os.getenv("ORDER_COMPLETE_TIME", "13:00")
 MORNING_REPORT_TIME = os.getenv("MORNING_REPORT_TIME", "10:05")
 WARM_BROADCAST_TIME = os.getenv("WARM_BROADCAST_TIME", "08:00")
-PAYMENT_REMINDER_TIME = os.getenv("PAYMENT_REMINDER_TIME", "13:30")
+PAYMENT_REMINDER_TIME = os.getenv("PAYMENT_REMINDER_TIME", "13:00")
 
 # Пауза между отправками в массовых рассылках клиентам (тёплая рассылка,
 # оповещение о новом меню, напоминание об оплате) — чтобы не словить

@@ -1574,11 +1574,30 @@ def get_unconfirmed_card_orders(date_str: str) -> list:
         if not tg_id:
             continue
         if client_id not in by_client:
-            by_client[client_id] = {"client_id": client_id, "tg_id": tg_id, "rows": []}
+            by_client[client_id] = {"client_id": client_id, "tg_id": tg_id, "name": (client or {}).get("name", ""), "rows": []}
             order.append(client_id)
         by_client[client_id]["rows"].append(r)
 
     return [by_client[cid] for cid in order]
+
+
+def get_client_pending_screenshot(client_id, date_str: str) -> dict:
+    """Сегодняшний заказ клиента, по которому выбрано "скрин позже" и скрин
+    ещё не прислан (и админ не поставил оплату руками): состав, сумма, строки."""
+    orders = get_client_orders(client_id, limit=10**9)
+    prices = get_set_prices()
+    items, rows, total = [], [], 0
+    for o in orders:
+        if o["date"].strip() != date_str or o["canceled"]:
+            continue
+        pay = o["payment"].strip()
+        if not (pay == "" or (pay == "В долг" and o.get("pay_method") == "Карта" and not o.get("review"))):
+            continue
+        rows.append(o["row"])
+        total += _order_amount(o, prices)
+        if str(o["qty"]).strip() != "0":
+            items.append({"set": o["set"], "qty": o["qty"]})
+    return {"items": items, "rows": rows, "total": total}
 
 
 def get_payments_for_date(date_str: str) -> list:

@@ -335,7 +335,7 @@
       "orders.paid": "Оплачено", "orders.unpaid": "Не оплачено", "orders.all": "Все",
       "orders.debtTag": " (в долг)",
       "orders.payChecking": "Оплата на проверке",
-      "orders.method": "Способ оплаты", "orders.method.card": "Карта", "orders.method.cash": "Наличные", "orders.method.ticket": "Билет", "orders.setsSum": "Сеты", "orders.pay": "Оплатить {sum}", "orders.payHint": "Выберите дни, за которые хотите оплатить, и прикрепите скриншот оплаты — мы проверим и подтвердим.",
+      "orders.method": "Способ оплаты", "orders.method.card": "Карта", "orders.method.cash": "Наличные", "orders.method.ticket": "Билет", "pay.title": "Оплата за сегодня", "pay.total": "Сумма к оплате", "pay.send": "Отправить оплату", "pay.sent": "Скриншот отправлен. Мы проверим оплату и подтвердим заказ.", "pay.nothing": "Сейчас оплата не требуется.", "orders.setsSum": "Сеты", "orders.pay": "Оплатить {sum}", "orders.payHint": "Выберите дни, за которые хотите оплатить, и прикрепите скриншот оплаты — мы проверим и подтвердим.",
       "orders.delivery": "Доставка", "orders.dlv.paid": "оплачена", "orders.dlv.review": "ждёт подтверждения", "orders.dlv.debt": "в долг", "orders.dlv.unpaid": "не оплачена",
       "orders.cancel": "Отменить",
       "orders.cancelConfirm": "Отменить заказ на {date}?",
@@ -642,7 +642,7 @@
       "orders.paid": "To'langan", "orders.unpaid": "To'lanmagan", "orders.all": "Barchasi",
       "orders.debtTag": " (nasiya)",
       "orders.payChecking": "To'lov tekshirilmoqda",
-      "orders.method": "To'lov usuli", "orders.method.card": "Karta", "orders.method.cash": "Naqd", "orders.method.ticket": "Chipta", "orders.setsSum": "Setlar", "orders.pay": "To'lash {sum}", "orders.payHint": "To'lamoqchi bo'lgan kunlarni tanlang va to'lov skrinshotini biriktiring — tekshirib tasdiqlaymiz.",
+      "orders.method": "To'lov usuli", "orders.method.card": "Karta", "orders.method.cash": "Naqd", "orders.method.ticket": "Chipta", "pay.title": "Bugungi to'lov", "pay.total": "To'lov summasi", "pay.send": "To'lovni yuborish", "pay.sent": "Skrinshot yuborildi. To'lovni tekshirib, buyurtmani tasdiqlaymiz.", "pay.nothing": "Hozir to'lov talab qilinmaydi.", "orders.setsSum": "Setlar", "orders.pay": "To'lash {sum}", "orders.payHint": "To'lamoqchi bo'lgan kunlarni tanlang va to'lov skrinshotini biriktiring — tekshirib tasdiqlaymiz.",
       "orders.delivery": "Yetkazib berish", "orders.dlv.paid": "to'langan", "orders.dlv.review": "tasdiqlash kutilmoqda", "orders.dlv.debt": "nasiya", "orders.dlv.unpaid": "to'lanmagan",
       "orders.cancel": "Bekor qilish",
       "orders.cancelConfirm": "{date} sanasidagi buyurtmani bekor qilasizmi?",
@@ -949,7 +949,7 @@
       "orders.paid": "Paid", "orders.unpaid": "Unpaid", "orders.all": "All",
       "orders.debtTag": " (on credit)",
       "orders.payChecking": "Payment under review",
-      "orders.method": "Payment method", "orders.method.card": "Card", "orders.method.cash": "Cash", "orders.method.ticket": "Ticket", "orders.setsSum": "Sets", "orders.pay": "Pay {sum}", "orders.payHint": "Choose the days you want to pay for and attach a payment screenshot — we'll check and confirm it.",
+      "orders.method": "Payment method", "orders.method.card": "Card", "orders.method.cash": "Cash", "orders.method.ticket": "Ticket", "pay.title": "Today's payment", "pay.total": "Total due", "pay.send": "Send payment", "pay.sent": "Screenshot sent. We'll check the payment and confirm your order.", "pay.nothing": "No payment needed right now.", "orders.setsSum": "Sets", "orders.pay": "Pay {sum}", "orders.payHint": "Choose the days you want to pay for and attach a payment screenshot — we'll check and confirm it.",
       "orders.delivery": "Delivery", "orders.dlv.paid": "paid", "orders.dlv.review": "awaiting confirmation", "orders.dlv.debt": "on credit", "orders.dlv.unpaid": "unpaid",
       "orders.cancel": "Cancel",
       "orders.cancelConfirm": "Cancel the order for {date}?",
@@ -4315,6 +4315,49 @@
     body.appendChild(attach);
   }
 
+  // Страница оплаты за сегодня — открывается по кнопке из напоминания в боте (?pay=today).
+  function loadPayToday(root) {
+    api("/api/pay/today").then(function (data) {
+      root.innerHTML = "";
+      if (!data.items.length) {
+        root.appendChild(el("div", "empty-note", t("pay.nothing")));
+        return;
+      }
+      var card = el("div", "card");
+      card.innerHTML = '<div class="order-card-head"><span class="order-card-date">' + escapeHtml(data.date) + '</span></div>' +
+        '<div class="order-card-items">' + itemsText(data.items) + '</div>' +
+        '<div class="order-card-sums"><div><b>' + escapeHtml(t("pay.total")) + '</b><b>' + fmtSum(data.total) + '</b></div></div>';
+      root.appendChild(card);
+      var fileInput = el("input");
+      fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none";
+      var btn = el("button", "btn-primary orders-pay-btn", t("pay.send"));
+      btn.addEventListener("click", function () { fileInput.click(); });
+      fileInput.addEventListener("change", function () {
+        if (!fileInput.files || !fileInput.files[0]) return;
+        var file = fileInput.files[0];
+        btn.disabled = true;
+        btn.textContent = t("checkout.uploading");
+        apiUpload("/api/order/screenshot", file, file.name).then(function (up) {
+          return api("/api/pay/today", { method: "POST", body: { file_id: up.file_id } });
+        }).then(function () {
+          haptic("success");
+          toast(t("orders.payChecking"));
+          root.innerHTML = "";
+          root.appendChild(el("div", "empty-note", t("pay.sent")));
+        }).catch(function (err) {
+          btn.disabled = false;
+          btn.textContent = t("pay.send");
+          toast(t("checkout.uploadFailed", { msg: err.message }));
+        });
+      });
+      root.appendChild(fileInput);
+      root.appendChild(btn);
+    }).catch(function () {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", t("orders.loadFailed")));
+    });
+  }
+
   function itemsText(items) {
     return items.map(function (i) { return i.qty + "× " + localizedSetName(i.set); }).join(", ");
   }
@@ -7502,6 +7545,7 @@
       state.paMenu = !!me.pa_menu;
       showScreen("home");
       checkPendingCare();
+      if (/[?&]pay=today\b/.test(location.search)) openProfileSubscreen(t("pay.title"), loadPayToday);
     }).catch(function (err) {
       var root = document.getElementById("home-root");
       root.innerHTML = "";

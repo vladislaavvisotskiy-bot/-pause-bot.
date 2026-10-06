@@ -301,6 +301,13 @@ def open_pauseapp_kb():
     return b.as_markup()
 
 
+def pay_today_kb():
+    """Кнопка из напоминания об оплате — открывает PAUSE App сразу на странице оплаты за сегодня."""
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.PAYMENT_REMINDER_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/?pay=today"))
+    return b.as_markup()
+
+
 def pauseapp_test_kb() -> InlineKeyboardMarkup:
     """ВРЕМЕННО, по прямой просьбе пользователя: единственная кнопка
     запуска PAUSE App — для аккаунтов из config.PAUSEAPP_TEST_CLIENT_IDS

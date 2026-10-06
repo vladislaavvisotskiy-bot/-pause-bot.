@@ -779,7 +779,7 @@ async def reminder_screenshot_received(message: Message, state: FSMContext, bot:
                 f"{o['qty']}× {sheets.display_set_name(o['set'])}" + (f" ({o['garnish']})" if o["garnish"] else "")
                 for o in order_rows
             )
-            caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
+            caption = texts.ADMIN_LATE_SCREENSHOT_ALERT.format(
                 name=client.get("name", ""),
                 client_id=client.get("id", ""),
                 items=items_text,

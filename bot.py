@@ -110,10 +110,11 @@ async def send_payment_reminders(bot: Bot):
     groups = sheets.get_unconfirmed_card_orders(date_str)
     for g in groups:
         rows_str = ",".join(str(r) for r in g["rows"])
+        name = (g.get("name") or "").strip()
         try:
             await bot.send_message(
-                int(g["tg_id"]), texts.PAYMENT_REMINDER_TEXT,
-                reply_markup=kb.reminder_screenshot_kb(rows_str),
+                int(g["tg_id"]), texts.PAYMENT_REMINDER_TEXT.format(name=f", {name}" if name else ""),
+                reply_markup=kb.pay_today_kb() if config.WEBAPP_URL else kb.reminder_screenshot_kb(rows_str),
             )
         except Exception:
             logger.exception("Не удалось отправить напоминание об оплате клиенту ID %s", g.get("client_id"))
