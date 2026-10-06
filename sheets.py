@@ -304,8 +304,11 @@ def _row_screenshot(row: list) -> str:
 def _is_review_row(row: list) -> bool:
     """Клиент выбрал карту, прислал скрин, админ ещё не подтвердил:
     в K "В долг", но клиенту это "Оплата на проверке", не долг."""
-    return (row[config.O_PAYMENT - 1].strip() == "В долг" if len(row) >= config.O_PAYMENT else False) \
-        and _row_pay_method(row) == "Карта" and bool(_row_screenshot(row))
+    if not (row[config.O_PAYMENT - 1].strip() == "В долг" if len(row) >= config.O_PAYMENT else False):
+        return False
+    method = _row_pay_method(row)
+    # Наличные из приложения клиенту тоже "на проверке", не долг (в таблице — "В долг").
+    return method == "Наличные" or (method == "Карта" and bool(_row_screenshot(row)))
 
 
 def _row_delivery_fee(row: list) -> int:
@@ -501,31 +504,39 @@ def get_client_debt(client_id) -> int:
     return total
 
 
-def get_client_debt_from_orders(orders: list) -> int:
-    """То же самое, что get_client_debt, но без повторного чтения ВСЕГО
-    листа "Заказы" с нуля — переиспользует уже полученные строки клиента
-    (см. get_client_orders), которые и так нужны рядом (экран "Мои
-    заказы" в боте и в PAUSE App раньше читал "Заказы" дважды подряд —
-    один раз под get_client_order_groups, второй раз под get_client_debt
-    — на реальном листе (800+ строк) это было заметно медленно; отсюда и
-    вопрос "почему так долго грузит")."""
+def _order_amount(o: dict, prices: dict) -> int:
+    try:
+        qty = int(str(o["qty"]).strip() or 0)
+    except ValueError:
+        qty = 0
+    amount = qty * prices.get(o["set"], 0)
+    if not amount and o.get("sum"):
+        try:
+            amount = int(str(o["sum"]).replace(" ", "").replace(",", "") or 0)
+        except ValueError:
+            amount = 0
+    return amount + int(o.get("delivery_fee") or 0)
+
+
+def get_client_debt_by_day(orders: list) -> list:
+    """Долг клиента по дням [{"date", "amount"}] (новые сверху) — без заказов
+    "на проверке" и отменённых; для выбора, за какой день платить."""
     prices = get_set_prices()
-    total = 0
+    by_day, order = {}, []
     for o in orders:
         if o["payment"].strip() != "В долг" or o["canceled"] or o.get("review"):
             continue
-        try:
-            qty = int(str(o["qty"]).strip() or 0)
-        except ValueError:
-            qty = 0
-        amount = qty * prices.get(o["set"], 0)
-        if not amount and o.get("sum"):
-            try:
-                amount = int(str(o["sum"]).replace(" ", "").replace(",", "") or 0)
-            except ValueError:
-                amount = 0
-        total += amount + int(o.get("delivery_fee") or 0)
-    return total
+        if o["date"] not in by_day:
+            by_day[o["date"]] = 0
+            order.append(o["date"])
+        by_day[o["date"]] += _order_amount(o, prices)
+    return [{"date": d, "amount": by_day[d]} for d in order if by_day[d] > 0]
+
+
+def get_client_debt_from_orders(orders: list) -> int:
+    """То же самое, что get_client_debt, но без повторного чтения ВСЕГО
+    листа "Заказы" с нуля — переиспользует уже полученные строки клиента."""
+    return sum(d["amount"] for d in get_client_debt_by_day(orders))
 
 
 def get_all_debtors() -> list:
@@ -1110,6 +1121,8 @@ def get_client_order_groups(client_id, limit=10, rows=None) -> list:
         if key not in groups:
             groups[key] = {
                 "sets_sum": 0,
+                "card_review": False,
+                "methods": [],
                 "date": r["date"],
                 "zone": r["zone"],
                 "items": [],
@@ -1126,6 +1139,13 @@ def get_client_order_groups(client_id, limit=10, rows=None) -> list:
         g = groups[key]
         if r.get("review") and r["status"].strip().upper() != "ОПЛАЧЕНО":
             g["review"] = True
+            if r.get("pay_method") == "Карта":
+                g["card_review"] = True
+        pay = r["payment"].strip()
+        m = {"Картой": "card", "Наличными": "cash", "Билетом": "ticket"}.get(pay) or \
+            {"Карта": "card", "Наличные": "cash"}.get(r.get("pay_method") or "", "")
+        if m and m not in g["methods"] and str(r["qty"]).strip() != "0":
+            g["methods"].append(m)
         if r.get("delivery_fee"):
             g["delivery_fee"] += r["delivery_fee"]
             g["delivery_payment"] = r["payment"].strip()
@@ -1468,7 +1488,7 @@ def mark_screenshot_sent(row_nums: list):
         ws.update_cell(r, config.O_PAYMENT, "В долг" if method.strip() == "Карта" else "На проверке")
 
 
-def submit_debt_payment(client_id, file_id: str) -> list:
+def submit_debt_payment(client_id, file_id: str, dates=None) -> list:
     """Клиент оплачивает долг из PAUSE App скрином: все его строки "В долг"
     (не отменённые и ещё не на проверке) получают скрин и способ "Карта" —
     в K остаётся "В долг" до подтверждения админом, клиенту это "Оплата на
@@ -1483,6 +1503,8 @@ def submit_debt_payment(client_id, file_id: str) -> list:
         if row[config.O_CLIENT_ID - 1].strip() != str(client_id):
             continue
         if row[config.O_PAYMENT - 1].strip() != "В долг" or _is_review_row(row):
+            continue
+        if dates is not None and row[config.O_DATE - 1].strip() not in dates:
             continue
         if len(row) >= config.O_COMMENT and is_canceled(row[config.O_COMMENT - 1]):
             continue

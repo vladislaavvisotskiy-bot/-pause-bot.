@@ -2165,6 +2165,11 @@ p { margin: 0; color: var(--ink-soft); }
 /* Платная доставка: клиентская строка в заказе + экран "Доставки" */
 .order-card-sums { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; color: var(--ink-soft); }
 .order-card-sums > div { display: flex; justify-content: space-between; margin-top: 2px; }
+.order-card-method { margin-top: 6px; font-size: 13px; color: var(--ink-soft); }
+.debt-days { margin: 12px 0 4px; text-align: left; }
+.debt-day-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.debt-day-date { flex: 1; }
+.debt-day-sum { font-weight: 700; }
 .orders-pay-btn { width: 100%; margin-top: 12px; }
 .order-card-delivery { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 8px 12px; border-radius: 12px; font-size: 12.5px; background: var(--ivory-deep); color: var(--ink-soft); }
 .order-card-delivery b { font-weight: 700; }

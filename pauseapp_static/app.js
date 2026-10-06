@@ -335,7 +335,7 @@
       "orders.paid": "Оплачено", "orders.unpaid": "Не оплачено", "orders.all": "Все",
       "orders.debtTag": " (в долг)",
       "orders.payChecking": "Оплата на проверке",
-      "orders.setsSum": "Сеты", "orders.pay": "Оплатить {sum}", "orders.payHint": "К оплате: {sum}. Прикрепите скриншот оплаты — мы проверим и подтвердим.",
+      "orders.method": "Способ оплаты", "orders.method.card": "Карта", "orders.method.cash": "Наличные", "orders.method.ticket": "Билет", "orders.setsSum": "Сеты", "orders.pay": "Оплатить {sum}", "orders.payHint": "Выберите дни, за которые хотите оплатить, и прикрепите скриншот оплаты — мы проверим и подтвердим.",
       "orders.delivery": "Доставка", "orders.dlv.paid": "оплачена", "orders.dlv.review": "ждёт подтверждения", "orders.dlv.debt": "в долг", "orders.dlv.unpaid": "не оплачена",
       "orders.cancel": "Отменить",
       "orders.cancelConfirm": "Отменить заказ на {date}?",
@@ -642,7 +642,7 @@
       "orders.paid": "To'langan", "orders.unpaid": "To'lanmagan", "orders.all": "Barchasi",
       "orders.debtTag": " (nasiya)",
       "orders.payChecking": "To'lov tekshirilmoqda",
-      "orders.setsSum": "Setlar", "orders.pay": "To'lash {sum}", "orders.payHint": "To'lov summasi: {sum}. To'lov skrinshotini biriktiring — tekshirib tasdiqlaymiz.",
+      "orders.method": "To'lov usuli", "orders.method.card": "Karta", "orders.method.cash": "Naqd", "orders.method.ticket": "Chipta", "orders.setsSum": "Setlar", "orders.pay": "To'lash {sum}", "orders.payHint": "To'lamoqchi bo'lgan kunlarni tanlang va to'lov skrinshotini biriktiring — tekshirib tasdiqlaymiz.",
       "orders.delivery": "Yetkazib berish", "orders.dlv.paid": "to'langan", "orders.dlv.review": "tasdiqlash kutilmoqda", "orders.dlv.debt": "nasiya", "orders.dlv.unpaid": "to'lanmagan",
       "orders.cancel": "Bekor qilish",
       "orders.cancelConfirm": "{date} sanasidagi buyurtmani bekor qilasizmi?",
@@ -949,7 +949,7 @@
       "orders.paid": "Paid", "orders.unpaid": "Unpaid", "orders.all": "All",
       "orders.debtTag": " (on credit)",
       "orders.payChecking": "Payment under review",
-      "orders.setsSum": "Sets", "orders.pay": "Pay {sum}", "orders.payHint": "Amount due: {sum}. Attach a payment screenshot — we'll check and confirm it.",
+      "orders.method": "Payment method", "orders.method.card": "Card", "orders.method.cash": "Cash", "orders.method.ticket": "Ticket", "orders.setsSum": "Sets", "orders.pay": "Pay {sum}", "orders.payHint": "Choose the days you want to pay for and attach a payment screenshot — we'll check and confirm it.",
       "orders.delivery": "Delivery", "orders.dlv.paid": "paid", "orders.dlv.review": "awaiting confirmation", "orders.dlv.debt": "on credit", "orders.dlv.unpaid": "unpaid",
       "orders.cancel": "Cancel",
       "orders.cancelConfirm": "Cancel the order for {date}?",
@@ -4228,6 +4228,7 @@
             '<div class="order-card-head"><span class="order-card-date">' + g.date + '</span>' +
             '<span class="order-card-pills">' + payPill + statusPill + '</span></div>' +
             '<div class="order-card-items">' + itemsText(g.items) + (g.is_debt ? t("orders.debtTag") : "") + '</div>' +
+            (g.methods && g.methods.length ? '<div class="order-card-method">' + escapeHtml(t("orders.method")) + ': ' + g.methods.map(function (m) { return escapeHtml(t("orders.method." + m)); }).join(" + ") + '</div>' : "") +
             (g.delivery_fee
               ? '<div class="order-card-sums"><div><span>' + escapeHtml(t("orders.setsSum")) + '</span><span>' + fmtSum(g.sets_sum) + '</span></div>' +
                 '<div><span>' + escapeHtml(t("orders.delivery")) + '</span><span>' + fmtSum(g.delivery_fee) + '</span></div></div>'
@@ -4254,7 +4255,7 @@
         if (data.debt > 0) {
           root.appendChild(el("div", "center-note", t("orders.debtLine", { sum: fmtSum(data.debt) })));
           var payBtn = el("button", "btn-primary orders-pay-btn", t("orders.pay", { sum: fmtSum(data.debt) }));
-          payBtn.addEventListener("click", function () { openDebtPay(root, data.debt); });
+          payBtn.addEventListener("click", function () { openDebtPay(root, data.debt_days || []); });
           root.appendChild(payBtn);
         }
       }
@@ -4264,31 +4265,52 @@
     });
   }
 
-  function openDebtPay(ordersRoot, debt) {
-    showInfo(escapeHtml(t("orders.payHint", { sum: fmtSum(debt) })));
+  function openDebtPay(ordersRoot, days) {
+    showInfo(escapeHtml(t("orders.payHint")));
     var body = document.getElementById("info-modal-body");
+    var selected = {};
+    days.forEach(function (d) { selected[d.date] = true; });
+    var list = el("div", "debt-days");
+    var attach = el("button", "btn-primary orders-pay-btn");
+    function total() {
+      return days.reduce(function (s, d) { return s + (selected[d.date] ? d.amount : 0); }, 0);
+    }
+    function refresh() {
+      attach.textContent = t("orders.pay", { sum: fmtSum(total()) }) + " · " + t("checkout.attachScreenshot");
+      attach.disabled = total() <= 0;
+    }
+    days.forEach(function (d) {
+      var row = el("label", "debt-day-row");
+      var cb = el("input"); cb.type = "checkbox"; cb.checked = true;
+      cb.addEventListener("change", function () { selected[d.date] = cb.checked; refresh(); });
+      row.appendChild(cb);
+      row.appendChild(el("span", "debt-day-date", escapeHtml(d.date)));
+      row.appendChild(el("span", "debt-day-sum", fmtSum(d.amount)));
+      list.appendChild(row);
+    });
     var fileInput = el("input");
     fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none";
-    var attach = el("button", "btn-primary orders-pay-btn", t("checkout.attachScreenshot"));
     attach.addEventListener("click", function () { fileInput.click(); });
     fileInput.addEventListener("change", function () {
       if (!fileInput.files || !fileInput.files[0]) return;
       var file = fileInput.files[0];
+      var dates = days.filter(function (d) { return selected[d.date]; }).map(function (d) { return d.date; });
       attach.disabled = true;
       attach.textContent = t("checkout.uploading");
       apiUpload("/api/order/screenshot", file, file.name).then(function (data) {
-        return api("/api/debt/pay", { method: "POST", body: { file_id: data.file_id } });
+        return api("/api/debt/pay", { method: "POST", body: { file_id: data.file_id, dates: dates } });
       }).then(function () {
         hideInfo();
         haptic("success");
         toast(t("orders.payChecking"));
         loadOrders(ordersRoot);
       }).catch(function (err) {
-        attach.disabled = false;
-        attach.textContent = t("checkout.attachScreenshot");
+        refresh();
         toast(t("checkout.uploadFailed", { msg: err.message }));
       });
     });
+    refresh();
+    body.appendChild(list);
     body.appendChild(fileInput);
     body.appendChild(attach);
   }

@@ -449,6 +449,16 @@ async def _refresh_giveaway_state(tg_id: int, date_str: str) -> dict:
         return {"joined": False, "has_ticket": False}
 
 
+_bg_tasks = set()
+
+
+def _spawn(coro):
+    """Фоновая задача, не блокирующая ответ клиенту (уведомления, второстепенные записи)."""
+    task = asyncio.ensure_future(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+
+
 async def api_order_submit(request: web.Request):
     """Оформление заказа — те же два пути, что и confirm_order в
     handlers/order.py: обычная точка -> append_order на каждую позицию
@@ -462,7 +472,9 @@ async def api_order_submit(request: web.Request):
     if not client:
         return web.json_response({"error": "not_registered"}, status=404)
 
-    if not PAUSEAPP_IGNORE_CUTOFF and await _retry_sheets(sheets.is_after_cutoff):
+    after_cutoff, date_str = await asyncio.gather(
+        _retry_sheets(sheets.is_after_cutoff), _retry_sheets(sheets.get_active_menu_date))
+    if not PAUSEAPP_IGNORE_CUTOFF and after_cutoff:
         return web.json_response({"error": "cutoff_closed"}, status=409)
 
     body = await request.json()
@@ -525,13 +537,14 @@ async def api_order_submit(request: web.Request):
     if has_remaining and not payment:
         return web.json_response({"error": "payment_required"}, status=400)
 
-    date_str = await _retry_sheets(sheets.get_active_menu_date)
     delivery_comment = (body.get("delivery_comment") or "").strip()[:500]
     if delivery_comment:
-        try:
-            await _retry_sheets(sheets.add_delivery_comment, date_str, client, point, delivery_comment)
-        except Exception:
-            logger.exception("PAUSE App: не удалось сохранить комментарий к доставке")
+        async def _save_dc():
+            try:
+                await _retry_sheets(sheets.add_delivery_comment, date_str, client, point, delivery_comment)
+            except Exception:
+                logger.exception("PAUSE App: не удалось сохранить комментарий к доставке")
+        _spawn(_save_dc())
     payment_value = _payment_value(payment, bool(screenshot))
     bot = request.app.get("bot")
 
@@ -620,18 +633,29 @@ async def api_order_submit(request: web.Request):
         fee_payment=payment_value, pay_method=_pay_method(payment),
     )
 
-    try:
-        await _retry_sheets(sheets.update_client_point, client["row"], zone, point)
-    except Exception:
-        logger.exception("PAUSE App: не удалось сохранить точку по умолчанию (tg_id=%s)", tg_id)
+    async def _save_point():
+        try:
+            await _retry_sheets(sheets.update_client_point, client["row"], zone, point)
+        except Exception:
+            logger.exception("PAUSE App: не удалось сохранить точку по умолчанию (tg_id=%s)", tg_id)
 
-    if is_ticket_payment:
+    async def _use_ticket():
+        if not is_ticket_payment:
+            return
         try:
             await _retry_sheets(sheets.use_ticket, tg_id, order_row=row_nums[ticket_row_pos])
         except Exception:
             logger.exception("PAUSE App: не удалось списать билет 'Пауза в подарок' (tg_id=%s)", tg_id)
 
-    if screenshot and bot and config.ADMIN_IDS:
+    async def _care():
+        number = await _retry_sheets(sheets.get_next_message_number)
+        phrase = random.choice(CARE_PHRASES)
+        await _retry_sheets(sheets.save_care_message, number, tg_id, client.get("name", ""), sheets.today_date_str(), phrase)
+        return number, phrase
+
+    async def _notify_screenshot():
+        if not (screenshot and bot and config.ADMIN_IDS):
+            return
         try:
             prices = await _retry_sheets(sheets.get_set_prices)
             total = sum(prices.get(i["set"], 0) * int(i.get("qty", 0)) for i in cart)
@@ -653,11 +677,13 @@ async def api_order_submit(request: web.Request):
         except Exception:
             logger.exception("PAUSE App: не удалось уведомить админов о скрине оплаты")
 
-    number = await _retry_sheets(sheets.get_next_message_number)
-    phrase = random.choice(CARE_PHRASES)
-    date_today = sheets.today_date_str()
-    await _retry_sheets(sheets.save_care_message, number, tg_id, client.get("name", ""), date_today, phrase)
-    giveaway = await _refresh_giveaway_state(tg_id, date_str)
+    _spawn(_notify_screenshot())
+    async def _ticket_then_giveaway():
+        await _use_ticket()  # состояние билета в розыгрыше — уже после списания
+        return await _refresh_giveaway_state(tg_id, date_str)
+
+    _, (number, phrase), giveaway = await asyncio.gather(
+        _save_point(), _care(), _ticket_then_giveaway())
 
     return web.json_response({
         "status": "ok",
@@ -921,7 +947,7 @@ async def api_orders(request: web.Request):
             not g["canceled"]
             and not sheets.is_after_cancel_cutoff(g["date"])
             and not _card_pending_status(g["payment"])
-            and not g.get("review")
+            and not g.get("card_review")
         )
         # Клиенту — только клиентские названия (те же, что на карточках в
         # Меню), техническое имя столбца G "Заказы" наружу не уходит.
@@ -938,6 +964,8 @@ async def api_orders(request: web.Request):
             "is_debt": g["payment"] == "В долг" and not g.get("review"),
             "delivery_fee": g.get("delivery_fee", 0),
             "sets_sum": g.get("sets_sum", 0),
+            "methods": g.get("methods", []),
+            "day_key": g["date"],
             "delivery_state": (
                 "paid" if g.get("delivery_payment") in ("Картой", "Наличными")
                 else "review" if g.get("delivery_payment") == "На проверке" or (g.get("delivery_payment") == "В долг" and g.get("review"))
@@ -950,7 +978,8 @@ async def api_orders(request: web.Request):
             "row_for_feedback": g["rows"][0] if g["rows"] else None,
         })
 
-    return web.json_response({"pending": pending_out, "orders": groups_out, "debt": debt})
+    debt_days = await _retry_sheets(sheets.get_client_debt_by_day, order_rows)
+    return web.json_response({"pending": pending_out, "orders": groups_out, "debt": debt, "debt_days": debt_days})
 
 
 async def api_debt_pay(request: web.Request):
@@ -968,9 +997,12 @@ async def api_debt_pay(request: web.Request):
     if not file_id:
         return web.json_response({"error": "photo_required"}, status=400)
 
+    dates = body.get("dates")
+    dates = {str(d).strip() for d in dates} if isinstance(dates, list) and dates else None
     order_rows = await _retry_sheets(sheets.get_client_orders, client["id"], limit=10**9)
-    debt = await _retry_sheets(sheets.get_client_debt_from_orders, order_rows)
-    row_nums = await _retry_sheets(sheets.submit_debt_payment, client["id"], file_id)
+    days = await _retry_sheets(sheets.get_client_debt_by_day, order_rows)
+    debt = sum(d["amount"] for d in days if dates is None or d["date"] in dates)
+    row_nums = await _retry_sheets(sheets.submit_debt_payment, client["id"], file_id, dates)
     if not row_nums:
         return web.json_response({"error": "no_debt"}, status=409)
 
@@ -979,7 +1011,7 @@ async def api_debt_pay(request: web.Request):
         try:
             caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
                 name=client.get("name", ""), client_id=client.get("id", ""),
-                items="оплата долга", sum=f"{debt:,}".replace(",", " "),
+                items="оплата долга" + (" за " + ", ".join(sorted(dates)) if dates else ""), sum=f"{debt:,}".replace(",", " "),
             )
             await notify_admins_photo(
                 bot, file_id, caption,
@@ -1002,7 +1034,7 @@ async def api_orders_cancel(request: web.Request):
     g = groups[0]
     if await _retry_sheets(sheets.is_after_cancel_cutoff, g["date"]):
         return web.json_response({"error": "too_late", "cutoff": config.CANCEL_CUTOFF_TIME}, status=409)
-    card_status = _card_pending_status(g["payment"]) or ("на проверке" if g.get("review") else "")
+    card_status = _card_pending_status(g["payment"]) or ("на проверке" if g.get("card_review") else "")
     if card_status:
         return web.json_response({"error": "card_pending", "status": card_status}, status=409)
 
