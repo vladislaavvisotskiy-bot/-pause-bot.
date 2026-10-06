@@ -3782,6 +3782,44 @@ def is_courier(tg_id) -> bool:
     return any(c["tg_id"] == target and not c["disabled"] for c in get_couriers())
 
 
+_DLV_COMMENT_HEADER = ["Дата заказа", "Время записи", "ID клиента", "Имя", "Телефон", "Telegram", "Точка", "Комментарий к доставке"]
+_dlv_comments_cache = {"data": None, "ts": 0}
+
+
+def add_delivery_comment(date_str: str, client: dict, point: str, text: str):
+    """Комментарий клиента к ДОСТАВКЕ (для водителя) — отдельный лист
+    "Комментарии к доставке": дата заказа, когда написал, кто (ID/имя/
+    телефон/Telegram), точка, текст. Показывается курьеру в "Маршруте"
+    рядом с человеком (см. get_route_people)."""
+    text = (text or "").strip()
+    if not text:
+        return
+    ws = _ws_or_create(config.SHEET_DELIVERY_COMMENTS, _DLV_COMMENT_HEADER)
+    now = _now()
+    tg = (client.get("telegram") or "").strip().lstrip("@")
+    ws.append_row([
+        date_str, now.strftime("%d.%m.%Y %H:%M"), str(client.get("id", "")), client.get("name", ""),
+        client.get("contact", ""), ("@" + tg) if tg else "", point, text,
+    ], value_input_option="RAW")
+    _dlv_comments_cache["data"] = None
+    _invalidate_route_cache(date_str)
+
+
+def get_delivery_comments_for_date(date_str: str) -> dict:
+    """{client_id: "комментарий; комментарий"} за дату заказа (кэш 30 с)."""
+    now = time.time()
+    if _dlv_comments_cache["data"] is None or now - _dlv_comments_cache["ts"] > 30:
+        ws = _ws_or_create(config.SHEET_DELIVERY_COMMENTS, _DLV_COMMENT_HEADER)
+        by = {}
+        for i, row in enumerate(ws.get_all_values()):
+            if i == 0 or len(row) < 8:
+                continue
+            by.setdefault(row[0].strip(), {}).setdefault(row[2].strip(), []).append(row[7].strip())
+        _dlv_comments_cache["data"] = by
+        _dlv_comments_cache["ts"] = now
+    return {cid: " · ".join(t for t in texts if t) for cid, texts in _dlv_comments_cache["data"].get(date_str, {}).items()}
+
+
 def get_route_people(date_str: str) -> dict:
     """Люди с реальными (неотменёнными) заказами на дату, сгруппированные по
     точке доставки, затем по клиенту — {точка: [{"client_id","name",
@@ -3837,6 +3875,14 @@ def get_route_people(date_str: str) -> dict:
         except ValueError:
             pass
 
+    try:
+        dlv = get_delivery_comments_for_date(date_str)
+    except Exception:
+        dlv = {}
+    for people in by_point.values():
+        for cid, person in people.items():
+            if dlv.get(cid):
+                person["delivery_comment"] = dlv[cid]
     return {point: list(people.values()) for point, people in by_point.items()}
 
 

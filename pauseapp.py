@@ -518,6 +518,12 @@ async def api_order_submit(request: web.Request):
         return web.json_response({"error": "payment_required"}, status=400)
 
     date_str = await _retry_sheets(sheets.get_active_menu_date)
+    delivery_comment = (body.get("delivery_comment") or "").strip()[:500]
+    if delivery_comment:
+        try:
+            await _retry_sheets(sheets.add_delivery_comment, date_str, client, point, delivery_comment)
+        except Exception:
+            logger.exception("PAUSE App: не удалось сохранить комментарий к доставке")
     payment_value = _payment_value(payment, bool(screenshot))
     bot = request.app.get("bot")
 

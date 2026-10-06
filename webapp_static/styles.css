@@ -994,3 +994,6 @@ p { margin: 0; color: var(--ink-soft); }
   text-decoration: none;
 }
 .cash-entry-contact-btn:active { background: var(--ink-soft-bg); }
+
+/* Комментарий клиента к доставке (виден курьеру у человека на точке) */
+.person-dlv-comment { margin-top: 4px; padding: 6px 10px; border-radius: 10px; background: #f6ead2; color: #6b4a1f; font-size: 13px; line-height: 1.35; }

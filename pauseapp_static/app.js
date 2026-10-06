@@ -123,7 +123,11 @@
       "checkout.deliveryTitle": "Куда доставить",
       "checkout.change": "Изменить",
       "checkout.commentTitle": "Комментарий к заказу",
-      "checkout.commentPlaceholder": "Необязательно — например, код домофона",
+      "checkout.commentPlaceholder": "Например: можно мне заменить салат, пожалуйста",
+      "checkout.commentInfo": "Это комментарии для нашей команды поваров. По возможности будем их учитывать и сделаем всё возможное, чтобы вас порадовать.",
+      "checkout.deliveryCommentTitle": "Комментарий к доставке",
+      "checkout.deliveryCommentPlaceholder": "Например: позвоните за 5 минут, 3 этаж, офис 12",
+      "checkout.deliveryCommentInfo": "Наша команда старается доставлять ваши обеды очень быстро — обычно с 12:00 до 12:30 всё уже развезено. Если у вас есть комментарии к доставке, мы обязательно сделаем всё возможное, чтобы их выполнить.",
       "checkout.paymentTitle": "Оплата",
       "checkout.cash": "Наличные",
       "checkout.card": "Карта",
@@ -424,7 +428,11 @@
       "checkout.deliveryTitle": "Qayerga yetkazish",
       "checkout.change": "O'zgartirish",
       "checkout.commentTitle": "Buyurtmaga izoh",
-      "checkout.commentPlaceholder": "Ixtiyoriy — masalan, domofon kodi",
+      "checkout.commentPlaceholder": "Masalan: salatni almashtirib bersangiz",
+      "checkout.commentInfo": "Bu bizning oshpazlar jamoasi uchun izohlar. Imkon qadar e'tiborga olamiz va sizni xursand qilish uchun hamma narsani qilamiz.",
+      "checkout.deliveryCommentTitle": "Yetkazib berishga izoh",
+      "checkout.deliveryCommentPlaceholder": "Masalan: 5 daqiqa oldin qo'ng'iroq qiling, 3-qavat, 12-ofis",
+      "checkout.deliveryCommentInfo": "Jamoamiz tushliklaringizni juda tez yetkazishga harakat qiladi — odatda soat 12:00–12:30 gacha hammasi yetkazib bo'lingan bo'ladi. Yetkazib berishga izohingiz bo'lsa, ularni bajarish uchun albatta harakat qilamiz.",
       "checkout.paymentTitle": "To'lov",
       "checkout.cash": "Naqd pul",
       "checkout.card": "Karta",
@@ -725,7 +733,11 @@
       "checkout.deliveryTitle": "Delivery address",
       "checkout.change": "Change",
       "checkout.commentTitle": "Order comment",
-      "checkout.commentPlaceholder": "Optional — e.g. intercom code",
+      "checkout.commentPlaceholder": "E.g. could I swap the salad, please",
+      "checkout.commentInfo": "These notes are for our team of cooks. We'll take them into account where we can and do our best to please you.",
+      "checkout.deliveryCommentTitle": "Delivery comment",
+      "checkout.deliveryCommentPlaceholder": "E.g. call 5 minutes ahead, 3rd floor, office 12",
+      "checkout.deliveryCommentInfo": "Our team does its best to deliver your lunches very fast — usually everything is delivered between 12:00 and 12:30. If you have delivery comments, we'll do everything we can to follow them.",
       "checkout.paymentTitle": "Payment",
       "checkout.cash": "Cash",
       "checkout.card": "Card",
@@ -3118,7 +3130,7 @@
 
   var checkout = {};
   function resetCheckout() {
-    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", payment: "", screenshotFileId: null, screenshotDeferred: false, useTicket: false, ticketItemIndex: null };
+    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", deliveryComment: "", payment: "", screenshotFileId: null, screenshotDeferred: false, useTicket: false, ticketItemIndex: null };
   }
   resetCheckout();
 
@@ -3264,14 +3276,26 @@
     body.appendChild(deliveryField);
     if (checkout.isNewPoint) body.appendChild(el("p", "center-note", t("checkout.newPointNote")));
 
-    var commentField = el("div", "field");
-    commentField.innerHTML =
-      '<label>' + escapeHtml(t("checkout.commentTitle")) + '</label>' +
-      '<textarea id="checkout-comment" rows="2" placeholder="' + escapeHtml(t("checkout.commentPlaceholder")) + '"></textarea>';
-    body.appendChild(commentField);
-    var commentInput = commentField.querySelector("textarea");
-    commentInput.value = checkout.comment || "";
-    commentInput.addEventListener("input", function (e) { checkout.comment = e.target.value; });
+    function commentFieldWithInfo(titleKey, infoKey, placeholderKey, value, onInput) {
+      var f = el("div", "field");
+      f.innerHTML =
+        '<label>' + escapeHtml(t(titleKey)) +
+          ' <button type="button" class="checkout-delivery-info-btn">' + ICON_CHECKOUT_INFO + '</button></label>' +
+        '<textarea rows="2" placeholder="' + escapeHtml(t(placeholderKey)) + '"></textarea>';
+      f.querySelector("button").addEventListener("click", function (e) {
+        e.preventDefault(); e.stopPropagation();
+        haptic("select");
+        showInfo('<p style="margin:0">' + escapeHtml(t(infoKey)) + '</p>');
+      });
+      var ta = f.querySelector("textarea");
+      ta.value = value || "";
+      ta.addEventListener("input", function (e) { onInput(e.target.value); });
+      return f;
+    }
+    body.appendChild(commentFieldWithInfo("checkout.commentTitle", "checkout.commentInfo", "checkout.commentPlaceholder",
+      checkout.comment, function (v) { checkout.comment = v; }));
+    body.appendChild(commentFieldWithInfo("checkout.deliveryCommentTitle", "checkout.deliveryCommentInfo", "checkout.deliveryCommentPlaceholder",
+      checkout.deliveryComment, function (v) { checkout.deliveryComment = v; }));
 
     var cashValue = (state.menu.payment_options || []).filter(function (p) { return !/карт/i.test(p); })[0] || t("checkout.cash");
     var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
@@ -3506,7 +3530,7 @@
         cart: state.cart.map(function (i) { return { set: i.set, garnish: i.garnish, qty: i.qty }; }),
         zone: checkout.zone, point: checkout.point, is_new_point: checkout.isNewPoint,
         lat: checkout.lat, lon: checkout.lon,
-        comment: checkout.comment, payment: checkout.payment, screenshot_file_id: checkout.screenshotFileId,
+        comment: checkout.comment, delivery_comment: checkout.deliveryComment, payment: checkout.payment, screenshot_file_id: checkout.screenshotFileId,
         ticket_item_index: checkout.useTicket ? checkout.ticketItemIndex : null,
       },
     }).then(function (data) {

@@ -788,6 +788,12 @@
       }
       pDiv.appendChild(name);
       pDiv.appendChild(line1);
+      if (p.delivery_comment) {
+        var dlv = document.createElement("div");
+        dlv.className = "person-dlv-comment";
+        dlv.textContent = "💬 " + p.delivery_comment;
+        pDiv.appendChild(dlv);
+      }
       body.appendChild(pDiv);
     });
 
