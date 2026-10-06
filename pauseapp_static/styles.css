@@ -2163,6 +2163,9 @@ p { margin: 0; color: var(--ink-soft); }
 .home-news .pday-carousel-slide { padding: 0 1px; }
 
 /* Платная доставка: клиентская строка в заказе + экран "Доставки" */
+.order-card-sums { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; color: var(--ink-soft); }
+.order-card-sums > div { display: flex; justify-content: space-between; margin-top: 2px; }
+.orders-pay-btn { width: 100%; margin-top: 12px; }
 .order-card-delivery { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 8px 12px; border-radius: 12px; font-size: 12.5px; background: var(--ivory-deep); color: var(--ink-soft); }
 .order-card-delivery b { font-weight: 700; }
 .order-card-delivery.dlv-paid b { color: var(--success); }

@@ -335,6 +335,7 @@
       "orders.paid": "Оплачено", "orders.unpaid": "Не оплачено", "orders.all": "Все",
       "orders.debtTag": " (в долг)",
       "orders.payChecking": "Оплата на проверке",
+      "orders.setsSum": "Сеты", "orders.pay": "Оплатить {sum}", "orders.payHint": "К оплате: {sum}. Прикрепите скриншот оплаты — мы проверим и подтвердим.",
       "orders.delivery": "Доставка", "orders.dlv.paid": "оплачена", "orders.dlv.review": "ждёт подтверждения", "orders.dlv.debt": "в долг", "orders.dlv.unpaid": "не оплачена",
       "orders.cancel": "Отменить",
       "orders.cancelConfirm": "Отменить заказ на {date}?",
@@ -641,6 +642,7 @@
       "orders.paid": "To'langan", "orders.unpaid": "To'lanmagan", "orders.all": "Barchasi",
       "orders.debtTag": " (nasiya)",
       "orders.payChecking": "To'lov tekshirilmoqda",
+      "orders.setsSum": "Setlar", "orders.pay": "To'lash {sum}", "orders.payHint": "To'lov summasi: {sum}. To'lov skrinshotini biriktiring — tekshirib tasdiqlaymiz.",
       "orders.delivery": "Yetkazib berish", "orders.dlv.paid": "to'langan", "orders.dlv.review": "tasdiqlash kutilmoqda", "orders.dlv.debt": "nasiya", "orders.dlv.unpaid": "to'lanmagan",
       "orders.cancel": "Bekor qilish",
       "orders.cancelConfirm": "{date} sanasidagi buyurtmani bekor qilasizmi?",
@@ -947,6 +949,7 @@
       "orders.paid": "Paid", "orders.unpaid": "Unpaid", "orders.all": "All",
       "orders.debtTag": " (on credit)",
       "orders.payChecking": "Payment under review",
+      "orders.setsSum": "Sets", "orders.pay": "Pay {sum}", "orders.payHint": "Amount due: {sum}. Attach a payment screenshot — we'll check and confirm it.",
       "orders.delivery": "Delivery", "orders.dlv.paid": "paid", "orders.dlv.review": "awaiting confirmation", "orders.dlv.debt": "on credit", "orders.dlv.unpaid": "unpaid",
       "orders.cancel": "Cancel",
       "orders.cancelConfirm": "Cancel the order for {date}?",
@@ -4225,7 +4228,10 @@
             '<div class="order-card-head"><span class="order-card-date">' + g.date + '</span>' +
             '<span class="order-card-pills">' + payPill + statusPill + '</span></div>' +
             '<div class="order-card-items">' + itemsText(g.items) + (g.is_debt ? t("orders.debtTag") : "") + '</div>' +
-            (g.delivery_fee ? '<div class="order-card-delivery dlv-' + g.delivery_state + '"><span>' + escapeHtml(t("orders.delivery")) + ' · ' + fmtSum(g.delivery_fee) + '</span><b>' + escapeHtml(t("orders.dlv." + (g.canceled ? "unpaid" : g.delivery_state))) + '</b></div>' : "");
+            (g.delivery_fee
+              ? '<div class="order-card-sums"><div><span>' + escapeHtml(t("orders.setsSum")) + '</span><span>' + fmtSum(g.sets_sum) + '</span></div>' +
+                '<div><span>' + escapeHtml(t("orders.delivery")) + '</span><span>' + fmtSum(g.delivery_fee) + '</span></div></div>'
+              : "");
           if (g.can_cancel || (!g.canceled && g.row_for_feedback)) {
             var actions = el("div", "order-card-actions");
             if (g.can_cancel) {
@@ -4247,12 +4253,44 @@
 
         if (data.debt > 0) {
           root.appendChild(el("div", "center-note", t("orders.debtLine", { sum: fmtSum(data.debt) })));
+          var payBtn = el("button", "btn-primary orders-pay-btn", t("orders.pay", { sum: fmtSum(data.debt) }));
+          payBtn.addEventListener("click", function () { openDebtPay(root, data.debt); });
+          root.appendChild(payBtn);
         }
       }
     }).catch(function () {
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", t("orders.loadFailed")));
     });
+  }
+
+  function openDebtPay(ordersRoot, debt) {
+    showInfo(escapeHtml(t("orders.payHint", { sum: fmtSum(debt) })));
+    var body = document.getElementById("info-modal-body");
+    var fileInput = el("input");
+    fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none";
+    var attach = el("button", "btn-primary orders-pay-btn", t("checkout.attachScreenshot"));
+    attach.addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function () {
+      if (!fileInput.files || !fileInput.files[0]) return;
+      var file = fileInput.files[0];
+      attach.disabled = true;
+      attach.textContent = t("checkout.uploading");
+      apiUpload("/api/order/screenshot", file, file.name).then(function (data) {
+        return api("/api/debt/pay", { method: "POST", body: { file_id: data.file_id } });
+      }).then(function () {
+        hideInfo();
+        haptic("success");
+        toast(t("orders.payChecking"));
+        loadOrders(ordersRoot);
+      }).catch(function (err) {
+        attach.disabled = false;
+        attach.textContent = t("checkout.attachScreenshot");
+        toast(t("checkout.uploadFailed", { msg: err.message }));
+      });
+    });
+    body.appendChild(fileInput);
+    body.appendChild(attach);
   }
 
   function itemsText(items) {

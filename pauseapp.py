@@ -937,6 +937,7 @@ async def api_orders(request: web.Request):
             "canceled": g["canceled"],
             "is_debt": g["payment"] == "В долг" and not g.get("review"),
             "delivery_fee": g.get("delivery_fee", 0),
+            "sets_sum": g.get("sets_sum", 0),
             "delivery_state": (
                 "paid" if g.get("delivery_payment") in ("Картой", "Наличными")
                 else "review" if g.get("delivery_payment") == "На проверке" or (g.get("delivery_payment") == "В долг" and g.get("review"))
@@ -950,6 +951,43 @@ async def api_orders(request: web.Request):
         })
 
     return web.json_response({"pending": pending_out, "orders": groups_out, "debt": debt})
+
+
+async def api_debt_pay(request: web.Request):
+    """Оплата долга скрином из "Мои заказы": все строки "В долг" клиента
+    уходят на проверку админу (скрин уже загружен через /api/order/screenshot)."""
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    file_id = (body.get("file_id") or "").strip()
+    if not file_id:
+        return web.json_response({"error": "photo_required"}, status=400)
+
+    order_rows = await _retry_sheets(sheets.get_client_orders, client["id"], limit=10**9)
+    debt = await _retry_sheets(sheets.get_client_debt_from_orders, order_rows)
+    row_nums = await _retry_sheets(sheets.submit_debt_payment, client["id"], file_id)
+    if not row_nums:
+        return web.json_response({"error": "no_debt"}, status=409)
+
+    bot = request.app.get("bot")
+    if bot and config.ADMIN_IDS:
+        try:
+            caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
+                name=client.get("name", ""), client_id=client.get("id", ""),
+                items="оплата долга", sum=f"{debt:,}".replace(",", " "),
+            )
+            await notify_admins_photo(
+                bot, file_id, caption,
+                reply_markup=kb.card_confirm_admin_kb(",".join(str(r) for r in row_nums)),
+            )
+        except Exception:
+            logger.exception("PAUSE App: не удалось уведомить админов об оплате долга")
+    return web.json_response({"status": "ok"})
 
 
 async def api_orders_cancel(request: web.Request):
@@ -2416,6 +2454,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/account/delete-request", api_account_delete_request)
     app.router.add_get("/api/orders", api_orders)
     app.router.add_post("/api/orders/cancel", api_orders_cancel)
+    app.router.add_post("/api/debt/pay", api_debt_pay)
     app.router.add_get("/api/favorites", api_favorites)
     app.router.add_post("/api/favorites/toggle", api_favorites_toggle)
     app.router.add_post("/api/feedback", api_feedback)

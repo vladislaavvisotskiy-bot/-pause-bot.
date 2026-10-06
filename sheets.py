@@ -1103,11 +1103,13 @@ def get_client_order_groups(client_id, limit=10, rows=None) -> list:
     get_client_debt_from_orders). По умолчанию читает сама, как раньше."""
     if rows is None:
         rows = get_client_orders(client_id, limit=10**9)  # уже от новых к старым
+    prices = get_set_prices()
     groups, order = {}, []
     for r in rows:
         key = (r["date"], r["batch"])
         if key not in groups:
             groups[key] = {
+                "sets_sum": 0,
                 "date": r["date"],
                 "zone": r["zone"],
                 "items": [],
@@ -1135,6 +1137,18 @@ def get_client_order_groups(client_id, limit=10, rows=None) -> list:
             continue
         g["items"].append({"set": r["set"], "qty": r["qty"]})
         g["rows"].append(r["row"])
+        if r["payment"].strip() != config.PAYMENT_TICKET:
+            try:
+                q = int(str(r["qty"]).strip() or 0)
+            except ValueError:
+                q = 0
+            amt = q * prices.get(r["set"], 0)
+            if not amt and r.get("sum"):
+                try:
+                    amt = int(str(r["sum"]).replace(" ", "").replace(",", "") or 0)
+                except ValueError:
+                    amt = 0
+            g["sets_sum"] += amt
         # "Оплачено" на весь заказ — только если ОПЛАЧЕНО во всех его
         # строках (столбец L "Заказы", формула по столбцу K — см.
         # confirm_card_payment/confirm_cash_payment). Обычно все строки
@@ -1452,6 +1466,33 @@ def mark_screenshot_sent(row_nums: list):
         # подтверждения, остальные — "На проверке", как и раньше.
         method = ws.cell(r, config.O_PAY_METHOD).value or ""
         ws.update_cell(r, config.O_PAYMENT, "В долг" if method.strip() == "Карта" else "На проверке")
+
+
+def submit_debt_payment(client_id, file_id: str) -> list:
+    """Клиент оплачивает долг из PAUSE App скрином: все его строки "В долг"
+    (не отменённые и ещё не на проверке) получают скрин и способ "Карта" —
+    в K остаётся "В долг" до подтверждения админом, клиенту это "Оплата на
+    проверке" (см. _is_review_row). Возвращает номера строк."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    cells, nums = [], []
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW or len(row) < config.O_PAYMENT:
+            continue
+        if row[config.O_CLIENT_ID - 1].strip() != str(client_id):
+            continue
+        if row[config.O_PAYMENT - 1].strip() != "В долг" or _is_review_row(row):
+            continue
+        if len(row) >= config.O_COMMENT and is_canceled(row[config.O_COMMENT - 1]):
+            continue
+        nums.append(r)
+        cells.append(gspread.Cell(r, config.O_SCREENSHOT, file_id))
+        cells.append(gspread.Cell(r, config.O_PAY_METHOD, "Карта"))
+    if cells:
+        ws.update_cells(cells)
+        _invalidate_orders_raw_cache()
+    return nums
 
 
 def get_order_rows(row_nums: list) -> list:
