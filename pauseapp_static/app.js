@@ -3190,42 +3190,52 @@
 
   function stepCart(body) {
     wizardPhaseEl.innerHTML = "";
-    body.appendChild(el("h2", "wizard-title", t("cart.title")));
-    var card = el("div", "card");
+    var qtyAll = state.cart.reduce(function (n, i) { return n + i.qty; }, 0);
+    var head = el("div", "ck-head");
+    head.appendChild(el("h2", "wizard-title ck-serif", t("cart.title")));
+    head.appendChild(el("span", "ck-head-count", String(qtyAll)));
+    body.appendChild(head);
+    var list = el("div", "ck-cart-list");
     state.cart.forEach(function (item, idx) {
-      var row = el("div", "cart-row");
-      var left = el("div");
-      left.appendChild(el("div", "cart-row-name", escapeHtml(item.display)));
-      if (item.garnishDisplay) left.appendChild(el("div", "cart-row-sub", escapeHtml(item.garnishDisplay)));
-      row.appendChild(left);
+      var row = el("div", "ck-cart-item");
+      row.appendChild(el("span", "ck-cart-ico", ICON_LEAF));
+      var mid = el("div", "ck-cart-mid");
+      mid.appendChild(el("div", "ck-cart-name", escapeHtml(item.display)));
+      if (item.garnishDisplay) mid.appendChild(el("div", "ck-cart-sub", escapeHtml(item.garnishDisplay)));
+      mid.appendChild(el("div", "ck-cart-unit", fmtSum(item.price)));
+      row.appendChild(mid);
 
-      var right = el("div", "cart-row-right");
-      var qtyRow = el("div", "menu-set-qty-row cart-row-qty");
-      var minus = el("button", "menu-set-qty-btn", "–");
-      var value = el("div", "menu-set-qty-value", String(item.qty));
-      var plus = el("button", "menu-set-qty-btn", "+");
-      minus.addEventListener("click", function () { if (item.qty > 1) { item.qty--; haptic(); wizardReplace(stepCart); } });
-      plus.addEventListener("click", function () { item.qty++; haptic(); wizardReplace(stepCart); });
-      qtyRow.appendChild(minus); qtyRow.appendChild(value); qtyRow.appendChild(plus);
-      right.appendChild(qtyRow);
-      right.appendChild(el("span", "cart-row-sum", fmtSum(item.price * item.qty)));
-      var rm = el("button", "cart-row-remove", "×");
+      var right = el("div", "ck-cart-right");
+      var rm = el("button", "ck-cart-remove");
+      rm.setAttribute("aria-label", "×");
+      rm.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
       rm.addEventListener("click", function () {
+        haptic("select");
         state.cart.splice(idx, 1);
         syncCartBar();
         if (!state.cart.length) { closeWizard(); return; }
         wizardReplace(stepCart);
       });
       right.appendChild(rm);
+      var stepper = el("div", "ck-stepper");
+      var minus = el("button", "", "–");
+      var value = el("span", "", String(item.qty));
+      var plus = el("button", "", "+");
+      minus.addEventListener("click", function () { if (item.qty > 1) { item.qty--; haptic(); wizardReplace(stepCart); } });
+      plus.addEventListener("click", function () { item.qty++; haptic(); wizardReplace(stepCart); });
+      stepper.appendChild(minus); stepper.appendChild(value); stepper.appendChild(plus);
+      right.appendChild(stepper);
+      right.appendChild(el("div", "ck-cart-sum", fmtSum(item.price * item.qty)));
       row.appendChild(right);
-      card.appendChild(row);
+      list.appendChild(row);
     });
-    var totalRow = el("div", "summary-total");
-    totalRow.innerHTML = '<span class="summary-total-label">' + escapeHtml(t("cart.total")) + '</span><span class="summary-total-value">' + fmtSum(cartTotal()) + '</span>';
-    card.appendChild(totalRow);
-    body.appendChild(card);
+    body.appendChild(list);
 
-    var next = el("button", "btn-primary wizard-footer-btn", t("cart.checkoutBtn"));
+    var totalCard = el("div", "ck-total-card");
+    totalCard.innerHTML = '<span>' + escapeHtml(t("cart.total")) + '</span><b>' + fmtSum(cartTotal()) + '</b>';
+    body.appendChild(totalCard);
+
+    var next = el("button", "btn-primary wizard-footer-btn ck-cta", t("cart.checkoutBtn"));
     next.addEventListener("click", function () { wizardStep(stepCheckout); });
     body.appendChild(next);
   }
@@ -3234,17 +3244,17 @@
 
   function stepCheckout(body) {
     wizardPhaseEl.innerHTML = "";
-    body.appendChild(el("h2", "wizard-title", t("checkout.title")));
+    body.appendChild(el("h2", "wizard-title ck-serif", t("checkout.title")));
 
     var profile = state.profile;
     if (!checkout.zone && !checkout.point && profile && profile.zone && profile.point) {
       checkout.zone = profile.zone; checkout.point = profile.point; checkout.isNewPoint = false;
     }
-    var deliveryField = el("div", "field");
+    var deliveryField = el("div", "field ck-sec");
     deliveryField.innerHTML = '<label>' + escapeHtml(t("checkout.deliveryTitle")) + '</label>';
     if (checkout.zone && checkout.point) {
-      var ptCard = el("div", "card option-row selected");
-      ptCard.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(checkout.zone) + '</div><div class="option-row-sub">' + escapeHtml(checkout.point) + '</div></div>';
+      var ptCard = el("div", "card option-row selected ck-point");
+      ptCard.innerHTML = '<span class="ck-point-ico">' + ICON_MAP_PIN + '</span><div class="ck-point-txt"><div class="option-row-label" style="font-weight:600">' + escapeHtml(checkout.point) + '</div><div class="option-row-sub">' + escapeHtml(checkout.zone) + '</div></div>';
       deliveryField.appendChild(ptCard);
       var change = el("button", "btn-text", t("checkout.change"));
       change.addEventListener("click", function () { wizardStep(function (b) { renderDeliveryMapPicker(b, applyCheckoutPoint); }); });
@@ -3258,7 +3268,7 @@
     body.appendChild(deliveryField);
     if (checkout.isNewPoint) body.appendChild(el("p", "center-note", t("checkout.newPointNote")));
 
-    var commentField = el("div", "field");
+    var commentField = el("div", "field ck-sec");
     commentField.innerHTML =
       '<label>' + escapeHtml(t("checkout.commentTitle")) + '</label>' +
       '<textarea id="checkout-comment" rows="2" placeholder="' + escapeHtml(t("checkout.commentPlaceholder")) + '"></textarea>';
@@ -3304,9 +3314,9 @@
     // оплаты (а не только когда включён билет, как раньше), по прямой
     // просьбе: раньше это было видно только на экране "Корзина" на шаг
     // раньше, тут же, перед самой оплатой, не повторялось вовсе.
-    var summaryField = el("div", "field");
+    var summaryField = el("div", "field ck-sec");
     summaryField.innerHTML = '<label>' + escapeHtml(t("checkout.summaryTitle")) + '</label>';
-    var summaryBox = el("div", "card checkout-ticket-summary");
+    var summaryBox = el("div", "card checkout-ticket-summary ck-receipt");
     state.cart.forEach(function (item, idx) {
       var isTicketItem = checkout.useTicket && idx === checkout.ticketItemIndex;
       if (isTicketItem) {
@@ -3352,7 +3362,7 @@
     summaryField.appendChild(summaryBox);
     body.appendChild(summaryField);
 
-    var payField = el("div", "field");
+    var payField = el("div", "field ck-sec");
     payField.innerHTML = '<label>' + escapeHtml(t("checkout.paymentTitle")) + '</label>';
 
     if (ticketAvailable) {
@@ -3457,7 +3467,8 @@
     }
     body.appendChild(payField);
 
-    var confirmBtn = el("button", "btn-primary wizard-footer-btn", t("checkout.confirmBtn"));
+    var confirmBtn = el("button", "btn-primary wizard-footer-btn ck-cta", t("checkout.confirmBtn") + (remainingTotal > 0 ? " · " + fmtSum(remainingTotal) : ""));
+    confirmBtn.dataset.label = confirmBtn.textContent;
     confirmBtn.addEventListener("click", function () { submitCheckoutOrder(confirmBtn); });
     body.appendChild(confirmBtn);
   }
@@ -3537,7 +3548,7 @@
       wizardStep(function (b) { stepOrderConfirmed(b, pending, care); });
     }).catch(function (err) {
       btn.disabled = false;
-      btn.textContent = t("checkout.confirmBtn");
+      btn.textContent = btn.dataset.label || t("checkout.confirmBtn");
       haptic("error");
       var TICKET_ERROR_KEYS = {
         no_ticket: "checkout.noTicket",

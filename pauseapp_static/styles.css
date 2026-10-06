@@ -2158,3 +2158,82 @@ p { margin: 0; color: var(--ink-soft); }
 .home-news { margin-bottom: 20px; }
 .home-news .home-promo { margin-bottom: 0; }
 .home-news .pday-carousel-slide { padding: 0 1px; }
+
+/* ------------------------------------------------------------------ */
+/* Корзина и сверка заказа (stepCart / stepCheckout)                    */
+/* ------------------------------------------------------------------ */
+.ck-serif { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; letter-spacing: .01em; font-size: 30px; }
+.ck-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ck-head .wizard-title { margin: 0; }
+.ck-head-count {
+  min-width: 30px; height: 30px; padding: 0 9px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ink); color: var(--ivory); font-weight: 700; font-size: 14px;
+}
+
+.ck-cart-list { display: flex; flex-direction: column; gap: 10px; }
+.ck-cart-item {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+  padding: 12px 14px 12px 12px;
+  box-shadow: 0 3px 14px rgba(43, 40, 35, .05);
+}
+.ck-cart-ico {
+  flex: none; width: 52px; height: 52px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fffdf8; background: linear-gradient(145deg, #8f9279, #6e7160);
+}
+.ck-cart-ico svg { width: 24px; height: 24px; }
+.ck-cart-mid { flex: 1; min-width: 0; }
+.ck-cart-name { font-weight: 600; font-size: 14.5px; color: var(--ink); line-height: 1.25; }
+.ck-cart-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.ck-cart-unit { font-size: 12px; color: var(--ink-soft); margin-top: 4px; opacity: .8; }
+.ck-cart-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; position: relative; }
+.ck-cart-remove { background: none; border: 0; color: var(--ink-soft); padding: 0; opacity: .6; cursor: pointer; display: flex; }
+.ck-stepper { display: inline-flex; align-items: center; background: var(--ivory-deep); border-radius: 999px; padding: 2px; }
+.ck-stepper button {
+  width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--card);
+  color: var(--ink); font-size: 16px; line-height: 1; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(43, 40, 35, .12);
+}
+.ck-stepper span { min-width: 26px; text-align: center; font-weight: 700; font-size: 14px; color: var(--ink); }
+.ck-cart-sum { font-weight: 700; font-size: 14.5px; color: var(--ink); }
+
+.ck-total-card {
+  margin-top: 14px; padding: 18px 20px; border-radius: 22px;
+  display: flex; justify-content: space-between; align-items: baseline;
+  background: linear-gradient(145deg, #8f9279, #6e7160); color: #fffdf8;
+  box-shadow: 0 8px 22px rgba(110, 113, 96, .3);
+}
+.ck-total-card span { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.ck-total-card b { font-family: "Cormorant Garamond", Georgia, serif; font-size: 32px; font-weight: 600; }
+.ck-cta { border-radius: 999px; padding: 17px; font-size: 16px; box-shadow: 0 8px 20px rgba(43, 40, 35, .22); }
+
+/* Сверка заказа: секции с аккуратными заголовками, чек-карточка */
+.ck-sec { margin-bottom: 20px; }
+.ck-sec > label {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  text-transform: none; letter-spacing: .01em;
+  font-size: 20px; font-weight: 600; color: var(--ink); margin-bottom: 10px;
+}
+.ck-point { justify-content: flex-start; gap: 12px; margin-bottom: 4px; border-radius: 20px; }
+.ck-point-ico {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ink); color: var(--ivory);
+}
+.ck-point-txt { min-width: 0; }
+.ck-receipt {
+  position: relative; border-radius: 20px; padding: 6px 18px 16px;
+  background: #fffdf8;
+  border: 1px dashed rgba(43, 40, 35, .22);
+}
+.ck-receipt .checkout-summary-row { padding: 10px 0; }
+.ck-receipt .checkout-summary-row + .checkout-summary-row { border-top: 1px dotted rgba(43, 40, 35, .2); }
+.ck-receipt .summary-total { border-top: 1px dashed rgba(43, 40, 35, .3); margin-top: 6px; padding-top: 14px; }
+.ck-receipt .summary-total-value { font-family: "Cormorant Garamond", Georgia, serif; font-size: 30px; font-weight: 600; }
+.ck-sec .payment-tile {
+  padding: 16px 10px; border-radius: 18px; font-weight: 600; transition: all .2s ease;
+}
+.ck-sec .payment-tile.active { background: var(--ink); color: var(--ivory); border-color: var(--ink); box-shadow: 0 6px 16px rgba(43, 40, 35, .22); }
+.ck-sec textarea { border-radius: 18px; }
