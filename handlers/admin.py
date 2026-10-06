@@ -1287,3 +1287,24 @@ async def cmd_broadcasts_status(message: Message):
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_OFF)
     else:
         await message.answer(texts.ADMIN_BROADCASTS_STATUS_ON)
+
+
+@router.message(Command("fix_order_qty"))
+async def cmd_fix_order_qty(message: Message):
+    """Одноразовая миграция: количество в листе "Заказы" -> настоящие числа
+    (нужна, чтобы счётчик заказов и статус клиента были верными). Безопасно
+    запускать повторно."""
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    await message.answer("Запускаю исправление количества в листе «Заказы». Это займёт до минуты.")
+    try:
+        r = await asyncio.to_thread(sheets.migrate_order_qty_to_numbers)
+    except Exception as e:
+        logger.exception("fix_order_qty не удалась")
+        await message.answer(f"Не получилось: {e}")
+        return
+    await message.answer(
+        f"Готово. Исправлено ячеек: {r['fixed']}, пустых пропущено: {r['skipped_blank']}, "
+        f"не похожих на число: {r['skipped_not_numeric']}, всего строк: {r['rows_scanned']}."
+    )
