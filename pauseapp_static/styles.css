@@ -2227,18 +2227,20 @@ p { margin: 0; color: var(--ink-soft); }
 .menu-wide-inner .menu-set-card-desc { padding-right: 36px; }
 
 /* Главная: карточки с историей блюда */
-.home-story-card { padding: 0; overflow: hidden; border-radius: 22px; }
-.home-story-top { display: flex; gap: 14px; padding: 12px; cursor: pointer; align-items: flex-start; }
-.home-story-photo { flex: none; width: 96px; height: 96px; border-radius: 16px; overflow: hidden; background: var(--ivory-deep); display: flex; align-items: center; justify-content: center; }
+.home-story-card { padding: 0; overflow: hidden; border-radius: 26px; cursor: pointer; }
+.home-story-photo { position: relative; width: 100%; aspect-ratio: 16 / 10; background: var(--ivory-deep); overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .home-story-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.home-story-photo::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 60%; background: linear-gradient(to top, rgba(30, 24, 18, .72), rgba(30, 24, 18, 0)); pointer-events: none; }
 .home-story-photo.empty { background: rgba(133, 135, 114, 0.14); color: #858772; }
-.home-story-photo.empty svg { width: 26px; height: 26px; }
-.home-story-info { flex: 1; min-width: 0; }
-.home-story-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.home-story-name { font-weight: 700; font-size: 16px; line-height: 1.25; color: var(--ink); }
-.home-story-preview { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
-.home-story-card.expanded .menu-wide-chev svg { transform: rotate(-90deg); }
-.home-story-card .menu-wide-inner { padding-left: 14px; padding-right: 14px; }
-.home-story-card.expanded .menu-wide-inner { padding: 14px 14px 16px; }
-.home-story-text { font-size: 14.5px; line-height: 1.6; color: var(--ink); }
-.home-story-order { width: 100%; margin-top: 14px; }
+.home-story-photo.empty svg { width: 44px; height: 44px; }
+.home-story-name { position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 1; font-size: 21px; font-weight: 700; line-height: 1.2; color: #fffdf8; text-shadow: 0 1px 8px rgba(0, 0, 0, .35); }
+.home-story-body { padding: 14px 16px 16px; }
+.home-story-preview { font-size: 14px; line-height: 1.55; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.home-story-preview[hidden] { display: none; }
+.home-story-more { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--accent-warm, #8a5a2e); }
+.home-story-more-ico svg { width: 14px; height: 14px; transform: rotate(90deg); transition: transform .2s ease; display: block; }
+.home-story-card.expanded .home-story-more-ico svg { transform: rotate(-90deg); }
+.home-story-card .menu-wide-inner { padding-left: 16px; padding-right: 16px; }
+.home-story-card.expanded .menu-wide-inner { padding: 14px 16px 18px; }
+.home-story-text { font-size: 15px; line-height: 1.65; color: var(--ink); }
+.home-story-order { width: 100%; margin-top: 16px; }
