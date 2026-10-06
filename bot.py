@@ -92,7 +92,10 @@ async def send_warm_broadcast(bot: Bot):
             continue
         try:
             greeting = texts.MORNING_GREETING.format(name=c.get("name") or "")
-            await bot.send_message(int(c["tg_id"]), f"{greeting}\n\n{line}")
+            await bot.send_message(
+                int(c["tg_id"]), f"{greeting}\n\n{line}",
+                reply_markup=kb.open_pauseapp_kb() if config.WEBAPP_URL else None,
+            )
         except Exception:
             logger.exception("Не удалось отправить тёплое утреннее сообщение клиенту ID %s", c.get("id"))
         await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
