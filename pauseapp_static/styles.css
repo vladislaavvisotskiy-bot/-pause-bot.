@@ -2200,3 +2200,25 @@ p { margin: 0; color: var(--ink-soft); }
 .dlv-badge.dlv-paid { background: var(--petal-green-soft); color: var(--petal-green); }
 .dlv-badge.dlv-review { background: #f6ead2; color: #8a6a2e; }
 .dlv-badge.dlv-debt { background: #f1e0cb; color: #8a5a2e; }
+
+/* Меню: крупный заголовок и широкие карточки с плавным раскрытием */
+.menu-hero { padding: 4px 2px 14px; }
+.menu-hero-title { font-size: 32px; font-weight: 800; letter-spacing: .01em; color: var(--ink); line-height: 1.1; }
+.menu-hero-sub { margin-top: 6px; font-size: 14px; font-weight: 400; color: var(--ink-soft); }
+#menu-root .menu-set-card.menu-wide-card { display: block; padding: 0; margin-left: 0; margin-right: 0; overflow: hidden; cursor: pointer; border-radius: 26px; }
+.menu-wide-photo { width: 100%; aspect-ratio: 4 / 3; background: var(--ivory-deep); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.menu-wide-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.menu-wide-photo.empty { background: rgba(133, 135, 114, 0.14); color: #858772; }
+.menu-wide-photo.empty svg { width: 48px; height: 48px; }
+.menu-wide-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 16px; }
+.menu-wide-info { min-width: 0; }
+.menu-wide-name { display: inline-block; max-width: 100%; padding: 6px 12px; border-radius: 10px; background: var(--ivory-deep); font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.menu-wide-price { margin-top: 8px; padding-left: 2px; font-size: 18px; font-weight: 700; color: var(--ink); }
+.menu-wide-plus { flex: none; width: 46px; height: 46px; border-radius: 14px; background: var(--ink); color: var(--ivory); display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 300; line-height: 1; transition: transform .3s ease; }
+.menu-wide-card.expanded .menu-wide-plus { transform: rotate(45deg); }
+.menu-wide-details { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .35s ease; cursor: default; }
+.menu-wide-card.expanded .menu-wide-details { grid-template-rows: 1fr; }
+.menu-wide-inner { min-height: 0; overflow: hidden; padding: 0 16px; position: relative; opacity: 0; transition: opacity .3s ease, padding .35s ease; }
+.menu-wide-card.expanded .menu-wide-inner { opacity: 1; padding: 0 16px 18px; border-top: 1px solid rgba(43, 40, 35, 0.08); padding-top: 14px; }
+.menu-wide-fav { position: absolute; top: 8px; right: 12px; }
+.menu-wide-inner .menu-set-card-desc { padding-right: 36px; }

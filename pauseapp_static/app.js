@@ -1812,7 +1812,7 @@
   function renderMenuScreen() {
     screenHeader("menu-header", {
       back: function () { showScreen("home"); },
-      title: t("menu.title"),
+      title: "",
       center: true,
       right: { icon: ICON_SLIDERS, label: t("menu.sort"), onClick: function () { toast(t("menu.sortSoon")); } },
     });
@@ -1830,7 +1830,8 @@
     // каждой вместо кнопки "Добавить в заказ" мягкая пометка о закрытом
     // приёме (см. buildMenuSetCard: canOrderNow()).
     var hero = el("div", "menu-hero");
-    hero.appendChild(el("h2", null, t("menu.hero")));
+    hero.appendChild(el("h1", "menu-hero-title", escapeHtml(t("menu.title"))));
+    hero.appendChild(el("p", "menu-hero-sub", escapeHtml(t("menu.hero"))));
     root.appendChild(hero);
 
     renderMenuCategoryChips(root);
@@ -1874,7 +1875,7 @@
       return;
     }
     var grid = el("div", "menu-set-grid");
-    sets.forEach(function (s) { grid.appendChild(buildMenuSetCard(s)); });
+    sets.forEach(function (s) { grid.appendChild(buildMenuSetCard(s, true)); });
     root.appendChild(grid);
   }
 
@@ -1888,8 +1889,8 @@
   // состояние (что выбрано, развёрнута ли) живёт в замыкании — у каждой
   // карточки отдельный экземпляр, поэтому Главная/Меню/Избранное не мешают
   // друг другу, даже отображая один и тот же сет одновременно.
-  function buildMenuSetCard(s) {
-    var card = el("div", "card menu-set-card");
+  function buildMenuSetCard(s, wide) {
+    var card = el("div", "card menu-set-card" + (wide ? " menu-wide-card" : ""));
     var expanded = false;
     var sel = { variantIdx: 0, garnish: "", garnishPicks: [], qty: 1 };
     var localizedName = localizedSetName(s.display_name);
@@ -1926,6 +1927,151 @@
 
     function canOrderNow() {
       return !state.menu || state.menu.can_order !== false;
+    }
+
+    // Цена, выбор варианта/гарнира, количество и "Добавить" — общий блок для
+    // обычной (render) и широкой (renderDetails) карточки.
+    function appendSelectors(body, rerender) {
+      var effSet = currentEffSet();
+      body.appendChild(el("div", "menu-set-card-price", fmtSum(effSet.price)));
+
+      if (s.is_variant_group) {
+        var variantRow = el("div", "menu-set-chip-row");
+        variantRow.addEventListener("click", function (e) { e.stopPropagation(); });
+        s.variants.forEach(function (v, idx) {
+          var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(localizedVariantLabel(v.label)));
+          chip.addEventListener("click", function () { sel.variantIdx = idx; sel.garnish = ""; sel.garnishPicks = []; rerender(); });
+          variantRow.appendChild(chip);
+        });
+        body.appendChild(variantRow);
+      }
+
+      if (effSet.has_garnish && effSet.garnish_options.length) {
+        var canMix = effSet.garnish_options.length >= 2;
+        if (canMix) {
+          body.appendChild(el("div", "menu-set-card-note", t("menu.garnishMixHint")));
+        }
+        var garnishRow = el("div", "menu-set-chip-row");
+        garnishRow.addEventListener("click", function (e) { e.stopPropagation(); });
+        effSet.garnish_options.forEach(function (g) {
+          var picked = sel.garnishPicks.indexOf(g.value) !== -1;
+          var chip = el("button", "menu-set-chip" + (picked ? " active" : ""), escapeHtml(g.display));
+          chip.addEventListener("click", function () {
+            if (!canMix) { sel.garnish = picked ? "" : g.value; sel.garnishPicks = picked ? [] : [g.value]; }
+            else pickGarnish(g.value);
+            rerender();
+          });
+          garnishRow.appendChild(chip);
+        });
+        body.appendChild(garnishRow);
+        if (sel.garnishPicks.length === 2) {
+          body.appendChild(el("div", "menu-set-card-note", "🔀 " + t("menu.garnishMixed", { text: displayGarnishText(sel.garnish) })));
+        }
+      }
+
+      if (!canOrderNow()) {
+        body.appendChild(el("div", "menu-set-closed-note", t("menu.orderClosedNote")));
+      } else {
+        var qtyRow = el("div", "menu-set-qty-row");
+        qtyRow.addEventListener("click", function (e) { e.stopPropagation(); });
+        var minus = el("button", "menu-set-qty-btn", "–");
+        var value = el("div", "menu-set-qty-value", String(sel.qty));
+        var plus = el("button", "menu-set-qty-btn", "+");
+        minus.addEventListener("click", function () { if (sel.qty > 1) { sel.qty--; value.textContent = sel.qty; haptic(); } });
+        plus.addEventListener("click", function () { sel.qty++; value.textContent = sel.qty; haptic(); });
+        qtyRow.appendChild(minus); qtyRow.appendChild(value); qtyRow.appendChild(plus);
+        body.appendChild(qtyRow);
+
+        var addBtnWrap = el("div", "menu-set-add-wrap");
+        addBtnWrap.addEventListener("click", function (e) { e.stopPropagation(); });
+        var addBtn = el("button", "btn-primary", t("menu.addToCart"));
+        addBtn.addEventListener("click", function () {
+          if (effSet.has_garnish && effSet.garnish_options.length && !sel.garnish) { toast(t("menu.pickGarnishFirst")); return; }
+          addToCart(effSet, sel);
+          haptic("success");
+          toast(t("menu.addedToCart"));
+          // Карточка остаётся раскрытой (можно сразу добавить ещё одну
+          // порцию с другим гарниром) — сбрасываем только сам выбор.
+          sel = { variantIdx: 0, garnish: "", garnishPicks: [], qty: 1 };
+          rerender();
+        });
+        addBtnWrap.appendChild(addBtn);
+        body.appendChild(addBtnWrap);
+      }
+
+    }
+
+    // --- Широкая карточка меню: фото сверху, название+цена и "+" под ним;
+    // по тапу вниз плавно раскрывается состав и выбор (grid-rows анимация).
+    function buildWide() {
+      var photo = el("div", "menu-wide-photo");
+      if (s.photo_url) {
+        var img = el("img");
+        img.alt = ""; img.loading = "lazy";
+        img.addEventListener("error", function () { img.remove(); photo.classList.add("empty"); photo.innerHTML = ICON_LEAF; });
+        setPhotoSrc(img, s.photo_url);
+        photo.appendChild(img);
+      } else {
+        photo.classList.add("empty");
+        photo.innerHTML = ICON_LEAF;
+      }
+      card.appendChild(photo);
+
+      var foot = el("div", "menu-wide-foot");
+      var info = el("div", "menu-wide-info");
+      info.appendChild(el("div", "menu-wide-name", escapeHtml(localizedName)));
+      var priceText = s.is_variant_group
+        ? t("menu.from", { sum: fmtSum(Math.min.apply(null, s.variants.map(function (v) { return v.price; }))) })
+        : fmtSum(s.price);
+      info.appendChild(el("div", "menu-wide-price", priceText));
+      foot.appendChild(info);
+      var plus = el("div", "menu-wide-plus", "+");
+      foot.appendChild(plus);
+      card.appendChild(foot);
+
+      var details = el("div", "menu-wide-details");
+      var inner = el("div", "menu-wide-inner");
+      details.appendChild(inner);
+      card.appendChild(details);
+
+      function renderDetails() {
+        inner.innerHTML = "";
+        var favBtn = el("button", "menu-set-fav-btn menu-wide-fav", ICON_HEART);
+        ensureFavoriteKeys().then(function (keys) {
+          favBtn.classList.toggle("active", keys.has(s.key));
+          favBtn.innerHTML = keys.has(s.key) ? ICON_HEART_FILLED : ICON_HEART;
+        });
+        favBtn.addEventListener("click", function () {
+          favBtn.disabled = true;
+          toggleFavorite(s.key).then(function (favorited) {
+            favBtn.disabled = false;
+            favBtn.classList.toggle("active", favorited);
+            favBtn.innerHTML = favorited ? ICON_HEART_FILLED : ICON_HEART;
+            haptic("success");
+            toast(favorited ? t("menu.favAdded") : t("menu.favRemoved"));
+          }).catch(function (err) {
+            favBtn.disabled = false;
+            toast(t("menu.favFailed", { msg: err.message }));
+          });
+        });
+        inner.appendChild(favBtn);
+        if (s.description && s.description.length) {
+          var list = el("ul", "menu-set-card-desc");
+          s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
+          inner.appendChild(list);
+        }
+        appendSelectors(inner, renderDetails);
+      }
+      inner.addEventListener("click", function (e) { e.stopPropagation(); });
+
+      foot.addEventListener("click", toggle);
+      photo.addEventListener("click", toggle);
+      function toggle() {
+        haptic("select");
+        expanded = !expanded;
+        if (expanded) renderDetails();
+        card.classList.toggle("expanded", expanded);
+      }
     }
 
     function render() {
@@ -2016,77 +2162,11 @@
       // (поймано и подтверждено тестом на кнопке "Добавить").
       card.onclick = function () { haptic("select"); expanded = false; render(); };
 
-      var effSet = currentEffSet();
-      body.appendChild(el("div", "menu-set-card-price", fmtSum(effSet.price)));
-
-      if (s.is_variant_group) {
-        var variantRow = el("div", "menu-set-chip-row");
-        variantRow.addEventListener("click", function (e) { e.stopPropagation(); });
-        s.variants.forEach(function (v, idx) {
-          var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(localizedVariantLabel(v.label)));
-          chip.addEventListener("click", function () { sel.variantIdx = idx; sel.garnish = ""; sel.garnishPicks = []; render(); });
-          variantRow.appendChild(chip);
-        });
-        body.appendChild(variantRow);
-      }
-
-      if (effSet.has_garnish && effSet.garnish_options.length) {
-        var canMix = effSet.garnish_options.length >= 2;
-        if (canMix) {
-          body.appendChild(el("div", "menu-set-card-note", t("menu.garnishMixHint")));
-        }
-        var garnishRow = el("div", "menu-set-chip-row");
-        garnishRow.addEventListener("click", function (e) { e.stopPropagation(); });
-        effSet.garnish_options.forEach(function (g) {
-          var picked = sel.garnishPicks.indexOf(g.value) !== -1;
-          var chip = el("button", "menu-set-chip" + (picked ? " active" : ""), escapeHtml(g.display));
-          chip.addEventListener("click", function () {
-            if (!canMix) { sel.garnish = picked ? "" : g.value; sel.garnishPicks = picked ? [] : [g.value]; }
-            else pickGarnish(g.value);
-            render();
-          });
-          garnishRow.appendChild(chip);
-        });
-        body.appendChild(garnishRow);
-        if (sel.garnishPicks.length === 2) {
-          body.appendChild(el("div", "menu-set-card-note", "🔀 " + t("menu.garnishMixed", { text: displayGarnishText(sel.garnish) })));
-        }
-      }
-
-      if (!canOrderNow()) {
-        body.appendChild(el("div", "menu-set-closed-note", t("menu.orderClosedNote")));
-      } else {
-        var qtyRow = el("div", "menu-set-qty-row");
-        qtyRow.addEventListener("click", function (e) { e.stopPropagation(); });
-        var minus = el("button", "menu-set-qty-btn", "–");
-        var value = el("div", "menu-set-qty-value", String(sel.qty));
-        var plus = el("button", "menu-set-qty-btn", "+");
-        minus.addEventListener("click", function () { if (sel.qty > 1) { sel.qty--; value.textContent = sel.qty; haptic(); } });
-        plus.addEventListener("click", function () { sel.qty++; value.textContent = sel.qty; haptic(); });
-        qtyRow.appendChild(minus); qtyRow.appendChild(value); qtyRow.appendChild(plus);
-        body.appendChild(qtyRow);
-
-        var addBtnWrap = el("div", "menu-set-add-wrap");
-        addBtnWrap.addEventListener("click", function (e) { e.stopPropagation(); });
-        var addBtn = el("button", "btn-primary", t("menu.addToCart"));
-        addBtn.addEventListener("click", function () {
-          if (effSet.has_garnish && effSet.garnish_options.length && !sel.garnish) { toast(t("menu.pickGarnishFirst")); return; }
-          addToCart(effSet, sel);
-          haptic("success");
-          toast(t("menu.addedToCart"));
-          // Карточка остаётся раскрытой (можно сразу добавить ещё одну
-          // порцию с другим гарниром) — сбрасываем только сам выбор.
-          sel = { variantIdx: 0, garnish: "", garnishPicks: [], qty: 1 };
-          render();
-        });
-        addBtnWrap.appendChild(addBtn);
-        body.appendChild(addBtnWrap);
-      }
-
+      appendSelectors(body, render);
       card.appendChild(body);
     }
 
-    render();
+    if (wide) buildWide(); else render();
     return card;
   }
 
