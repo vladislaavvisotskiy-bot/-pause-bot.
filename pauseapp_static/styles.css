@@ -2263,3 +2263,8 @@ p { margin: 0; color: var(--ink-soft); }
 .home-mini-photo.empty { background: rgba(133, 135, 114, 0.14); color: #858772; }
 .home-mini-photo.empty svg { width: 32px; height: 32px; }
 .home-mini-name { margin-top: 8px; font-size: 14px; font-weight: 600; line-height: 1.25; color: var(--ink); }
+
+/* Главная: сетка 2 в ряд вместо горизонтальной ленты */
+.home-mini-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; overflow: visible; scroll-snap-type: none; margin: 0; padding: 2px 0 6px; }
+.home-mini-card { flex: none; width: 100%; min-width: 0; }
+.home-mini-photo { width: 100%; height: auto; aspect-ratio: 1 / 1; }
