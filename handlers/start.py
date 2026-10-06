@@ -21,7 +21,7 @@ async def cmd_start(message: Message, state: FSMContext):
         await message.answer(texts.WELCOME_BACK, reply_markup=kb.main_menu_kb(message.from_user.id))
         return
 
-    await message.answer(texts.WELCOME_NEW, reply_markup=ReplyKeyboardRemove())
+    await message.answer(texts.WELCOME_NEW, reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
     await message.answer(texts.ASK_NAME)
     await state.set_state(Registration.waiting_name)
 
@@ -78,7 +78,13 @@ async def got_phone(message: Message, state: FSMContext):
         greeting_name = name
     await state.clear()
     app_kb = kb.open_pauseapp_kb() if config.WEBAPP_URL else None
-    await message.answer("Спасибо, номер записан ✅", reply_markup=ReplyKeyboardRemove())
+    # Убираем клавиатуру "Поделиться контактом": сообщение-пустышка с
+    # ReplyKeyboardRemove и сразу удаляем, чтобы не мусорить в чате.
+    try:
+        tmp = await message.answer("✅", reply_markup=ReplyKeyboardRemove())
+        await tmp.delete()
+    except Exception:
+        pass
     await message.answer(texts.REGISTERED.format(name=greeting_name), reply_markup=app_kb)
     await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(message.from_user.id))
 
