@@ -14,7 +14,7 @@ import texts
 import keyboards as kb
 import webapp
 import pauseapp
-from handlers import start, order, profile, club, admin
+from handlers import start, order, profile, club, admin, legacy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pause_bot")
@@ -155,6 +155,8 @@ async def main():
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
+    if config.MINIAPP_ONLY:
+        dp.include_router(legacy.router)  # первым: перехватывает старые кнопки у клиентов
     dp.include_router(start.router)
     dp.include_router(order.router)
     dp.include_router(profile.router)
@@ -162,6 +164,14 @@ async def main():
     dp.include_router(admin.router)
 
     await setup_commands(bot)
+    if config.MINIAPP_ONLY:
+        # Синяя кнопка рядом с полем ввода — тоже сразу в приложение.
+        try:
+            from aiogram.types import MenuButtonWebApp, WebAppInfo
+            await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(
+                text="PAUSE", web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/")))
+        except Exception:
+            logger.exception("Не удалось задать кнопку меню бота")
 
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
     h, m = map(int, config.MORNING_REPORT_TIME.split(":"))

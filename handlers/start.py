@@ -18,7 +18,10 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     client = sheets.find_client_by_tg_id(message.from_user.id)
     if client:
-        await message.answer(texts.WELCOME_BACK, reply_markup=kb.main_menu_kb(message.from_user.id))
+        if config.MINIAPP_ONLY and message.from_user.id not in config.ADMIN_IDS:
+            await message.answer(texts.WELCOME_BACK_APP, reply_markup=kb.main_menu_kb(message.from_user.id))
+        else:
+            await message.answer(texts.WELCOME_BACK, reply_markup=kb.main_menu_kb(message.from_user.id))
         return
 
     await message.answer(texts.WELCOME_NEW, reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
@@ -86,7 +89,8 @@ async def got_phone(message: Message, state: FSMContext):
     except Exception:
         pass
     await message.answer(texts.REGISTERED.format(name=greeting_name), reply_markup=app_kb)
-    await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(message.from_user.id))
+    if not config.MINIAPP_ONLY or message.from_user.id in config.ADMIN_IDS:
+        await message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(message.from_user.id))
 
 
 @router.message(Command("pauseapp"))

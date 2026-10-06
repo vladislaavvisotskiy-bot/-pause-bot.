@@ -73,8 +73,8 @@
       "splash.tagline1": "more than lunch,", "splash.tagline2": "packed with care",
       "splash.start": "Начать",
 
-      "access.deniedTitle": "Доступ ограничен",
-      "access.deniedText": "PAUSE App пока открыт только для команды PAUSE.",
+      "access.deniedTitle": "Нужна регистрация",
+      "access.deniedText": "Чтобы войти, откройте чат с ботом PAUSE, нажмите Start и пройдите короткую регистрацию. Затем нажмите «Открыть PAUSE».",
       "access.errorTitle": "Небольшая заминка",
       "access.errorText": "Не получилось связаться с сервером — потяните экран вниз или откройте приложение заново.",
       "home.loadError": "Не удалось загрузить данные: {msg}",
@@ -381,7 +381,7 @@
       "splash.start": "Boshlash",
 
       "access.deniedTitle": "Kirish cheklangan",
-      "access.deniedText": "PAUSE App hozircha faqat PAUSE jamoasi uchun ochiq.",
+      "access.deniedText": "Kirish uchun PAUSE botida Start tugmasini bosing va qisqa ro'yxatdan o'ting, so'ng PAUSE ni ochish tugmasini bosing.",
       "access.errorTitle": "Kichik uzilish",
       "access.errorText": "Server bilan bog'lanib bo'lmadi — ekranni pastga torting yoki ilovani qayta oching.",
       "home.loadError": "Ma'lumotlarni yuklab bo'lmadi: {msg}",
@@ -688,7 +688,7 @@
       "splash.start": "Start",
 
       "access.deniedTitle": "Access restricted",
-      "access.deniedText": "PAUSE App is currently open only to the PAUSE team.",
+      "access.deniedText": "To get in, open the PAUSE bot chat, press Start and complete the short registration. Then tap Open PAUSE.",
       "access.errorTitle": "Small hiccup",
       "access.errorText": "Couldn't reach the server — pull down to refresh or reopen the app.",
       "home.loadError": "Couldn't load data: {msg}",
@@ -4738,6 +4738,78 @@
     body.appendChild(el("h2", "wizard-title", title));
   }
 
+  // Рассылка клиентам "новое меню готово" (кнопка "Посмотреть" ведёт в приложение).
+  function loadOpsBroadcast(root) {
+    api("/api/ops/broadcast").then(function (info) {
+      root.innerHTML = "";
+      var card = el("div", "card");
+      card.innerHTML = '<div class="order-card-items"><b>Новое меню готово</b></div>' +
+        '<div class="center-note" style="margin-top:6px">Получат: ' + info.recipients + ' клиентов (кроме отключивших оповещения о меню). ' +
+        'Сообщение придёт с кнопкой «Посмотреть», она откроет приложение.</div>';
+      root.appendChild(card);
+      if (info.disabled) root.appendChild(el("div", "empty-note", "Рассылки сейчас выключены (включить: /admin в боте → рассылки)."));
+      var progress = el("div", "center-note");
+      progress.style.marginTop = "12px";
+      root.appendChild(progress);
+
+      function poll() {
+        if (!document.body.contains(root)) return;
+        api("/api/ops/broadcast").then(function (i) {
+          var st = i.status;
+          if (st.running) {
+            progress.textContent = "Идёт рассылка: " + st.sent + " из " + st.total;
+            setTimeout(poll, 2000);
+          } else if (st.total) {
+            progress.textContent = "Готово. Доставлено " + st.sent + " из " + st.total + (st.failed ? ", не доставлено " + st.failed : "") + ".";
+          }
+        }).catch(function () {});
+      }
+      poll();
+
+      function start(date, force) {
+        api("/api/ops/broadcast/menu", { method: "POST", body: { date: date, force: !!force } }).then(function () {
+          haptic("success");
+          progress.textContent = "Рассылка запущена…";
+          setTimeout(poll, 1500);
+        }).catch(function (err) {
+          if (err.code === "already_sent") {
+            showConfirm("Рассылка на " + date + " уже была (" + ((err.data && err.data.at) || "") + "). Отправить ещё раз?", "Отправить снова", function () { start(date, true); });
+          } else if (err.code === "already_running") {
+            toast("Рассылка уже идёт");
+          } else if (err.code === "broadcasts_disabled") {
+            toast("Рассылки выключены в настройках бота");
+          } else {
+            toast("Не удалось запустить: " + err.message);
+          }
+        });
+      }
+      function ask(date, label) {
+        showConfirm("Отправить всем клиентам (" + info.recipients + ") сообщение «Новое меню " + label + " уже готово» с кнопкой «Посмотреть»?", "Отправить", function () { start(date, false); });
+      }
+
+      var rowsCard = el("div", "card profile-nav-list");
+      rowsCard.appendChild(buildProfileRow(ICON_BELL, "Меню на сегодня · " + info.today, function () { ask(info.today, "на сегодня"); }));
+      rowsCard.appendChild(buildProfileRow(ICON_BELL, "Меню на завтра · " + info.tomorrow, function () { ask(info.tomorrow, "на завтра"); }));
+      root.appendChild(rowsCard);
+
+      var custom = el("div", "field");
+      custom.innerHTML = '<label>Другая дата</label><input type="date">';
+      root.appendChild(custom);
+      var pick = el("button", "btn-ghost", "Рассылка на выбранную дату");
+      pick.addEventListener("click", function () {
+        var v = custom.querySelector("input").value;
+        if (!v) { toast("Выберите дату"); return; }
+        var p = v.split("-");
+        var d = p[2] + "." + p[1] + "." + p[0];
+        ask(d, "на " + d);
+      });
+      root.appendChild(pick);
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+    });
+  }
+
   function loadOpsHub(root) {
     root.innerHTML = "";
     var rows = el("div", "card profile-nav-list");
@@ -4804,6 +4876,17 @@
             });
           }));
           body.appendChild(menuRows);
+        });
+      }));
+    }
+    if (state.isMainAdmin || state.paMenu) {
+      rows.appendChild(buildProfileRow(ICON_BELL, "Рассылка", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "Рассылка");
+          var sub = el("div");
+          sub.appendChild(el("div", "skeleton-block"));
+          body.appendChild(sub);
+          loadOpsBroadcast(sub);
         });
       }));
     }

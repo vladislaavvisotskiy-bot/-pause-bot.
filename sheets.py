@@ -3,7 +3,9 @@
 Слой работы с Google Таблицей. Всё общение с гугл-таблицей PAUSE идёт только
 через эти функции — если завтра поменяются столбцы, править нужно только тут.
 """
+import copy
 import json
+import os
 import random
 import threading
 import uuid
@@ -128,13 +130,83 @@ def _connect():
 _ws_cache: dict = {}  # name -> (worksheet, ts)
 _WS_CACHE_TTL = 20  # секунд
 
+# Кэш ЧТЕНИЙ листов. Квота Google Sheets API — порядка 60 чтений в минуту на
+# сервисный аккаунт; каждое открытие PAUSE App делает 8–10 чтений (меню,
+# профиль, послания, билеты...), так что при массовом переходе клиентов на
+# Mini App квота кончилась бы за считанные минуты. Чтения одного и того же
+# листа с теми же аргументами на SHEETS_READ_CACHE_SECONDS (по умолчанию 12 с)
+# отдаём из памяти; ЛЮБАЯ запись в лист (любой метод, кроме чтения) мгновенно
+# сбрасывает кэш этого листа, так что свои собственные записи видны сразу.
+# SHEETS_READ_CACHE_SECONDS=0 — выключить.
+_READ_CACHE_TTL = float(os.getenv("SHEETS_READ_CACHE_SECONDS", "12"))
+_READ_METHODS = {"get_all_values", "acell", "get", "row_values", "col_values", "cell", "get_all_records"}
+_sheet_versions: dict = {}
+_read_cache: dict = {}
+_read_lock = threading.Lock()
+
+
+def _bump_sheet(name):
+    with _read_lock:
+        _sheet_versions[name] = _sheet_versions.get(name, 0) + 1
+        for k in [k for k in _read_cache if k[0] == name]:
+            _read_cache.pop(k, None)
+
+
+def _copy_rows(val):
+    if isinstance(val, list) and all(isinstance(r, list) for r in val):
+        return [list(r) for r in val]
+    return copy.deepcopy(val)
+
+
+class _CachedWs:
+    """Прозрачная обёртка над gspread.Worksheet: чтения кэшируются, любые
+    другие вызовы (записи) сбрасывают кэш листа."""
+
+    def __init__(self, ws, name):
+        object.__setattr__(self, "_raw", ws)
+        object.__setattr__(self, "_name", name)
+
+    def __getattr__(self, attr):
+        target = getattr(self._raw, attr)
+        if not callable(target):
+            return target
+        name = self._name
+        if attr in _READ_METHODS and _READ_CACHE_TTL > 0:
+            def reader(*a, **k):
+                key = (name, attr, repr(a), repr(sorted(k.items())))
+                now = time.time()
+                with _read_lock:
+                    ent = _read_cache.get(key)
+                    ver = _sheet_versions.get(name, 0)
+                if ent and now - ent[0] < _READ_CACHE_TTL and ent[2] == ver:
+                    return _copy_rows(ent[1])
+                val = target(*a, **k)
+                with _read_lock:
+                    if _sheet_versions.get(name, 0) == ver:
+                        if len(_read_cache) > 400:
+                            _read_cache.clear()
+                        _read_cache[key] = (now, _copy_rows(val), ver)
+                return val
+            return reader
+
+        def writer(*a, **k):
+            try:
+                return target(*a, **k)
+            finally:
+                _bump_sheet(name)
+        return writer
+
+
+def _wrap_ws(ws, name):
+    return _CachedWs(ws, name) if _READ_CACHE_TTL > 0 else ws
+
 
 def _ws(name):
     cached = _ws_cache.get(name)
     now = time.time()
     if cached is not None and now - cached[1] < _WS_CACHE_TTL:
         return cached[0]
-    ws = _connect().worksheet(name)
+    ws = _wrap_ws(_connect().worksheet(name), name)
     _ws_cache[name] = (ws, now)
     return ws
 
@@ -154,6 +226,7 @@ def _ws_or_create(name: str, header: list) -> gspread.Worksheet:
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title=name, rows=200, cols=max(len(header), 1))
         ws.update([header], "A1")
+    ws = _wrap_ws(ws, name)
     _ws_cache[name] = (ws, now)
     return ws
 
@@ -1962,6 +2035,25 @@ def get_set_extra() -> dict:
             "photo_url": row[photo_i].strip() if len(row) > photo_i and row[photo_i] else "",
             "description": row[desc_i].strip() if len(row) > desc_i and row[desc_i] else "",
         }
+    return out
+
+
+_MB_HEADER = ["Дата меню", "Когда отправлено", "Получателей", "Доставлено", "Не доставлено", "Кто запустил"]
+
+
+def log_menu_broadcast(menu_date: str, total: int, sent: int, failed: int, admin_id):
+    ws = _ws_or_create(config.SHEET_MENU_BROADCASTS, _MB_HEADER)
+    ws.append_row([menu_date, _now().strftime("%d.%m.%Y %H:%M"), total, sent, failed, str(admin_id)],
+                  value_input_option="RAW")
+
+
+def get_menu_broadcast_log(menu_date: str) -> list:
+    """Записи журнала рассылок на эту дату меню: [{"at", "sent"}], старые первыми."""
+    ws = _ws_or_create(config.SHEET_MENU_BROADCASTS, _MB_HEADER)
+    out = []
+    for r in ws.get_all_values()[1:]:
+        if r and r[0].strip() == menu_date:
+            out.append({"at": r[1] if len(r) > 1 else "", "sent": r[3] if len(r) > 3 else ""})
     return out
 
 

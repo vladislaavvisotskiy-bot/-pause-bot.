@@ -515,7 +515,7 @@ async def admin_publish_confirmed(callback: CallbackQuery, state: FSMContext, bo
     except Exception:
         pass
     await callback.message.answer(texts.ADMIN_MENU_PUBLISHED.format(date=date_str))
-    if not sheets.is_broadcasts_disabled():
+    if not config.MINIAPP_ONLY and not sheets.is_broadcasts_disabled():
         await _broadcast_new_menu(bot)
     await state.clear()
     await callback.answer()

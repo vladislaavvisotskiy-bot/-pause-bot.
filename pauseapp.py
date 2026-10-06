@@ -2287,6 +2287,115 @@ async def _broadcast_new_menu_from_app(bot):
         await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
 
 
+# --- Ручная рассылка "новое меню готово" (Операционный центр → Рассылка) ---
+
+_menu_bc = {"running": False, "date": "", "total": 0, "sent": 0, "failed": 0, "blocked": 0, "done_at": ""}
+
+
+def _when_label(date_str: str) -> str:
+    if date_str == sheets.today_date_str():
+        return "на сегодня"
+    if date_str == sheets.get_tomorrow_date_str():
+        return "на завтра"
+    return "на " + date_str
+
+
+async def _run_menu_broadcast(bot, date_str: str, admin_id):
+    """Безопасная рассылка: ~10 сообщений/с (лимит Telegram — 30/с), при
+    flood-лимите ждём сколько просит Telegram и повторяем, заблокировавших
+    бота пропускаем, тех, кто отключил оповещения о меню, не трогаем, один
+    человек получает сообщение один раз."""
+    from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError, TelegramBadRequest
+    st = _menu_bc
+    try:
+        clients = await _retry_sheets(sheets.get_broadcast_clients)
+        seen, targets = set(), []
+        for c in clients:
+            tid = str(c.get("tg_id") or "").strip()
+            if not tid or tid in seen or c.get("notify_menu_off"):
+                continue
+            seen.add(tid)
+            targets.append(c)
+        st.update(total=len(targets), sent=0, failed=0, blocked=0)
+        when = _when_label(date_str)
+        delay = max(config.BROADCAST_DELAY_SECONDS, 0.08)
+        for c in targets:
+            nm = (c.get("name") or "").strip()
+            text = (texts.APP_MENU_BROADCAST_TEXT.format(name=nm, when=when) if nm
+                    else texts.APP_MENU_BROADCAST_TEXT_NONAME.format(when=when))
+            for attempt in range(3):
+                try:
+                    await bot.send_message(int(c["tg_id"]), text, reply_markup=kb.menu_broadcast_kb())
+                    st["sent"] += 1
+                    break
+                except TelegramRetryAfter as e:
+                    await asyncio.sleep(float(e.retry_after) + 1)
+                except TelegramForbiddenError:
+                    st["blocked"] += 1
+                    st["failed"] += 1
+                    break
+                except TelegramBadRequest:
+                    st["failed"] += 1
+                    break
+                except Exception:
+                    logger.exception("Рассылка меню: ошибка отправки клиенту ID %s", c.get("id"))
+                    if attempt == 2:
+                        st["failed"] += 1
+                    else:
+                        await asyncio.sleep(2)
+            await asyncio.sleep(delay)
+        try:
+            await _retry_sheets(sheets.log_menu_broadcast, date_str, st["total"], st["sent"], st["failed"], admin_id)
+        except Exception:
+            logger.exception("Рассылка меню: не удалось записать журнал")
+        try:
+            await bot.send_message(int(admin_id), f"Рассылка о меню {when} завершена. Доставлено: {st['sent']} из {st['total']}"
+                                   + (f", не доставлено: {st['failed']} (из них заблокировали бота: {st['blocked']})." if st["failed"] else "."))
+        except Exception:
+            pass
+    finally:
+        st["running"] = False
+        st["done_at"] = sheets.today_date_str()
+
+
+async def api_ops_broadcast_info(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    clients = await _retry_sheets(sheets.get_broadcast_clients)
+    recipients = len({str(c.get("tg_id")) for c in clients if c.get("tg_id") and not c.get("notify_menu_off")})
+    disabled = await _retry_sheets(sheets.is_broadcasts_disabled)
+    return web.json_response({
+        "today": sheets.today_date_str(), "tomorrow": sheets.get_tomorrow_date_str(),
+        "recipients": recipients, "disabled": bool(disabled),
+        "status": dict(_menu_bc),
+    })
+
+
+async def api_ops_broadcast_menu(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = (body.get("date") or "").strip()
+    try:
+        dt.datetime.strptime(date_str, "%d.%m.%Y")
+    except ValueError:
+        return web.json_response({"error": "bad_date"}, status=400)
+    bot = request.app.get("bot")
+    if not bot:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+    if _menu_bc["running"]:
+        return web.json_response({"error": "already_running"}, status=409)
+    if await _retry_sheets(sheets.is_broadcasts_disabled):
+        return web.json_response({"error": "broadcasts_disabled"}, status=409)
+    if not body.get("force"):
+        log = await _retry_sheets(sheets.get_menu_broadcast_log, date_str)
+        if log:
+            return web.json_response({"error": "already_sent", "at": log[-1]["at"]}, status=409)
+    _menu_bc.update(running=True, date=date_str, total=0, sent=0, failed=0, blocked=0)
+    _spawn(_run_menu_broadcast(bot, date_str, request["tg_id"]))
+    return web.json_response({"ok": True})
+
+
 async def api_ops_menu_draft_publish(request: web.Request):
     """Единственный шаг, переносящий черновик в активные ячейки (см.
     sheets.publish_draft_menu) — до этого клиенты продолжают видеть
@@ -2305,7 +2414,7 @@ async def api_ops_menu_draft_publish(request: web.Request):
     await _retry_sheets(sheets.publish_draft_menu, date_str)
 
     bot = request.app.get("bot")
-    will_broadcast = bool(bot) and not await _retry_sheets(sheets.is_broadcasts_disabled)
+    will_broadcast = bool(bot) and not config.MINIAPP_ONLY and not await _retry_sheets(sheets.is_broadcasts_disabled)
     if will_broadcast:
         asyncio.create_task(_broadcast_new_menu_from_app(bot))
 
@@ -2585,6 +2694,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/ops/menu/catalog", api_ops_menu_catalog)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/photo", api_ops_menu_set_photo)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/description", api_ops_menu_set_description)
+    app.router.add_get("/api/ops/broadcast", api_ops_broadcast_info)
+    app.router.add_post("/api/ops/broadcast/menu", api_ops_broadcast_menu)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/story", api_ops_menu_set_story)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/garnish-flag", api_ops_menu_set_garnish_flag)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/display-name", api_ops_menu_set_display_name)

@@ -19,6 +19,20 @@ def home_only_kb() -> InlineKeyboardMarkup:
 
 def main_menu_kb(tg_id: int = None) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
+    if config.MINIAPP_ONLY:
+        # Режим Mini App: у клиента одна кнопка (плюс "Маршрут" курьеру);
+        # админ сохраняет привычное меню и получает кнопку приложения сверху.
+        b.button(text=texts.OPEN_PAUSE_APP_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
+        if tg_id in config.ADMIN_IDS:
+            b.button(text=texts.PROFILE_BTN, callback_data="profile_section")
+            b.button(text=texts.MENU_BTN, callback_data="menu_section")
+            b.button(text=texts.CLUB_BTN, callback_data="club_section")
+            b.button(text=texts.SUPPORT_BTN, callback_data="support")
+            b.button(text=texts.ADMIN_PANEL_BTN, callback_data="admin_panel_open")
+        if tg_id is not None and sheets.is_courier(tg_id):
+            b.button(text=texts.COURIER_ROUTE_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/miniapp"))
+        b.adjust(1)
+        return b.as_markup()
     b.button(text=texts.PROFILE_BTN, callback_data="profile_section")
     b.button(text=texts.MENU_BTN, callback_data="menu_section")
     b.button(text=texts.CLUB_BTN, callback_data="club_section")
@@ -198,7 +212,10 @@ def confirm_order_kb(has_comment: bool = False) -> InlineKeyboardMarkup:
 
 def menu_broadcast_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.button(text=texts.MENU_BROADCAST_BTN, callback_data="menu_section")
+    if config.MINIAPP_ONLY:
+        b.button(text=texts.APP_MENU_BROADCAST_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
+    else:
+        b.button(text=texts.MENU_BROADCAST_BTN, callback_data="menu_section")
     b.adjust(1)
     return b.as_markup()
 

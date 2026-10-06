@@ -77,6 +77,12 @@ BROADCAST_DELAY_SECONDS = float(os.getenv("BROADCAST_DELAY_SECONDS", "0.1"))
 # Публичный HTTPS-адрес, по которому Railway отдаёт веб-сервис (см. README) —
 # без него кнопки маршрута в меню бота не показываются.
 WEBAPP_URL = os.getenv("WEBAPP_URL", "").rstrip("/")
+
+# Переход клиентов на Mini App: BOT_MINIAPP_ONLY=1 — у обычных клиентов в боте
+# остаётся ОДНА кнопка "Открыть PAUSE", все старые кнопки/тексты отвечают
+# тёплым сообщением о ребрендинге с кнопкой в приложение. Админы пользуются
+# ботом как раньше. Работает только при заданном WEBAPP_URL.
+MINIAPP_ONLY = os.getenv("BOT_MINIAPP_ONLY", "0").strip() == "1" and bool(WEBAPP_URL)
 # Railway сам прокидывает PORT для сервисов с публичным доменом.
 WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8080")))
 
@@ -154,6 +160,7 @@ CR_DONE = 5          # E — "Да", когда напоминание обра�
 # Новый лист, создаётся ботом сам (sheets._ws_or_create). Порядок строк =
 # порядок карточек на экране.
 SHEET_CLUB_CARDS = "Pause Club Карточки"
+SHEET_MENU_BROADCASTS = "Рассылки меню"  # журнал ручных рассылок о меню из Операционного центра
 SHEET_SET_STORIES = "Истории блюд"  # текст "истории блюда" для карточек на Главной (ключ — имя сета/группы)
 
 # PAUSE MOMENTS — стена постов клиентов (PAUSE App → Pause Club). Два НОВЫХ
