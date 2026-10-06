@@ -4500,8 +4500,10 @@ def mark_route_delivered(date_str: str, point_name: str):
         if len(row) < config.ROUTE_POINT:
             continue
         if row[config.ROUTE_DATE - 1].strip() == date_str and row[config.ROUTE_POINT - 1].strip() == point_name:
-            ws.update_cell(r, config.ROUTE_STATUS, config.ROUTE_STATUS_DELIVERED)
-            ws.update_cell(r, config.ROUTE_DELIVERED_AT, _now().strftime("%H:%M"))
+            ws.update_cells([
+                gspread.Cell(r, config.ROUTE_STATUS, config.ROUTE_STATUS_DELIVERED),
+                gspread.Cell(r, config.ROUTE_DELIVERED_AT, _now().strftime("%H:%M")),
+            ])
             _invalidate_route_cache(date_str)
             return
 

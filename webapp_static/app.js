@@ -809,11 +809,14 @@
       actions.appendChild(goBtn);
       actions.appendChild(doneBtn);
       card.appendChild(actions);
+    }
 
-      // "Наличные" — отдельной строкой под основными кнопками, не толкает
-      // их (это не "обязательное" действие на каждой точке, в отличие от
-      // "Поехали"/"Сдано"). Открывает список людей на точке, см.
-      // openCashModal.
+    // "Наличные" — отдельной строкой под основными кнопками, не толкает
+    // их (это не "обязательное" действие на каждой точке, в отличие от
+    // "Поехали"/"Сдано"). Доступна и у активной, и у УЖЕ СДАННОЙ точки —
+    // курьер может записать деньги и после "Сдано". Открывает список людей
+    // на точке, см. openCashModal.
+    if (state.role === "courier" && (active || point.status === "Сдано")) {
       var cashRow = document.createElement("div");
       cashRow.className = "card-actions-secondary";
       var cashBtn = document.createElement("button");
@@ -1202,14 +1205,34 @@
       .catch(function (err) { toast("Не удалось изменить закрепление: " + err.message); });
   }
 
-  function completePoint(point) {
+  // "Сдано" — оптимистично: точка отмечается и следующая открывается
+  // МГНОВЕННО, запрос уходит в фоне. Если сервер отказал — откатываем и
+  // говорим об этом. Пока есть неподтверждённые отметки, фоновые
+  // перезагрузки маршрута не делаем (иначе старый ответ мог бы на миг
+  // "снять" отметку), а после последней — тихо синхронизируемся.
+  var pendingComplete = 0;
+  function completePoint(pointName) {
     var date = state.date;
-    api("/api/route/complete", { method: "POST", body: { date: date, point: point } })
+    var p = state.points.filter(function (x) { return x.point === pointName; })[0];
+    if (!p || p.status === "Сдано") return;
+    var prev = { status: p.status, delivered_at: p.delivered_at };
+    p.status = "Сдано";
+    p.delivered_at = _nowHHMM();
+    haptic("success");
+    render();
+    pendingComplete++;
+    api("/api/route/complete", { method: "POST", body: { date: date, point: pointName } })
       .then(function () {
-        haptic("success");
-        return loadRoute(date);
+        pendingComplete--;
+        if (!pendingComplete) loadRoute(date);
       })
-      .catch(function (err) { toast("Не удалось отметить: " + err.message); });
+      .catch(function (err) {
+        pendingComplete--;
+        p.status = prev.status;
+        p.delivered_at = prev.delivered_at;
+        render();
+        toast("Не удалось отметить: " + err.message);
+      });
   }
 
   function saveCourierComment(point, comment, onSuccess) {
