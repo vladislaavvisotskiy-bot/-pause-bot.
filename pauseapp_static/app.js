@@ -1935,7 +1935,7 @@
 
     // Цена, выбор варианта/гарнира, количество и "Добавить" — общий блок для
     // обычной (render) и широкой (renderDetails) карточки.
-    function appendSelectors(body, rerender, noPrice) {
+    function appendSelectors(body, rerender, noPrice, live) {
       var effSet = currentEffSet();
       if (!noPrice) body.appendChild(el("div", "menu-set-card-price", fmtSum(effSet.price)));
 
@@ -1976,6 +1976,49 @@
       if (!canOrderNow()) {
         body.appendChild(el("div", "menu-set-closed-note", t("menu.orderClosedNote")));
       } else {
+        if (live) {
+          var needGarnish = effSet.has_garnish && effSet.garnish_options.length;
+          var lineFor = function () {
+            return state.cart.filter(function (i) { return i.set === effSet.key && (i.garnish || "") === (sel.garnish || ""); })[0];
+          };
+          var qtyRowL = el("div", "menu-set-qty-row");
+          qtyRowL.addEventListener("click", function (e) { e.stopPropagation(); });
+          var minusL = el("button", "menu-set-qty-btn", "–");
+          var valueL = el("div", "menu-set-qty-value", "0");
+          var plusL = el("button", "menu-set-qty-btn", "+");
+          var addWrapL = el("div", "menu-set-add-wrap");
+          addWrapL.addEventListener("click", function (e) { e.stopPropagation(); });
+          var addBtnL = el("button", "btn-primary", t("menu.addToCart"));
+          var syncL = function () {
+            var ln = lineFor();
+            var q = ln ? ln.qty : 0;
+            valueL.textContent = String(q);
+            minusL.disabled = q === 0;
+            addWrapL.hidden = q > 0;
+          };
+          var bumpL = function (d) {
+            if (needGarnish && !sel.garnish) { toast(t("menu.pickGarnishFirst")); return; }
+            var ln = lineFor();
+            if (d > 0) {
+              if (ln) { ln.qty++; syncCartBar(); }
+              else addToCart(effSet, { garnish: sel.garnish, qty: 1 });
+            } else if (ln) {
+              ln.qty--;
+              if (ln.qty <= 0) state.cart.splice(state.cart.indexOf(ln), 1);
+              syncCartBar();
+            }
+            haptic();
+            syncL();
+          };
+          minusL.addEventListener("click", function () { bumpL(-1); });
+          plusL.addEventListener("click", function () { bumpL(1); });
+          addBtnL.addEventListener("click", function () { bumpL(1); if (lineFor()) { haptic("success"); toast(t("menu.addedToCart")); } });
+          qtyRowL.appendChild(minusL); qtyRowL.appendChild(valueL); qtyRowL.appendChild(plusL);
+          body.appendChild(qtyRowL);
+          addWrapL.appendChild(addBtnL);
+          body.appendChild(addWrapL);
+          syncL();
+        } else {
         var qtyRow = el("div", "menu-set-qty-row");
         qtyRow.addEventListener("click", function (e) { e.stopPropagation(); });
         var minus = el("button", "menu-set-qty-btn", "–");
@@ -2001,6 +2044,7 @@
         });
         addBtnWrap.appendChild(addBtn);
         body.appendChild(addBtnWrap);
+        }
       }
 
     }
@@ -2029,7 +2073,7 @@
         : fmtSumComma(s.price);
       info.appendChild(el("div", "menu-wide-price", priceText));
       foot.appendChild(info);
-      var plus = el("div", "menu-wide-plus", "+");
+      var plus = el("div", "menu-wide-chev", ICON_CHEVRON);
       foot.appendChild(plus);
       card.appendChild(foot);
 
@@ -2064,7 +2108,7 @@
           s.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
           inner.appendChild(list);
         }
-        appendSelectors(inner, renderDetails, true);
+        appendSelectors(inner, renderDetails, true, true);
       }
       inner.addEventListener("click", function (e) { e.stopPropagation(); });
 
