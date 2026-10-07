@@ -175,6 +175,16 @@ async def main():
                 text="PAUSE", web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/")))
         except Exception:
             logger.exception("Не удалось задать кнопку меню бота")
+        # Админам вместо кнопки приложения — привычное меню команд (/start, /admin).
+        try:
+            from aiogram.types import MenuButtonCommands
+            for admin_id in config.ADMIN_IDS:
+                try:
+                    await bot.set_chat_menu_button(chat_id=admin_id, menu_button=MenuButtonCommands())
+                except Exception:
+                    logger.exception("Не удалось вернуть меню команд админу ID %s", admin_id)
+        except Exception:
+            logger.exception("Не удалось настроить меню команд админов")
 
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
     h, m = map(int, config.MORNING_REPORT_TIME.split(":"))
