@@ -2315,6 +2315,15 @@ def has_today_sets_selection() -> bool:
     return bool((ws.acell(config.REF_TODAY_SETS_CELL).value or "").strip())
 
 
+def is_active_menu_date_current() -> bool:
+    """Дата активного меню — сегодня или позже (то есть меню на ближайший день опубликовано)."""
+    try:
+        d = dt.datetime.strptime(get_active_menu_date(), "%d.%m.%Y").date()
+    except ValueError:
+        return False
+    return d >= _now().date()
+
+
 def set_today_sets(sets: list):
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_TODAY_SETS_CELL, ", ".join(sets))

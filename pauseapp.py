@@ -301,7 +301,8 @@ async def api_menu(request: web.Request):
     # устаревшим данным — см. отчёт пользователю.
     # Меню опубликовано, если есть фото/подпись ИЛИ админ выбрал сеты на день:
     # публикация через Операционный центр может идти без фото-поста.
-    published = bool(photo_ids or caption) or await _retry_sheets(sheets.has_today_sets_selection)
+    published = bool(photo_ids or caption) or await _retry_sheets(sheets.has_today_sets_selection) \
+        or await _retry_sheets(sheets.is_active_menu_date_current)
     cutoff_passed = False if PAUSEAPP_IGNORE_CUTOFF else await _retry_sheets(sheets.is_after_cutoff)
 
     sets_today = await _retry_sheets(sheets.get_today_sets)
