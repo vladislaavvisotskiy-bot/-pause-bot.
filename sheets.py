@@ -2309,6 +2309,12 @@ def get_today_sets() -> list:
     return out
 
 
+def has_today_sets_selection() -> bool:
+    """Админ при публикации выбрал конкретные сеты на день (ячейка не пуста)."""
+    ws = _ws(config.SHEET_REFERENCE)
+    return bool((ws.acell(config.REF_TODAY_SETS_CELL).value or "").strip())
+
+
 def set_today_sets(sets: list):
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_TODAY_SETS_CELL, ", ".join(sets))

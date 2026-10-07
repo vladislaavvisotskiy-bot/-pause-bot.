@@ -299,7 +299,9 @@ async def api_menu(request: web.Request):
     # премиального приложения решили быть строже и явно попросить
     # подождать публикации, а не предлагать заказ по потенциально
     # устаревшим данным — см. отчёт пользователю.
-    published = bool(photo_ids or caption)
+    # Меню опубликовано, если есть фото/подпись ИЛИ админ выбрал сеты на день:
+    # публикация через Операционный центр может идти без фото-поста.
+    published = bool(photo_ids or caption) or await _retry_sheets(sheets.has_today_sets_selection)
     cutoff_passed = False if PAUSEAPP_IGNORE_CUTOFF else await _retry_sheets(sheets.is_after_cutoff)
 
     sets_today = await _retry_sheets(sheets.get_today_sets)
