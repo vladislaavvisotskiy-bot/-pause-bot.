@@ -2057,6 +2057,47 @@ def get_menu_broadcast_log(menu_date: str) -> list:
     return out
 
 
+_NT_HEADER = ["tg_id", "Время напоминания"]
+_notify_times_lock = threading.Lock()
+
+
+def valid_notify_time(t: str) -> bool:
+    """Личное время напоминания: шаг 30 минут, с 06:00 до 22:00."""
+    m = re.fullmatch(r"(\d{2}):(00|30)", (t or "").strip())
+    return bool(m) and 6 <= int(m.group(1)) <= 22
+
+
+def get_notify_times() -> dict:
+    """{tg_id: "HH:MM"} — личное время напоминания (нет записи — стандартное)."""
+    now = time.time()
+    if _cache.get("notify_times") is not None and now - _cache.get("notify_times_ts", 0) < 30:
+        return _cache["notify_times"]
+    ws = _ws_or_create(config.SHEET_NOTIFY_TIMES, _NT_HEADER)
+    out = {}
+    for r in ws.get_all_values()[1:]:
+        if r and r[0].strip() and len(r) > 1 and valid_notify_time(r[1]):
+            out[r[0].strip()] = r[1].strip()
+    _cache["notify_times"] = out
+    _cache["notify_times_ts"] = now
+    return out
+
+
+def set_notify_time(tg_id, value: str):
+    """value="" — вернуть стандартное время."""
+    key = str(tg_id).strip()
+    with _notify_times_lock:
+        ws = _ws_or_create(config.SHEET_NOTIFY_TIMES, _NT_HEADER)
+        rows = ws.get_all_values()
+        for i, r in enumerate(rows):
+            if i and r and r[0].strip() == key:
+                ws.update_cells([gspread.Cell(i + 1, 2, value)], value_input_option="RAW")
+                break
+        else:
+            if value:
+                ws.append_row([key, value], value_input_option="RAW")
+        _cache["notify_times"] = None
+
+
 _SS_HEADER = ["Сет", "История"]
 _set_stories_lock = threading.Lock()
 

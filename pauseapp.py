@@ -832,9 +832,12 @@ async def api_notify(request: web.Request):
     client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
     if not client:
         return web.json_response({"error": "not_registered"}, status=404)
+    times = await _retry_sheets(sheets.get_notify_times)
     return web.json_response({
         "morning_on": not client.get("notify_morning_off"),
         "menu_on": not client.get("notify_menu_off"),
+        "time": times.get(str(tg_id)) or "",
+        "default_time": config.WARM_BROADCAST_TIME,
     })
 
 
@@ -847,6 +850,11 @@ async def api_notify_set(request: web.Request):
     if "morning_on" in body:
         col = config.COL_NOTIFY_MORNING_OFF
         await _retry_sheets(sheets.update_client_field, client["row"], col, "" if body["morning_on"] else "Да")
+    if "time" in body:
+        value = (body.get("time") or "").strip()
+        if value and not sheets.valid_notify_time(value):
+            return web.json_response({"error": "bad_time"}, status=400)
+        await _retry_sheets(sheets.set_notify_time, tg_id, value)
     if "menu_on" in body:
         col = config.COL_NOTIFY_MENU_OFF
         await _retry_sheets(sheets.update_client_field, client["row"], col, "" if body["menu_on"] else "Да")

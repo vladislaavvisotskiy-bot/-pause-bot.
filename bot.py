@@ -73,14 +73,38 @@ async def send_debt_reminders(bot: Bot):
             logger.exception("Не удалось отметить напоминание отправленным (row=%s)", r["row"])
 
 
+def _slot_now() -> str:
+    """Текущий 30-минутный слот по Ташкенту: "08:00" / "08:30"."""
+    n = sheets._now()
+    return f"{n.hour:02d}:{'00' if n.minute < 30 else '30'}"
+
+
+def _default_notify_slot() -> str:
+    h, m = map(int, config.WARM_BROADCAST_TIME.split(":"))
+    return f"{h:02d}:{'00' if m < 30 else '30'}"
+
+
+def _greeting_for(slot: str, name: str) -> str:
+    h = int(slot[:2])
+    word = "Доброе утро" if h < 12 else ("Добрый день" if h < 17 else "Добрый вечер")
+    return f"{word}, {name} ☘️" if name else f"{word} ☘️"
+
+
 async def send_warm_broadcast(bot: Bot):
-    """Ежедневная тёплая рассылка всем зарегистрированным клиентам —
-    персональное приветствие по имени + общая фраза дня. Тем, кто уже
-    сделал заказ на сегодня (дату активного меню), рассылка не идёт —
-    незачем звать заказывать того, кто уже заказал."""
+    """Тёплое напоминание о PAUSE. Запускается каждые 30 минут и пишет только
+    тем клиентам, у кого сейчас их личный слот (Профиль → Уведомления → время
+    напоминания); у кого своего времени нет — в стандартное WARM_BROADCAST_TIME.
+    Тем, кто уже заказал на дату активного меню, и отключившим напоминание —
+    не пишем."""
     if sheets.is_broadcasts_disabled():
         return
-    clients = sheets.get_broadcast_clients()
+    slot = _slot_now()
+    default_slot = _default_notify_slot()
+    personal = sheets.get_notify_times()
+    clients = [
+        c for c in sheets.get_broadcast_clients()
+        if (personal.get(str(c.get("tg_id"))) or default_slot) == slot
+    ]
     if not clients:
         return
     tickets = sheets.get_client_ticket_counts(sheets.get_active_menu_date())
@@ -91,13 +115,13 @@ async def send_warm_broadcast(bot: Bot):
         if c.get("notify_morning_off"):
             continue
         try:
-            greeting = texts.MORNING_GREETING.format(name=c.get("name") or "")
+            greeting = _greeting_for(slot, (c.get("name") or "").strip())
             await bot.send_message(
                 int(c["tg_id"]), f"{greeting}\n\n{line}",
                 reply_markup=kb.open_pauseapp_kb() if config.WEBAPP_URL else None,
             )
         except Exception:
-            logger.exception("Не удалось отправить тёплое утреннее сообщение клиенту ID %s", c.get("id"))
+            logger.exception("Не удалось отправить тёплое напоминание клиенту ID %s", c.get("id"))
         await asyncio.sleep(config.BROADCAST_DELAY_SECONDS)
 
 
@@ -190,8 +214,8 @@ async def main():
     h, m = map(int, config.MORNING_REPORT_TIME.split(":"))
     scheduler.add_job(send_morning_reports, "cron", hour=h, minute=m, args=[bot])
     scheduler.add_job(send_debt_reminders, "cron", hour=h, minute=m, args=[bot])
-    wh, wm = map(int, config.WARM_BROADCAST_TIME.split(":"))
-    scheduler.add_job(send_warm_broadcast, "cron", hour=wh, minute=wm, args=[bot])
+    # Каждые 30 минут: в каждый слот пишем тем, у кого он выбран как личное время.
+    scheduler.add_job(send_warm_broadcast, "cron", hour="6-22", minute="0,30", args=[bot])
     prh, prm = map(int, config.PAYMENT_REMINDER_TIME.split(":"))
     scheduler.add_job(send_payment_reminders, "cron", hour=prh, minute=prm, args=[bot])
     # "Пауза в подарок" в PAUSE App (видимый всем пул, см. pauseapp.py) —

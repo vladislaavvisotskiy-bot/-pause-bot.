@@ -2271,3 +2271,5 @@ p { margin: 0; color: var(--ink-soft); }
 
 /* Карусели: между слайдами зазор, чтобы при свайпе карточки не склеивались */
 .pday-carousel-track { gap: 14px; }
+
+.notify-time-select { flex: none; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 15px; }

@@ -356,14 +356,15 @@
       "feedback.sendFailed": "Не получилось отправить: {msg}",
 
       "notify.title": "Уведомления",
-      "notify.morningTitle": "Утреннее напоминание",
-      "notify.morningSub": "Тёплое сообщение утром с напоминанием заказать",
+      "notify.morningTitle": "Напоминание о PAUSE",
+      "notify.morningSub": "Тёплое сообщение каждый день с напоминанием заказать",
       "notify.menuTitle": "О публикации меню",
       "notify.menuSub": "Сообщение, когда на сегодня опубликовано новое меню",
       "notify.on": "Включено", "notify.off": "Отключено",
       "notify.saveFailed": "Не удалось сохранить",
       "notify.loadFailed": "Не удалось загрузить настройки уведомлений.",
-      "notify.footnote": "Время рассылок пока общее для всех — своё время для каждого добавим отдельно, если понадобится.",
+      "notify.timeTitle": "Время напоминания", "notify.timeSub": "Во сколько вам удобно получать напоминание", "notify.timeSaved": "Напоминание в {time}",
+      "notify.footnote": "Если вы уже сделали заказ на сегодня, напоминание не придёт.",
 
       "support.title": "Поддержка",
       "support.intro": "С любыми предложениями или проблемами обращайтесь сюда — мы всегда на связи и рады помочь.",
@@ -663,14 +664,15 @@
       "feedback.sendFailed": "Yuborib bo'lmadi: {msg}",
 
       "notify.title": "Bildirishnomalar",
-      "notify.morningTitle": "Ertalabki eslatma",
-      "notify.morningSub": "Buyurtma berish haqida ertalabki iliq xabar",
+      "notify.morningTitle": "PAUSE haqida eslatma",
+      "notify.morningSub": "Har kuni buyurtma berishni eslatuvchi iliq xabar",
       "notify.menuTitle": "Menyu e'loni haqida",
       "notify.menuSub": "Bugungi yangi menyu e'lon qilinganda xabar",
       "notify.on": "Yoqildi", "notify.off": "O'chirildi",
       "notify.saveFailed": "Saqlab bo'lmadi",
       "notify.loadFailed": "Bildirishnoma sozlamalarini yuklab bo'lmadi.",
-      "notify.footnote": "Xabarnomalar vaqti hozircha hamma uchun umumiy — kerak bo'lsa, har bir kishi uchun alohida vaqt qo'shamiz.",
+      "notify.timeTitle": "Eslatma vaqti", "notify.timeSub": "Eslatmani qaysi vaqtda olish sizga qulay", "notify.timeSaved": "Eslatma {time} da",
+      "notify.footnote": "Bugun buyurtma bergan bo'lsangiz, eslatma kelmaydi.",
 
       "support.title": "Yordam",
       "support.intro": "Har qanday taklif yoki muammo bilan shu yerga murojaat qiling — biz doim aloqadamiz va yordam berishdan xursandmiz.",
@@ -970,14 +972,15 @@
       "feedback.sendFailed": "Couldn't send: {msg}",
 
       "notify.title": "Notifications",
-      "notify.morningTitle": "Morning reminder",
-      "notify.morningSub": "A warm morning message reminding you to order",
+      "notify.morningTitle": "PAUSE reminder",
+      "notify.morningSub": "A warm daily message reminding you to order",
       "notify.menuTitle": "Menu published",
       "notify.menuSub": "A message when today's new menu is published",
       "notify.on": "Enabled", "notify.off": "Disabled",
       "notify.saveFailed": "Couldn't save",
       "notify.loadFailed": "Couldn't load notification settings.",
-      "notify.footnote": "Notification times are still the same for everyone — we'll add per-person timing separately if needed.",
+      "notify.timeTitle": "Reminder time", "notify.timeSub": "When you'd like to get the reminder", "notify.timeSaved": "Reminder at {time}",
+      "notify.footnote": "If you've already ordered today, the reminder won't be sent.",
 
       "support.title": "Support",
       "support.intro": "For any suggestions or issues, reach out here — we're always around and happy to help.",
@@ -4217,6 +4220,29 @@
               .catch(function () { toast(t("notify.saveFailed")); });
           }
         ));
+        var timeRow = el("div", "toggle-row notify-time-row");
+        var timeText = el("div", "toggle-row-text");
+        timeText.innerHTML = '<div class="toggle-row-title">' + escapeHtml(t("notify.timeTitle")) + '</div><div class="toggle-row-sub">' + escapeHtml(t("notify.timeSub")) + '</div>';
+        timeRow.appendChild(timeText);
+        var sel = el("select", "notify-time-select");
+        var cur = data.time || (data.default_time || "08:00");
+        for (var hh = 6; hh <= 22; hh++) {
+          ["00", "30"].forEach(function (mm) {
+            if (hh === 22 && mm === "30") return;
+            var v = (hh < 10 ? "0" : "") + hh + ":" + mm;
+            var o = document.createElement("option");
+            o.value = v; o.textContent = v;
+            if (v === cur) o.selected = true;
+            sel.appendChild(o);
+          });
+        }
+        sel.addEventListener("change", function () {
+          api("/api/notify", { method: "POST", body: { time: sel.value } })
+            .then(function () { toast(t("notify.timeSaved", { time: sel.value })); })
+            .catch(function () { toast(t("notify.saveFailed")); });
+        });
+        timeRow.appendChild(sel);
+        card.appendChild(timeRow);
         card.appendChild(buildToggleRow(
           t("notify.menuTitle"),
           t("notify.menuSub"),
