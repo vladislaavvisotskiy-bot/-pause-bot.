@@ -34,6 +34,7 @@
       <div id="cards"></div>
 
       <button id="add-point-btn" class="btn-primary" hidden>+ Добавить точку</button>
+      <button id="removed-points-btn" class="btn-ghost" hidden>Удалённые точки</button>
     </section>
 
     <!-- ==================== ПРОФИЛЬ ==================== -->
@@ -75,7 +76,7 @@
 
   <div id="add-point-modal" class="modal" hidden>
     <div class="modal-sheet">
-      <div class="modal-title">Добавить точку</div>
+      <div class="modal-title" id="add-point-title">Добавить точку</div>
       <div id="add-point-list" class="modal-list"></div>
       <button id="add-point-cancel" class="btn-ghost">Отмена</button>
     </div>

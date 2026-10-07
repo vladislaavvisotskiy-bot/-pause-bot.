@@ -997,3 +997,5 @@ p { margin: 0; color: var(--ink-soft); }
 
 /* Комментарий клиента к доставке (виден курьеру у человека на точке) */
 .person-dlv-comment { margin-top: 4px; padding: 6px 10px; border-radius: 10px; background: #f6ead2; color: #6b4a1f; font-size: 13px; line-height: 1.35; }
+
+#removed-points-btn { width: 100%; margin-top: 10px; }

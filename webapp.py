@@ -846,6 +846,15 @@ async def api_route_add(request: web.Request):
     return web.json_response({"ok": True})
 
 
+async def api_route_removed(request: web.Request):
+    if request["role"] != "admin":
+        return web.json_response({"error": "forbidden"}, status=403)
+    date_str = request.query.get("date") or await _today()
+    async with _route_lock:
+        points = await _retry_sheets(sheets.get_removed_route_points, date_str)
+    return web.json_response({"points": points})
+
+
 async def api_route_remove(request: web.Request):
     if request["role"] != "admin":
         return web.json_response({"error": "forbidden"}, status=403)
@@ -1023,6 +1032,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/route/pin", api_route_pin)
     app.router.add_post("/api/route/add", api_route_add)
     app.router.add_post("/api/route/remove", api_route_remove)
+    app.router.add_get("/api/route/removed", api_route_removed)
     app.router.add_post("/api/route/comment", api_route_comment)
     app.router.add_post("/api/route/assign", api_route_assign)
     app.router.add_post("/api/route/complete", api_route_complete)

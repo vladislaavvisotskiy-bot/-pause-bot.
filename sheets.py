@@ -4750,6 +4750,23 @@ def add_route_point(date_str: str, point_name: str):
     _invalidate_route_cache(date_str)
 
 
+def get_removed_route_points(date_str: str) -> list:
+    """Названия точек, убранных из маршрута на эту дату (строки со статусом
+    ROUTE_STATUS_REMOVED) — чтобы админ мог вернуть их обратно."""
+    ws = _ws(config.SHEET_ROUTE)
+    out = []
+    for i, row in enumerate(ws.get_all_values()):
+        if i + 1 < config.ROUTE_DATA_START_ROW or len(row) < config.ROUTE_POINT:
+            continue
+        if row[config.ROUTE_DATE - 1].strip() != date_str:
+            continue
+        status = row[config.ROUTE_STATUS - 1].strip() if len(row) >= config.ROUTE_STATUS else ""
+        name = row[config.ROUTE_POINT - 1].strip()
+        if status == config.ROUTE_STATUS_REMOVED and name and name not in out:
+            out.append(name)
+    return out
+
+
 def remove_route_point(date_str: str, point_name: str):
     """Убирает точку из маршрута на этот день. Не удаляет строку физически
     — помечает статусом ROUTE_STATUS_REMOVED (см. get_route_for_date,

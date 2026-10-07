@@ -877,6 +877,7 @@
 
     document.getElementById("map").hidden = hiddenFromCourier;
     document.getElementById("add-point-btn").hidden = state.role !== "admin" || hiddenFromCourier;
+    document.getElementById("removed-points-btn").hidden = state.role !== "admin" || hiddenFromCourier;
     renderStartBadge();
 
     if (hiddenFromCourier) {
@@ -1350,7 +1351,40 @@
     modal.hidden = false;
   }
 
+  // Удалённые из маршрута точки на выбранную дату — можно вернуть обратно.
+  function openRemovedPointsModal() {
+    var modal = document.getElementById("add-point-modal");
+    var list = document.getElementById("add-point-list");
+    document.getElementById("add-point-title").textContent = "Удалённые точки";
+    list.innerHTML = "<div class=\"modal-list-empty\">Загрузка…</div>";
+    modal.hidden = false;
+    var date = state.date;
+    api("/api/route/removed?date=" + encodeURIComponent(date)).then(function (data) {
+      list.innerHTML = "";
+      if (!data.points.length) {
+        list.innerHTML = "<div class=\"modal-list-empty\">Удалённых точек нет</div>";
+        return;
+      }
+      data.points.forEach(function (name) {
+        var item = document.createElement("div");
+        item.className = "modal-list-item";
+        item.textContent = name + " — вернуть";
+        item.addEventListener("click", function () {
+          modal.hidden = true;
+          api("/api/route/add", { method: "POST", body: { date: date, point: name } })
+            .then(function () { toast("Точка возвращена"); return loadRoute(date); })
+            .catch(function (err) { toast("Не удалось вернуть: " + err.message); });
+        });
+        list.appendChild(item);
+      });
+    }).catch(function (err) {
+      list.innerHTML = "<div class=\"modal-list-empty\">Ошибка загрузки</div>";
+      toast(err.message);
+    });
+  }
+
   function openAddPointModal() {
+    document.getElementById("add-point-title").textContent = "Добавить точку";
     var modal = document.getElementById("add-point-modal");
     var list = document.getElementById("add-point-list");
     list.innerHTML = "<div class=\"modal-list-empty\">Загрузка…</div>";
@@ -3155,6 +3189,7 @@
     initNav();
 
     document.getElementById("add-point-btn").addEventListener("click", openAddPointModal);
+    document.getElementById("removed-points-btn").addEventListener("click", openRemovedPointsModal);
     document.getElementById("add-point-cancel").addEventListener("click", function () {
       document.getElementById("add-point-modal").hidden = true;
     });
