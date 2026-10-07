@@ -3469,6 +3469,23 @@ def build_kitchen_report(date_str: str) -> str:
     return "\n".join(out)
 
 
+def phone_for_copy(raw: str) -> str:
+    """Телефон одной строкой без пробелов: +998911234567 (удобно копировать
+    и Telegram делает такой номер кликабельным). Узбекские номера приводим
+    к +998XXXXXXXXX, зарубежные — к +цифры, непонятное оставляем как есть."""
+    raw = (raw or "").strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) == 9:
+        return "+998" + digits
+    if len(digits) == 12 and digits.startswith("998"):
+        return "+" + digits
+    if len(digits) == 10 and digits.startswith("8"):  # старый вид 8 91 123 46 78
+        return "+998" + digits[1:]
+    if 10 <= len(digits) <= 15:
+        return "+" + digits
+    return raw
+
+
 def build_courier_report(date_str: str) -> str:
     """Отчёт для курьера — только куда и к кому ехать (без суммы и способа
     оплаты). Раз в строке больше нет ничего, что различало бы несколько
@@ -3506,7 +3523,7 @@ def build_courier_report(date_str: str) -> str:
         client = clients.get(client_id) or {}
         name = client.get("name") or row[config.O_NAME - 1].strip() or client_id
         point = row[config.O_POINT - 1].strip()
-        contact = client.get("contact") or row[config.O_CONTACT - 1].strip() or "Неизвестно"
+        contact = phone_for_copy(client.get("contact") or row[config.O_CONTACT - 1].strip()) or "Неизвестно"
         telegram = client.get("telegram") or row[config.O_TELEGRAM - 1].strip()
 
         tg = f"@{telegram}" if telegram and not telegram.startswith("@") else (telegram or "—")
