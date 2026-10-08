@@ -15,6 +15,7 @@ import texts
 import keyboards as kb
 import config
 import pdf_report
+import menu_broadcast
 from states import AdminClub, AdminMenu, AdminSetPhoto, AdminSetDescription
 
 router = Router()
@@ -515,8 +516,11 @@ async def admin_publish_confirmed(callback: CallbackQuery, state: FSMContext, bo
     except Exception:
         pass
     await callback.message.answer(texts.ADMIN_MENU_PUBLISHED.format(date=date_str))
-    if not config.MINIAPP_ONLY and not sheets.is_broadcasts_disabled():
-        await _broadcast_new_menu(bot)
+    res = await menu_broadcast.start(bot, date_str, callback.from_user.id)
+    if res == "already_sent":
+        await callback.message.answer("На эту дату рассылка о меню уже была, повторно не отправляю. При необходимости запустите её вручную: Mini App → Операционный центр → Рассылка.")
+    elif res == "disabled":
+        await callback.message.answer("Рассылки сейчас выключены, оповещение о меню не отправлено.")
     await state.clear()
     await callback.answer()
 
