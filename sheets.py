@@ -1892,6 +1892,20 @@ _ref_set_table_cache = {"rows": None, "ts": 0}
 _REF_SET_TABLE_TTL = 10  # секунд — каталог почти никогда не меняется чаще
 
 
+def _auto_register_variant_groups(rows):
+    """Если в каталоге есть пара "X" и "X без компота", это сет с переменной
+    ценой: клиенту одна карточка с выбором "С компотом / Без компота" (как
+    "Самса"). Достаточно завести в Справочниках две строки с ценами — в код
+    ничего добавлять не нужно."""
+    names = {row[0].strip() for row in rows if row and row[0] and row[0].strip()}
+    for n in sorted(names):
+        light = n + " без компота"
+        if light in names and n not in config.SET_VARIANT_GROUP and light not in config.SET_VARIANT_GROUP:
+            config.SET_VARIANTS[n] = [(n, "С компотом"), (light, "Без компота")]
+            config.SET_VARIANT_GROUP[n] = n
+            config.SET_VARIANT_GROUP[light] = n
+
+
 def _invalidate_ref_set_table_cache():
     _ref_set_table_cache["rows"] = None
     _ref_set_table_cache["ts"] = 0
@@ -1902,6 +1916,7 @@ def _ref_set_table_rows() -> list:
     if _ref_set_table_cache["rows"] is not None and now - _ref_set_table_cache["ts"] < _REF_SET_TABLE_TTL:
         return _ref_set_table_cache["rows"]
     rows = _ws(config.SHEET_REFERENCE).get(config.REF_SET_TABLE_RANGE)
+    _auto_register_variant_groups(rows)
     _ref_set_table_cache["rows"] = rows
     _ref_set_table_cache["ts"] = now
     return rows

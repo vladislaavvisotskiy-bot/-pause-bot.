@@ -2039,7 +2039,7 @@
         var variantRow = el("div", "menu-set-chip-row");
         variantRow.addEventListener("click", function (e) { e.stopPropagation(); });
         s.variants.forEach(function (v, idx) {
-          var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(localizedVariantLabel(v.label)));
+          var chip = el("button", "menu-set-chip" + (sel.variantIdx === idx ? " active" : ""), escapeHtml(localizedVariantLabel(v.label) + " · " + fmtSumComma(v.price)));
           chip.addEventListener("click", function () { sel.variantIdx = idx; sel.garnish = ""; sel.garnishPicks = []; rerender(); });
           variantRow.appendChild(chip);
         });
