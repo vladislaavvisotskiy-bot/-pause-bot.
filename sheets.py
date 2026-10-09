@@ -1789,9 +1789,11 @@ def is_after_cutoff() -> bool:
     всю ночь и всё утро, до ORDER_CUTOFF_TIME именно завтрашнего дня, а
     не "сегодняшних" 10:00 по часам. Сравнение — по времени Ташкента,
     независимо от того, в каком часовом поясе физически работает сервер."""
-    cutoff_h, cutoff_m = map(int, config.ORDER_CUTOFF_TIME.split(":"))
+    day = _active_menu_day()
+    cutoff_time = config.ORDER_CUTOFF_OVERRIDES.get(day.strftime("%d.%m.%Y"), config.ORDER_CUTOFF_TIME)
+    cutoff_h, cutoff_m = map(int, cutoff_time.split(":"))
     cutoff_moment = dt.datetime.combine(
-        _active_menu_day(), dt.time(cutoff_h, cutoff_m), tzinfo=TASHKENT_TZ
+        day, dt.time(cutoff_h, cutoff_m), tzinfo=TASHKENT_TZ
     )
     return _now() >= cutoff_moment
 
