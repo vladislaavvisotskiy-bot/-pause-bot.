@@ -6253,8 +6253,8 @@
 
   // Детальный экран по одной из трёх плашек "по сетам" (заказы-%,
   // выручка, прибыль) — разные только значение в строке и итог внизу.
-  function renderOpsSetBreakdownDetail(body, summary, valueFn, total) {
-    if (!summary.by_set.length) {
+  function renderOpsSetBreakdownDetail(body, summary, valueFn, total, extra) {
+    if (!summary.by_set.length && !(extra && extra.value)) {
       body.appendChild(el("div", "empty-note", "За этот период заказов нет."));
       return;
     }
@@ -6266,6 +6266,12 @@
         '<div class="ops-breakdown-nums"><span>' + s.qty + ' шт</span><span>' + valueFn(s) + '</span></div>';
       card.appendChild(row);
     });
+    if (extra && extra.value) {
+      var xr = el("div", "ops-breakdown-row ops-breakdown-row-sep");
+      xr.innerHTML = '<div class="ops-breakdown-name">' + escapeHtml(extra.label) + '</div>' +
+        '<div class="ops-breakdown-nums"><span></span><span>' + fmtSum(extra.value) + '</span></div>';
+      card.appendChild(xr);
+    }
     body.appendChild(card);
     if (total !== undefined) {
       body.appendChild(el("div", "ops-debtor-total", "Итого: " + fmtSum(total)));
@@ -6300,8 +6306,10 @@
         '<div class="ops-breakdown-nums"><span>' + fmtSum(value) + '</span></div>';
       return r;
     };
-    card.appendChild(row("Валовая прибыль", summary.profit, false));
-    card.appendChild(row("Доставка", summary.delivery_cost, true));
+    card.appendChild(row("Выручка (блюда + доставка клиентов)", summary.revenue, false));
+    card.appendChild(row("− Себестоимость блюд", summary.kitchen, true));
+    card.appendChild(row("= Валовая прибыль", summary.profit, true));
+    card.appendChild(row("− Расходы на доставку (курьеры, сервисы)", summary.delivery_cost, true));
     body.appendChild(card);
     body.appendChild(el("div", "ops-debtor-total", "Чистая прибыль: " + fmtSum(summary.net_profit)));
   }
@@ -6411,25 +6419,45 @@
       statGrid.appendChild(opsStatTile(fmtSum(summary.revenue), "выручка", function () {
         wizardStep(function (b) {
           opsStepHeader(b, "Выручка по сетам");
-          renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.revenue); }, summary.revenue);
+          renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.revenue); }, summary.revenue, { label: "Доставка (платят клиенты)", value: summary.delivery_income });
         });
       }));
       statGrid.appendChild(opsStatTile(fmtSum(summary.profit), "валовая прибыль", function () {
         wizardStep(function (b) {
           opsStepHeader(b, "Валовая прибыль по сетам");
-          renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.profit); }, summary.profit);
+          renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.profit); }, summary.profit, { label: "Доставка (платят клиенты)", value: summary.delivery_income });
         });
       }, summary.profit_margin_pct + "%"));
-      statGrid.appendChild(opsStatTile(fmtSum(summary.kitchen), "к оплате кухне", function () {
+      statGrid.appendChild(opsStatTile(fmtSum(summary.kitchen), "себестоимость (кухня)", function () {
         wizardStep(function (b) {
-          opsStepHeader(b, "К оплате кухне по сетам");
+          opsStepHeader(b, "Себестоимость по сетам");
           renderOpsSetBreakdownDetail(b, summary, function (s) { return fmtSum(s.kitchen); }, summary.kitchen);
         });
       }));
       statGrid.appendChild(opsStatTile(fmtSum(summary.net_profit), "чистая прибыль", function () {
         wizardStep(function (b) { opsStepHeader(b, "Чистая прибыль"); renderOpsNetProfitDetail(b, summary); });
       }, summary.net_margin_pct + "%"));
+      statGrid.appendChild(opsStatTile(fmtSum(summary.delivery_income), "доход от доставки", function () {
+        wizardStep(function (b) {
+          opsStepHeader(b, "Доход от доставки");
+          b.appendChild(el("div", "empty-note", "Сколько клиенты заплатили за доставку за период. Эта сумма уже входит в выручку и валовую прибыль."));
+          b.appendChild(el("div", "ops-debtor-total", "Итого: " + fmtSum(summary.delivery_income)));
+        });
+      }));
+      statGrid.appendChild(opsStatTile(summary.gift_qty, "оплачено лепестками", function () {
+        wizardStep(function (b) {
+          opsStepHeader(b, "Оплачено лепестками");
+          b.appendChild(el("div", "empty-note", "Эти сеты клиенты получили за лепестки: выручка по ним 0, а себестоимость входит в «себестоимость (кухня)» и уменьшает прибыль."));
+          b.appendChild(el("div", "ops-debtor-total", summary.gift_qty + " шт, себестоимость " + fmtSum(summary.gift_cost)));
+        });
+      }, "себестоимость " + fmtSum(summary.gift_cost)));
       body.appendChild(statGrid);
+      if (summary.missing_cost_sets && summary.missing_cost_sets.length) {
+        var warn = el("div", "card");
+        warn.innerHTML = '<div class="ops-order-name">Не заполнена себестоимость</div><div class="order-card-items">' +
+          escapeHtml(summary.missing_cost_sets.join(", ")) + '. Прибыль по ним показана завышенной: впишите себестоимость в «Меню» → «Изменить».</div>';
+        body.appendChild(warn);
+      }
 
       // --- разбивка по районам ---
       body.appendChild(el("h3", "ops-section-title", "По районам"));

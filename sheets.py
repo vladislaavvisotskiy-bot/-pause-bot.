@@ -2065,7 +2065,7 @@ def add_catalog_set(name: str, display_name: str, price: int, cost: int, has_gar
     return target
 
 
-_PH_HEADER = ["Сет", "Цена", "Действует с"]
+_PH_HEADER = ["Сет", "Цена", "Действует с", "Прибыль с порции"]
 _price_hist_cache = {"v": None, "ts": 0.0}
 _PRICE_EPOCH = "01.01.2000"
 
@@ -2086,7 +2086,11 @@ def get_price_history() -> dict:
             p = int(str(r[1]).replace(" ", "").replace(",", ""))
         except ValueError:
             continue
-        out.setdefault(r[0].strip(), []).append((d, p))
+        try:
+            m = int(str(r[3]).replace(" ", "").replace(",", "")) if len(r) > 3 and str(r[3]).strip() else None
+        except ValueError:
+            m = None
+        out.setdefault(r[0].strip(), []).append((d, p, m))
     for v in out.values():
         v.sort(key=lambda x: x[0])
     _price_hist_cache["v"] = out
@@ -2107,7 +2111,7 @@ def _price_for(set_name: str, date_str: str, prices: dict) -> int:
             day = None
         if day is not None:
             price = None
-            for eff, p in hist:
+            for eff, p, _m in hist:
                 if eff <= day:
                     price = p
             if price is not None:
@@ -2115,16 +2119,46 @@ def _price_for(set_name: str, date_str: str, prices: dict) -> int:
     return prices.get(set_name, 0)
 
 
-def _record_price_change(name: str, old_price: int, new_price: int):
-    """Фиксирует смену цены: новая действует с сегодняшней даты, всё, что
-    раньше, остаётся по прежней цене."""
+def _margin_for(set_name: str, date_str: str, margins: dict) -> int:
+    """Прибыль с порции (цена − себестоимость) на дату заказа: из истории
+    изменений, а если там не записана (или 0) — текущая из таблицы."""
+    try:
+        hist = get_price_history().get((set_name or "").strip())
+    except Exception:
+        hist = None
+    if hist:
+        try:
+            day = dt.datetime.strptime((date_str or "").strip(), "%d.%m.%Y").date()
+        except ValueError:
+            day = None
+        if day is not None:
+            m = None
+            for eff, _p, mm in hist:
+                if eff <= day:
+                    m = mm
+            if m:
+                return m
+    return margins.get(set_name, 0)
+
+
+def _record_price_change(name: str, old_price: int, new_price: int, old_margin: int = 0, new_margin: int = 0):
+    """Фиксирует смену цены и/или себестоимости: новые значения действуют с
+    сегодняшней даты, всё, что раньше, остаётся по прежним."""
     ws = _ws_or_create(config.SHEET_PRICE_HISTORY, _PH_HEADER)
+    try:
+        if ws.col_count < len(_PH_HEADER):
+            ws.add_cols(len(_PH_HEADER) - ws.col_count)
+        head = ws.row_values(1)
+        if len(head) < len(_PH_HEADER):
+            ws.update_cells([gspread.Cell(1, len(_PH_HEADER), _PH_HEADER[-1])], value_input_option="RAW")
+    except Exception:
+        pass
     rows = ws.get_all_values()
     has = any(len(r) > 0 and r[0].strip() == name for r in rows[1:])
     new_rows = []
     if not has:
-        new_rows.append([name, old_price, _PRICE_EPOCH])
-    new_rows.append([name, new_price, _now().strftime("%d.%m.%Y")])
+        new_rows.append([name, old_price, _PRICE_EPOCH, old_margin])
+    new_rows.append([name, new_price, _now().strftime("%d.%m.%Y"), new_margin])
     ws.append_rows(new_rows, value_input_option="RAW")
     _price_hist_cache["v"] = None
 
@@ -2142,8 +2176,13 @@ def update_set_price_cost(technical_name: str, price: int, cost: int):
                 old_price = int(str(row[1]).replace(" ", "").replace(",", "")) if len(row) > 1 else 0
             except ValueError:
                 old_price = 0
-            if old_price and old_price != int(price):
-                _record_price_change(row[0].strip(), old_price, int(price))
+            try:
+                old_margin = int(str(row[config.REF_SET_MARGIN_COL_IDX]).replace(" ", "").replace(",", "") or 0) if len(row) > config.REF_SET_MARGIN_COL_IDX else 0
+            except ValueError:
+                old_margin = 0
+            new_margin = int(price) - int(cost)
+            if old_price and (old_price != int(price) or old_margin != new_margin):
+                _record_price_change(row[0].strip(), old_price, int(price), old_margin, new_margin)
             ws.update_cells([
                 gspread.Cell(r, 7, int(price)),
                 gspread.Cell(r, config.REF_SET_MARGIN_COL, int(price) - int(cost)),
@@ -3673,11 +3712,14 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
     rows = _orders_raw_rows()
     clients = _clients_index()
     prices = get_set_prices()
+    margins = get_set_margins()
     out = []
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.ORDERS_DATA_START_ROW:
             continue
+        if len(row) < config.O_DELIVERY_FEE:
+            row = row + [""] * (config.O_DELIVERY_FEE - len(row))
         if len(row) < config.O_PAY_METHOD:
             row = row + [""] * (config.O_PAY_METHOD - len(row))
         date_cell = row[config.O_DATE - 1].strip()
@@ -3720,8 +3762,34 @@ def get_orders_in_range(date_from: str, date_to: str) -> list:
             "pay_status": pay_status,
             "sum": _row_amount(row, prices),
             "batch": row[config.O_ORDER_BATCH - 1].strip(),
+            **_row_finance(row, date_cell, qty, payment_raw, prices, margins),
         })
     return out
+
+
+def _row_finance(row: list, date_cell: str, qty: int, payment_raw: str, prices: dict, margins: dict) -> dict:
+    """Финансовые поля строки заказа для отчёта «Финансы»:
+    dish_revenue — выручка за блюда (0, если оплачено лепестком), delivery —
+    плата клиента за доставку, cost — себестоимость блюд (считается и для
+    лепестковых — кухня их приготовила), gift — заказ оплачен лепестком,
+    cost_known — у сета заполнена прибыль/себестоимость."""
+    set_name = row[config.O_SET - 1].strip()
+    try:
+        delivery = int(str(row[config.O_DELIVERY_FEE - 1]).replace(" ", "").replace(",", "") or 0)
+    except ValueError:
+        delivery = 0
+    price = _price_for(set_name, date_cell, prices)
+    margin = _margin_for(set_name, date_cell, margins)
+    gift = payment_raw == config.PAYMENT_TICKET
+    amount = _row_amount(row, prices) - delivery  # с учётом запасного значения из столбца J
+    return {
+        "delivery": delivery,
+        "gift": gift,
+        "dish_revenue": 0 if gift else amount,
+        "gift_value": amount if gift else 0,
+        "cost": qty * (price - margin) if (margin and qty) else 0,
+        "cost_known": bool(margin) or qty == 0,
+    }
 
 
 def get_delivery_overview(date_from: str, date_to: str) -> dict:

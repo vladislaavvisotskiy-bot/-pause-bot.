@@ -1658,37 +1658,49 @@ async def api_ops_summary(request: web.Request):
     # против дефолтных (2/1.2с), чтобы пережить кратковременный 429 от
     # Google (лимит запросов в минуту) не падая в server_error у админа.
     items = await _retry_sheets(sheets.get_orders_in_range, date_from, date_to, retries=3, delay=1.5)
-    margins = await _retry_sheets(sheets.get_set_margins, retries=3, delay=1.5)
 
+    # Модель (по продажам, статус оплаты не важен):
+    #   выручка = блюда (лепестковые = 0) + доставка, которую платят клиенты
+    #   кухня (себестоимость) = себестоимость ВСЕХ приготовленных блюд, включая
+    #     «оплаченные лепестком» (их стоимость — подарок за счёт PAUSE)
+    #   валовая = выручка − кухня; чистая = валовая − расходы на доставку.
     revenue = 0
-    profit = 0
-    by_set = {}    # ключ — КЛИЕНТСКОЕ название (display_name), не сырое из
-                   # "Заказы": по прямой просьбе везде показываем то же
-                   # имя, что видит клиент; "Самса"/"Самса без компота"
-                   # (разные строки в таблице, одно клиентское имя
-                   # "Пауза дуо." — см. texts.SET_DISPLAY_NAMES) из-за
-                   # этого корректно складываются в одну строку отчёта.
+    kitchen = 0
+    delivery_income = 0
+    gift_qty = 0
+    gift_cost = 0
+    missing_cost = {}
+    by_set = {}
     by_zone = {}
-    people = {}    # ключ — client_id
+    people = {}
     for i in items:
         key = _ops_order_key(i)
-        revenue += i["sum"]
-        item_profit = margins.get(i["set"], 0) * i["qty"]
-        profit += item_profit
+        row_revenue = i["dish_revenue"] + i["delivery"]
+        revenue += row_revenue
+        kitchen += i["cost"]
+        delivery_income += i["delivery"]
+        if i["gift"] and i["qty"]:
+            gift_qty += i["qty"]
+            gift_cost += i["cost"]
+        if i["qty"] and not i["cost_known"]:
+            missing_cost[sheets.display_set_name(i["set"])] = True
 
         display_name = sheets.display_set_name(i["set"])
-        s = by_set.setdefault(display_name, {"display_name": display_name, "qty": 0, "revenue": 0, "profit": 0})
+        s = by_set.setdefault(display_name, {"display_name": display_name, "qty": 0, "revenue": 0, "profit": 0, "kitchen": 0})
         s["qty"] += i["qty"]
-        s["revenue"] += i["sum"]
-        s["profit"] += item_profit
+        s["revenue"] += i["dish_revenue"]
+        s["kitchen"] += i["cost"]
+        s["profit"] += i["dish_revenue"] - i["cost"]
 
         zone = i["zone"] or "—"
         z = by_zone.setdefault(zone, {"zone": zone, "revenue": 0, "_orders": set()})
         z["_orders"].add(key)
-        z["revenue"] += i["sum"]
+        z["revenue"] += row_revenue
 
         p = people.setdefault(i["client_id"], {"client_id": i["client_id"], "name": i["name"], "sets": {}})
         p["sets"][display_name] = p["sets"].get(display_name, 0) + i["qty"]
+
+    profit = revenue - kitchen
 
     total_qty = sum(s["qty"] for s in by_set.values())
     by_set_list = sorted(
@@ -1696,7 +1708,6 @@ async def api_ops_summary(request: web.Request):
             dict(
                 s,
                 pct=round(s["qty"] / total_qty * 100, 1) if total_qty else 0,
-                kitchen=s["revenue"] - s["profit"],
             )
             for s in by_set.values()
         ],
@@ -1717,7 +1728,6 @@ async def api_ops_summary(request: web.Request):
         key=lambda x: x["name"],
     )
 
-    kitchen = revenue - profit
     # "Доставка" в "Чистая прибыль" — два слагаемых, оба вводятся в Mini
     # App "Маршрут" ("Профиль" → "Расходы на логистику", см.
     # webapp.api_logistics_set): расходы на сторонние сервисы (Яндекс,
@@ -1743,6 +1753,8 @@ async def api_ops_summary(request: web.Request):
         "order_count": total_qty, "revenue": revenue, "profit": profit,
         "kitchen": kitchen, "delivery_cost": delivery_cost, "net_profit": net_profit,
         "profit_margin_pct": profit_margin_pct, "net_margin_pct": net_margin_pct,
+        "delivery_income": delivery_income, "gift_qty": gift_qty, "gift_cost": gift_cost,
+        "missing_cost_sets": sorted(missing_cost),
         "people_count": len(people_list),
         "by_set": by_set_list, "by_zone": by_zone_list, "people": people_list,
     })
