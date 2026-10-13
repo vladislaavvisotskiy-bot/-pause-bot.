@@ -2000,6 +2000,39 @@ def seed_set_margins() -> dict:
     return {"seeded": seeded, "skipped": skipped}
 
 
+def add_catalog_set(name: str, display_name: str, price: int, cost: int, has_garnish: bool = False) -> int:
+    """Заводит НОВЫЙ сет в таблицу сетов "Справочники" (F:Q) — первая пустая
+    строка. Столбцы: F — техническое имя, G — цена для клиентов, H — гарнир
+    Да/Нет, P — валовая прибыль с порции (= цена − себестоимость; именно из
+    неё считаются финансы, см. get_set_margins), Q — название для клиентов.
+    Возвращает номер строки. ValueError("exists"/"no_space") — нельзя."""
+    name = name.strip()
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_TABLE_RANGE)
+    last_row = 1 + 19  # REF_SET_TABLE_RANGE = F2:Q20
+    target = None
+    for i in range(last_row - 1):
+        row = rows[i] if i < len(rows) else []
+        if row and row[0].strip().lower() == name.lower():
+            raise ValueError("exists")
+        if target is None and not (row and row[0].strip()):
+            target = 2 + i
+    if target is None:
+        raise ValueError("no_space")
+    cells = [
+        gspread.Cell(target, 6, name),
+        gspread.Cell(target, 7, int(price)),
+        gspread.Cell(target, 8, "Да" if has_garnish else "Нет"),
+        gspread.Cell(target, config.REF_SET_MARGIN_COL, int(price) - int(cost)),
+    ]
+    dn = (display_name or "").strip()
+    if dn and dn != name:
+        cells.append(gspread.Cell(target, config.REF_SET_DISPLAY_NAME_COL, dn))
+    ws.update_cells(cells, value_input_option="RAW")
+    _invalidate_ref_set_table_cache()
+    return target
+
+
 def get_sets() -> list:
     """Список названий сетов для кнопок "какие сеты сегодня" (шаг 1
     публикации меню) — те же самые технические имена, что и в таблице

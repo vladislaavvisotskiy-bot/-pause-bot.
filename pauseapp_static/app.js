@@ -5347,6 +5347,10 @@
     });
     body.appendChild(selectAllBtn);
 
+    var addSetBtn = el("button", "btn-ghost", "+ Добавить сет");
+    addSetBtn.addEventListener("click", function () { wizardStep(renderMenuAddSetStep); });
+    body.appendChild(addSetBtn);
+
     var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
     saveBtn.addEventListener("click", function () {
       saveBtn.disabled = true;
@@ -5358,6 +5362,62 @@
       }).catch(function (err) {
         saveBtn.disabled = false;
         toast("Не удалось сохранить: " + err.message);
+      });
+    });
+    body.appendChild(saveBtn);
+  }
+
+  // Новый сет: пишется в таблицу сетов (клиентам виден только в выбранном
+  // меню), себестоимость нужна для расчёта прибыли в Финансах.
+  function renderMenuAddSetStep(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Новый сет"));
+    var card = el("div", "card");
+    function field(label, type, placeholder) {
+      var f = el("div", "field");
+      f.innerHTML = "<label>" + label + "</label>";
+      var inp = el("input");
+      inp.type = type; inp.placeholder = placeholder || "";
+      if (type === "number") inp.inputMode = "numeric";
+      f.appendChild(inp);
+      card.appendChild(f);
+      return inp;
+    }
+    var techIn = field("Техническое название", "text", "Как в заказах и отчётах");
+    var nameIn = field("Название для клиентов", "text", "Если пусто — как техническое");
+    var priceIn = field("Цена для клиентов, сум", "number", "60000");
+    var costIn = field("Себестоимость, сум", "number", "30000");
+    body.appendChild(card);
+    var profit = el("div", "center-note", "");
+    body.appendChild(profit);
+    function sync() {
+      var p = parseInt(priceIn.value, 10), c = parseInt(costIn.value, 10);
+      profit.textContent = (p > 0 && c >= 0) ? ("Прибыль с порции: " + fmtSum(p - c) + " сум") : "";
+    }
+    priceIn.addEventListener("input", sync);
+    costIn.addEventListener("input", sync);
+
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Добавить сет");
+    saveBtn.addEventListener("click", function () {
+      var tech = techIn.value.trim();
+      var price = parseInt(priceIn.value, 10), cost = parseInt(costIn.value, 10);
+      if (!tech) { toast("Укажите техническое название"); return; }
+      if (!(price > 0)) { toast("Укажите цену для клиентов"); return; }
+      if (!(cost >= 0)) { toast("Укажите себестоимость"); return; }
+      saveBtn.disabled = true;
+      api("/api/ops/menu/sets", { method: "POST", body: { technical_name: tech, display_name: nameIn.value.trim(), price: price, cost: cost } }).then(function () {
+        return api("/api/ops/menu/draft");
+      }).then(function (d) {
+        haptic("success");
+        menuDraft.catalog = d.catalog;
+        if (_menuSetsSelected && _menuSetsSelected.indexOf(tech) === -1) _menuSetsSelected.push(tech);
+        toast("Сет добавлен");
+        wizardBack();
+        wizardReplace(renderMenuDraftSetsStep);
+      }).catch(function (err) {
+        saveBtn.disabled = false;
+        var m = { exists: "Сет с таким названием уже есть", no_space: "В таблице сетов нет свободных строк", bad_name: "Название не должно содержать запятую", bad_number: "Проверьте цену и себестоимость" };
+        toast(m[err.message] || ("Не удалось добавить: " + err.message));
       });
     });
     body.appendChild(saveBtn);

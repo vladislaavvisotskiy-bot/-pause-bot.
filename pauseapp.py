@@ -2182,6 +2182,30 @@ async def api_ops_menu_set_display_name(request: web.Request):
 # наоборот) — состояние общее, не раздельное.
 # ---------------------------------------------------------------------------
 
+async def api_ops_menu_add_set(request: web.Request):
+    """Новый сет прямо из "Сеты сегодня": техническое имя, имя для клиентов,
+    цена для клиентов и себестоимость (из неё считается валовая прибыль)."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    name = (body.get("technical_name") or "").strip()
+    display = (body.get("display_name") or "").strip()
+    try:
+        price = int(body.get("price"))
+        cost = int(body.get("cost"))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "bad_number"}, status=400)
+    if not name or len(name) > 60 or "," in name or "|" in name:
+        return web.json_response({"error": "bad_name"}, status=400)
+    if price <= 0 or cost < 0:
+        return web.json_response({"error": "bad_number"}, status=400)
+    try:
+        await _retry_sheets(sheets.add_catalog_set, name, display, price, cost, bool(body.get("has_garnish")))
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=409)
+    return web.json_response({"ok": True, "key": name})
+
+
 async def api_ops_menu_draft(request: web.Request):
     if not request["pa_menu"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -2764,6 +2788,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/menu/catalog/{set_key}/story", api_ops_menu_set_story)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/garnish-flag", api_ops_menu_set_garnish_flag)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/display-name", api_ops_menu_set_display_name)
+    app.router.add_post("/api/ops/menu/sets", api_ops_menu_add_set)
     app.router.add_get("/api/ops/menu/draft", api_ops_menu_draft)
     app.router.add_post("/api/ops/menu/draft/new", api_ops_menu_draft_new)
     app.router.add_post("/api/ops/menu/draft/sets", api_ops_menu_draft_sets)

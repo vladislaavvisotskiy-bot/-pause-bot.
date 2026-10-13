@@ -62,3 +62,5 @@ The Club tab (`screen-club` in `pauseapp_static/index.html`) was redesigned to m
 
 ## PAUSE MOMENTS на Главной + просмотры
 Лента PAUSE MOMENTS открыта прямо на Главной (`renderHomeMoments`, под быстрыми кнопками; блока «Сегодня в меню» на Главной больше нет); карточка Moments остаётся в Клубе, из карусели Главной убрана (фильтр `kind !== "moments"` в buildHomeNewsCarousel; композер/детали открываются через `openWizard`). Просмотры: клиент шлёт пакет id видимых постов (`/api/moments/views`, пост >50% на экране ≥1 с, один раз за открытие), лист `config.SHEET_MOMENT_VIEWS` ("Моменты просмотры": post_id, tg_id, views, last_ts); `/api/moments` отдаёт `views`/`viewers` ТОЛЬКО главному админу (`is_main_admin`), его собственные просмотры не считаются.
+
+**Новый сет из Mini App:** «Меню дня» → «Сеты сегодня» → «+ Добавить сет» (`POST /api/ops/menu/sets`, `sheets.add_catalog_set`) пишет строку в таблицу сетов «Справочники» F:Q (первая пустая из 19): F имя, G цена, H гарнир Да/Нет, P валовая прибыль = цена − себестоимость (из неё считаются Финансы, `get_set_margins`), Q название для клиентов. Лимит — строки 2–20 (`REF_SET_TABLE_RANGE`).
