@@ -2036,6 +2036,7 @@ async def _catalog_overview() -> list:
     sets_with_garnish = await _retry_sheets(sheets.get_sets_with_garnish)
     extra = await _retry_sheets(sheets.get_set_extra)
     overrides = await _retry_sheets(sheets.get_set_display_name_overrides)
+    margins = await _retry_sheets(sheets.get_set_margins)
     try:
         stories = await _retry_sheets(sheets.get_set_stories)
     except Exception:
@@ -2058,6 +2059,7 @@ async def _catalog_overview() -> list:
                 "key": group, "is_group": True, "technical_names": technicals,
                 "display_name": _name(group),
                 "prices": {t: prices.get(t, 0) for t in technicals},
+                "margins": {t: margins.get(t, 0) for t in technicals},
                 "has_garnish": technicals[0].strip().lower() in sets_with_garnish,
                 "photo_url": _resolve_photo_url(first_extra.get("photo_url", "")),
                 "description": first_extra.get("description", ""),
@@ -2069,6 +2071,7 @@ async def _catalog_overview() -> list:
                 "key": name, "is_group": False, "technical_names": [name],
                 "display_name": _name(name),
                 "prices": {name: prices.get(name, 0)},
+                "margins": {name: margins.get(name, 0)},
                 "has_garnish": name.strip().lower() in sets_with_garnish,
                 "photo_url": _resolve_photo_url(e.get("photo_url", "")),
                 "description": e.get("description", ""),
@@ -2181,6 +2184,33 @@ async def api_ops_menu_set_display_name(request: web.Request):
 # бота, а потом откроет "Меню дня" в приложении, увидит тот же черновик (и
 # наоборот) — состояние общее, не раздельное.
 # ---------------------------------------------------------------------------
+
+async def api_ops_menu_edit_set(request: web.Request):
+    """Правка существующего сета: название для клиентов + цена/себестоимость
+    каждого варианта (variants: [{technical, price, cost}])."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_key = request.match_info.get("set_key", "")
+    body = await request.json()
+    variants = body.get("variants") or []
+    clean = []
+    for v in variants:
+        try:
+            price, cost = int(v.get("price")), int(v.get("cost"))
+        except (TypeError, ValueError):
+            return web.json_response({"error": "bad_number"}, status=400)
+        tech = (v.get("technical") or "").strip()
+        if not tech or price <= 0 or cost < 0:
+            return web.json_response({"error": "bad_number"}, status=400)
+        clean.append((tech, price, cost))
+    for tech, price, cost in clean:
+        try:
+            await _retry_sheets(sheets.update_set_price_cost, tech, price, cost)
+        except ValueError:
+            return web.json_response({"error": "not_found"}, status=404)
+    await _retry_sheets(sheets.set_set_display_name, set_key, (body.get("display_name") or "").strip())
+    return web.json_response({"ok": True})
+
 
 async def api_ops_menu_add_set(request: web.Request):
     """Новый сет прямо из "Сеты сегодня": техническое имя, имя для клиентов,
@@ -2789,6 +2819,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/menu/catalog/{set_key}/garnish-flag", api_ops_menu_set_garnish_flag)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/display-name", api_ops_menu_set_display_name)
     app.router.add_post("/api/ops/menu/sets", api_ops_menu_add_set)
+    app.router.add_post("/api/ops/menu/catalog/{set_key}/edit", api_ops_menu_edit_set)
     app.router.add_get("/api/ops/menu/draft", api_ops_menu_draft)
     app.router.add_post("/api/ops/menu/draft/new", api_ops_menu_draft_new)
     app.router.add_post("/api/ops/menu/draft/sets", api_ops_menu_draft_sets)

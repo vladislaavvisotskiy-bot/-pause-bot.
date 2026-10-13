@@ -5330,6 +5330,12 @@
         : fmtSum(c.prices[c.key]);
       row.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(c.display_name) +
         '</div><div class="option-row-sub">' + priceText + ' сум</div></div>';
+      var editBtn = el("button", "set-edit-btn", "Изменить");
+      editBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        wizardStep(function (b) { renderMenuEditSetStep(b, c); });
+      });
+      row.appendChild(editBtn);
       row.addEventListener("click", function () {
         haptic("select");
         var idx = _menuSetsSelected.indexOf(c.key);
@@ -5369,6 +5375,78 @@
 
   // Новый сет: пишется в таблицу сетов (клиентам виден только в выбранном
   // меню), себестоимость нужна для расчёта прибыли в Финансах.
+  // Правка существующего сета: те же поля, что при добавлении, уже заполненные.
+  // Техническое название менять нельзя — на него завязаны заказы и отчёты.
+  function renderMenuEditSetStep(body, c) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Изменить сет"));
+    var card = el("div", "card");
+    function field(label, type, value, readonly) {
+      var f = el("div", "field");
+      f.innerHTML = "<label>" + label + "</label>";
+      var inp = el("input");
+      inp.type = type; inp.value = value;
+      if (type === "number") inp.inputMode = "numeric";
+      if (readonly) inp.readOnly = true;
+      f.appendChild(inp);
+      card.appendChild(f);
+      return inp;
+    }
+    field("Техническое название", "text", c.technical_names.join(" / "), true);
+    var nameIn = field("Название для клиентов", "text", c.display_name);
+    var rows = c.technical_names.map(function (tn) {
+      var price = c.prices[tn] || 0;
+      var margin = (c.margins && c.margins[tn]) || 0;
+      var label = c.is_group ? (" · " + tn) : "";
+      var priceIn = field("Цена для клиентов, сум" + label, "number", price || "");
+      var costIn = field("Себестоимость, сум" + label, "number", margin ? (price - margin) : "");
+      return { tn: tn, priceIn: priceIn, costIn: costIn, oldPrice: price };
+    });
+    body.appendChild(card);
+    var profit = el("div", "center-note", "");
+    body.appendChild(profit);
+    function sync() {
+      profit.innerHTML = rows.map(function (r) {
+        var p = parseInt(r.priceIn.value, 10), cs = parseInt(r.costIn.value, 10);
+        return (p > 0 && cs >= 0) ? ((c.is_group ? escapeHtml(r.tn) + ": " : "") + "прибыль с порции " + fmtSum(p - cs) + " сум") : "";
+      }).filter(Boolean).join("<br>");
+    }
+    rows.forEach(function (r) { r.priceIn.addEventListener("input", sync); r.costIn.addEventListener("input", sync); });
+    sync();
+
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    function doSave(payload) {
+      saveBtn.disabled = true;
+      api("/api/ops/menu/catalog/" + encodeURIComponent(c.key) + "/edit", { method: "POST", body: payload }).then(function () {
+        return api("/api/ops/menu/draft");
+      }).then(function (d) {
+        haptic("success");
+        menuDraft.catalog = d.catalog;
+        toast("Сохранено");
+        wizardBack();
+        wizardReplace(renderMenuDraftSetsStep);
+      }).catch(function (err) {
+        saveBtn.disabled = false;
+        toast(err.message === "bad_number" ? "Проверьте цену и себестоимость" : ("Не удалось сохранить: " + err.message));
+      });
+    }
+    saveBtn.addEventListener("click", function () {
+      var variants = [], priceChanged = false;
+      for (var i = 0; i < rows.length; i++) {
+        var p = parseInt(rows[i].priceIn.value, 10), cs = parseInt(rows[i].costIn.value, 10);
+        if (!(p > 0)) { toast("Укажите цену для клиентов"); return; }
+        if (!(cs >= 0)) { toast("Укажите себестоимость"); return; }
+        if (p !== rows[i].oldPrice) priceChanged = true;
+        variants.push({ technical: rows[i].tn, price: p, cost: cs });
+      }
+      var payload = { display_name: nameIn.value.trim(), variants: variants };
+      if (priceChanged) {
+        showConfirm("Суммы заказов считаются по текущей цене сета, поэтому новая цена изменит и суммы прошлых заказов с этим сетом. Сохранить?", "Сохранить", function () { doSave(payload); });
+      } else doSave(payload);
+    });
+    body.appendChild(saveBtn);
+  }
+
   function renderMenuAddSetStep(body) {
     wizardPhaseEl.innerHTML = "";
     body.appendChild(el("h2", "wizard-title", "Новый сет"));

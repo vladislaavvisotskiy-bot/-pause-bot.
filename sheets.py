@@ -2033,6 +2033,24 @@ def add_catalog_set(name: str, display_name: str, price: int, cost: int, has_gar
     return target
 
 
+def update_set_price_cost(technical_name: str, price: int, cost: int):
+    """Меняет цену (G) и валовую прибыль (P = цена − себестоимость) у
+    существующего сета. Техническое имя не меняется (на него завязаны заказы)."""
+    name = technical_name.strip().lower()
+    ws = _ws(config.SHEET_REFERENCE)
+    rows = ws.get(config.REF_SET_TABLE_RANGE)
+    for i, row in enumerate(rows):
+        if row and row[0].strip().lower() == name:
+            r = 2 + i
+            ws.update_cells([
+                gspread.Cell(r, 7, int(price)),
+                gspread.Cell(r, config.REF_SET_MARGIN_COL, int(price) - int(cost)),
+            ], value_input_option="RAW")
+            _invalidate_ref_set_table_cache()
+            return
+    raise ValueError("not_found")
+
+
 def get_sets() -> list:
     """Список названий сетов для кнопок "какие сеты сегодня" (шаг 1
     публикации меню) — те же самые технические имена, что и в таблице
