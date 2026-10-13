@@ -1492,12 +1492,32 @@ def _moment_out(p: dict) -> dict:
         "image_urls": ["/pauseapp/api/feed/image/" + fid for fid in p.get("file_ids", [])],
         "comment_count": p.get("comment_count", 0),
         "like_count": p.get("like_count", 0), "liked": bool(p.get("liked")),
+        **({"views": p["views"], "viewers": p["viewers"]} if "views" in p else {}),
     }
 
 
 async def api_moments_list(request: web.Request):
     posts = await _retry_sheets(sheets.get_moments, 50, request["tg_id"])
+    if request.get("is_main_admin"):
+        # Просмотры видит только главный админ — остальным в ответ не попадают.
+        stats = await _retry_sheets(sheets.get_moment_view_stats)
+        for p in posts:
+            st = stats.get(p["id"], {})
+            p["views"] = st.get("views", 0)
+            p["viewers"] = st.get("viewers", 0)
     return web.json_response({"posts": [_moment_out(p) for p in posts]})
+
+
+async def api_moments_views(request: web.Request):
+    """Пакет id постов, которые человек увидел в ленте. Просмотры самого
+    главного админа не считаем (иначе его заходы накручивали бы счётчик)."""
+    if request.get("is_main_admin"):
+        return web.json_response({"ok": True})
+    body = await request.json()
+    ids = [str(i) for i in (body.get("ids") or []) if isinstance(i, str)][:50]
+    if ids:
+        await _retry_sheets(sheets.record_moment_views, request["tg_id"], ids)
+    return web.json_response({"ok": True})
 
 
 async def api_moments_publish(request: web.Request):
@@ -2762,6 +2782,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/feed/image/{file_id}", api_feed_image)
     app.router.add_get("/api/moments", api_moments_list)
     app.router.add_post("/api/moments", api_moments_publish)
+    app.router.add_post("/api/moments/views", api_moments_views)
     app.router.add_post("/api/moments/delete", api_moments_delete)
     app.router.add_post("/api/moments/comments/delete", api_moment_comment_delete)
     app.router.add_post("/api/moments/{post_id}/like", api_moment_like)

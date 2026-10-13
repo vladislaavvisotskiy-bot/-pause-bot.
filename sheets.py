@@ -6267,5 +6267,61 @@ def get_moment_comments(post_id: str) -> list:
     return out
 
 
+_MOMV_HEADER = ["post_id", "tg_id", "views", "last_ts"]
+_moment_views_lock = threading.Lock()
+
+
+def record_moment_views(tg_id, post_ids: list):
+    """+1 просмотр каждому посту от этого человека (одним пакетом: одно чтение,
+    одна запись обновлений, одна дозапись новых строк)."""
+    ids = [p for p in dict.fromkeys(post_ids) if p]
+    if not ids:
+        return
+    me = str(tg_id)
+    now = _moment_now()
+    with _moment_views_lock:
+        ws = _ws_or_create(config.SHEET_MOMENT_VIEWS, _MOMV_HEADER)
+        rows = ws.get_all_values()
+        index = {}
+        for i, row in enumerate(rows):
+            row = _moment_row(row, len(_MOMV_HEADER))
+            if i and row[0].strip():
+                index[(row[0], row[1])] = (i + 1, row[2])
+        cells, new_rows = [], []
+        for pid in ids:
+            hit = index.get((pid, me))
+            if hit:
+                try:
+                    n = int(hit[1] or 0)
+                except ValueError:
+                    n = 0
+                cells.append(gspread.Cell(hit[0], 3, n + 1))
+                cells.append(gspread.Cell(hit[0], 4, now))
+            else:
+                new_rows.append([pid, me, 1, now])
+        if cells:
+            ws.update_cells(cells, value_input_option="RAW")
+        if new_rows:
+            ws.append_rows(new_rows, value_input_option="RAW")
+
+
+def get_moment_view_stats() -> dict:
+    """{post_id: {"views": всего просмотров, "viewers": разных людей}}."""
+    ws = _ws_or_create(config.SHEET_MOMENT_VIEWS, _MOMV_HEADER)
+    out = {}
+    for row in ws.get_all_values()[1:]:
+        row = _moment_row(row, len(_MOMV_HEADER))
+        if not row[0].strip():
+            continue
+        try:
+            n = int(row[2] or 0)
+        except ValueError:
+            n = 0
+        st = out.setdefault(row[0], {"views": 0, "viewers": 0})
+        st["views"] += n
+        st["viewers"] += 1
+    return out
+
+
 def delete_moment_comment(comment_id: str) -> bool:
     return _set_status_by_id(config.SHEET_MOMENT_COMMENTS, _MOMC_HEADER, comment_id, 7)

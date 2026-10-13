@@ -1617,6 +1617,7 @@
       state.notifUnread = results[2].unread_count || 0;
       state.home = true;
       renderHomeScreen();
+      if (state.homeNewsPrefetched && state.moments) loadMoments();
     }).catch(function (err) {
       // Уже показан рабочий (пусть и чуть устаревший) экран — разовый сбой
       // фонового обновления не должен стирать его в пустой экран ошибки.
@@ -1677,7 +1678,7 @@
       if (!state.moments) loadMoments();
     }
     var slidesData = [buildHomeMenuSlide(m)];
-    (state.clubCards || DEFAULT_CLUB_CARDS).forEach(function (c) { slidesData.push(buildHomeClubSlide(c)); });
+    (state.clubCards || DEFAULT_CLUB_CARDS).forEach(function (c) { if (c.kind !== "moments") slidesData.push(buildHomeClubSlide(c)); });
 
     var carousel = el("div", "pday-carousel home-news");
     var track = el("div", "pday-carousel-track");
@@ -1772,6 +1773,12 @@
       m.sets.forEach(function (s) { list.appendChild(buildHomeMiniCard(s)); });
       root.appendChild(list);
     }
+
+    // Лента PAUSE MOMENTS — сразу открытая, под сегодняшним меню.
+    var momRoot = el("div", "home-moments");
+    momRoot.id = "home-moments";
+    root.appendChild(momRoot);
+    renderHomeMoments();
   }
 
   // -------------------------------------------------------------------
@@ -2569,6 +2576,7 @@
 
   function buildMomentPost(post, onOpen, onDeleted) {
     var row = el("div", "mom-post" + (onOpen ? " tappable" : ""));
+    row.setAttribute("data-post-id", post.id);
     row.appendChild(momAvatar(post.tg_id, post.name));
     var main = el("div", "mom-main");
     var head = el("div", "mom-head");
@@ -2580,7 +2588,7 @@
           api("/api/moments/delete", { method: "POST", body: { id: post.id } }).then(function () {
             haptic("success");
             state.moments = (state.moments || []).filter(function (p) { return p.id !== post.id; });
-            renderClubNowCards();
+            refreshMoments();
             toast(t("mom.deleted"));
             if (onDeleted) onDeleted();
           }).catch(function (err) { toast(momErrText(err)); });
@@ -2615,16 +2623,100 @@
     });
     acts.appendChild(likeBtn);
     acts.appendChild(el("span", "mom-act", ICON_MOM_COMMENT + (post.comment_count ? '<b>' + post.comment_count + '</b>' : "")));
+    // Просмотры приходят с сервера только главному админу.
+    if (typeof post.views === "number") {
+      var vw = el("span", "mom-act mom-views", ICON_MOM_EYE + '<b>' + post.views + '</b>' + (post.viewers ? '<i>' + post.viewers + ' чел.</i>' : ""));
+      vw.title = "Просмотры (видите только вы)";
+      acts.appendChild(vw);
+    }
     main.appendChild(acts);
     row.appendChild(main);
     if (onOpen) row.addEventListener("click", function () { haptic("select"); onOpen(post); });
     return row;
   }
 
+  var ICON_MOM_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="19" height="19" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+  // Перерисовка везде, где показаны посты: карточки Клуба и лента на Главной.
+  function refreshMoments() {
+    renderClubNowCards();
+    renderHomeMoments();
+  }
+
+  // --- Просмотры: пост засчитывается, когда он больше половины на экране
+  // секунду и дольше; один раз за открытие приложения; шлём пакетом. Просмотры
+  // главного админа сервер не считает. ---
+  var momSeen = {};
+  var momViewQueue = [];
+  var momViewTimer = null;
+
+  function queueMomentView(id) {
+    momViewQueue.push(id);
+    if (momViewTimer) return;
+    momViewTimer = setTimeout(function () {
+      var ids = momViewQueue.splice(0);
+      momViewTimer = null;
+      api("/api/moments/views", { method: "POST", body: { ids: ids } }).catch(function () {
+        ids.forEach(function (x) { delete momSeen[x]; });
+      });
+    }, 2000);
+  }
+
+  function trackMomentViews(listEl) {
+    if (!("IntersectionObserver" in window) || state.isMainAdmin) return;
+    var timers = {};
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        var id = e.target.getAttribute("data-post-id");
+        if (!id || momSeen[id]) return;
+        if (e.isIntersecting) {
+          timers[id] = setTimeout(function () { momSeen[id] = true; queueMomentView(id); io.unobserve(e.target); }, 1000);
+        } else if (timers[id]) { clearTimeout(timers[id]); delete timers[id]; }
+      });
+    }, { threshold: 0.5 });
+    Array.prototype.forEach.call(listEl.querySelectorAll(".mom-post"), function (n) { io.observe(n); });
+  }
+
+  // --- Лента PAUSE MOMENTS прямо на Главной ---
+  function renderHomeMoments() {
+    var root = document.getElementById("home-moments");
+    if (!root) return;
+    root.innerHTML = "";
+    root.appendChild(el("div", "profile-section-title", escapeHtml(t("club.moments.eyebrow"))));
+    if (momCanWrite()) {
+      var composer = el("div", "mom-composer");
+      composer.appendChild(momAvatar(momMyId(), momMyName(), true));
+      composer.appendChild(el("span", "mom-composer-ph", escapeHtml(t("mom.placeholder"))));
+      composer.appendChild(el("span", "mom-composer-ic", ICON_MOM_IMAGE));
+      composer.addEventListener("click", function () { haptic("select"); openWizard(renderMomentCompose); });
+      root.appendChild(composer);
+    }
+    var list = el("div", "mom-list");
+    root.appendChild(list);
+    var posts = state.moments;
+    if (!posts) { list.appendChild(el("div", "skeleton-block")); return; }
+    if (!posts.length) {
+      list.appendChild(el("div", "feed-empty", "<div>" + ICON_LEAF + "</div><p>" + escapeHtml(t("mom.empty")) + "</p>"));
+      return;
+    }
+    var shown = state.homeMomentsShown || 10;
+    posts.slice(0, shown).forEach(function (p) {
+      list.appendChild(buildMomentPost(p, function (post) {
+        openWizard(function (b) { renderMomentDetail(b, post.id); });
+      }, renderHomeMoments));
+    });
+    if (posts.length > shown) {
+      var more = el("button", "btn-ghost", "Показать ещё");
+      more.addEventListener("click", function () { state.homeMomentsShown = shown + 10; renderHomeMoments(); });
+      root.appendChild(more);
+    }
+    trackMomentViews(list);
+  }
+
   function loadMoments(onDone) {
     api("/api/moments").then(function (data) {
       state.moments = data.posts || [];
-      renderClubNowCards();
+      refreshMoments();
       if (onDone) onDone(true);
     }).catch(function () { if (onDone) onDone(false); });
   }
@@ -2751,8 +2843,8 @@
         haptic("success");
         toast(t("mom.published"));
         state.moments = [data.post].concat(state.moments || []);
-        renderClubNowCards();
-        wizardBack();
+        refreshMoments();
+        wizardBackOrClose();
       }).catch(function (err) {
         publish.textContent = t("mom.publish");
         sync();
@@ -2767,7 +2859,7 @@
     document.getElementById("wizard").classList.add("wizard-white");
     var post = (state.moments || []).filter(function (p) { return p.id === postId; })[0];
     if (!post) { body.appendChild(el("div", "empty-note", escapeHtml(t("mom.loadFailed")))); return; }
-    body.appendChild(buildMomentPost(post, null, function () { wizardBack(); }));
+    body.appendChild(buildMomentPost(post, null, function () { wizardBackOrClose(); }));
     body.appendChild(el("h3", "club-serif-h", escapeHtml(t("mom.comments"))));
     var list = el("div", "mom-comments");
     list.appendChild(el("div", "skeleton-block"));
@@ -3109,7 +3201,7 @@
     var root = document.getElementById("club-now-cards");
     if (!root) return;
     root.innerHTML = "";
-    var cards = state.clubCards || DEFAULT_CLUB_CARDS;
+    var cards = (state.clubCards || DEFAULT_CLUB_CARDS).filter(function (c) { return c.kind !== "moments"; });
     var i = 0;
     while (i < cards.length) {
       if (cards[i].carousel) {
