@@ -1156,7 +1156,18 @@
   var API_BASE = "/pauseapp";
 
 
+  // Разовый автоповтор GET при кратковременной перегрузке (503/429).
   function api(path, options) {
+    var isGet = !(options && options.method && options.method !== "GET");
+    return apiOnce(path, options).catch(function (err) {
+      if (isGet && (err.status === 503 || err.status === 429)) {
+        return new Promise(function (r) { setTimeout(r, 1200); }).then(function () { return apiOnce(path, options); });
+      }
+      throw err;
+    });
+  }
+
+  function apiOnce(path, options) {
     options = options || {};
     var headers = options.headers || {};
     headers["X-Telegram-Init-Data"] = initData();
@@ -1617,7 +1628,7 @@
       state.notifUnread = results[2].unread_count || 0;
       state.home = true;
       renderHomeScreen();
-      if (state.homeNewsPrefetched && state.moments) loadMoments();
+      if (state.homeNewsPrefetched && state.moments && Date.now() - (state.momentsAt || 0) > 30000) loadMoments();
     }).catch(function (err) {
       // Уже показан рабочий (пусть и чуть устаревший) экран — разовый сбой
       // фонового обновления не должен стирать его в пустой экран ошибки.
@@ -2704,6 +2715,7 @@
   function loadMoments(onDone) {
     api("/api/moments").then(function (data) {
       state.moments = data.posts || [];
+      state.momentsAt = Date.now();
       refreshMoments();
       if (onDone) onDone(true);
     }).catch(function () { if (onDone) onDone(false); });

@@ -139,10 +139,12 @@ _WS_CACHE_TTL = 20  # секунд
 # отдаём из памяти; ЛЮБАЯ запись в лист (любой метод, кроме чтения) мгновенно
 # сбрасывает кэш этого листа, так что свои собственные записи видны сразу.
 # SHEETS_READ_CACHE_SECONDS=0 — выключить.
-_READ_CACHE_TTL = float(os.getenv("SHEETS_READ_CACHE_SECONDS", "12"))
+_READ_CACHE_TTL = float(os.getenv("SHEETS_READ_CACHE_SECONDS", "20"))
 _READ_METHODS = {"get_all_values", "acell", "get", "row_values", "col_values", "cell", "get_all_records"}
 _sheet_versions: dict = {}
 _read_cache: dict = {}
+_read_cache_stale: dict = {}  # последнее удачное чтение (для отдачи при ошибке Google)
+_key_locks: dict = {}
 _read_lock = threading.Lock()
 
 
@@ -175,19 +177,48 @@ class _CachedWs:
         if attr in _READ_METHODS and _READ_CACHE_TTL > 0:
             def reader(*a, **k):
                 key = (name, attr, repr(a), repr(sorted(k.items())))
-                now = time.time()
-                with _read_lock:
-                    ent = _read_cache.get(key)
-                    ver = _sheet_versions.get(name, 0)
-                if ent and now - ent[0] < _READ_CACHE_TTL and ent[2] == ver:
+
+                def fresh():
+                    now = time.time()
+                    with _read_lock:
+                        ent = _read_cache.get(key)
+                        ver = _sheet_versions.get(name, 0)
+                    if ent and now - ent[0] < _READ_CACHE_TTL and ent[2] == ver:
+                        return ent, ver
+                    return None, ver
+
+                ent, ver = fresh()
+                if ent:
                     return _copy_rows(ent[1])
-                val = target(*a, **k)
+                # Одинаковые чтения одновременно (массовое открытие приложения)
+                # сливаем в одно обращение к Google: остальные ждут и берут
+                # свежий результат из кэша.
                 with _read_lock:
-                    if _sheet_versions.get(name, 0) == ver:
-                        if len(_read_cache) > 400:
-                            _read_cache.clear()
-                        _read_cache[key] = (now, _copy_rows(val), ver)
-                return val
+                    klock = _key_locks.setdefault(key, threading.Lock())
+                with klock:
+                    ent, ver = fresh()
+                    if ent:
+                        return _copy_rows(ent[1])
+                    try:
+                        val = target(*a, **k)
+                    except Exception:
+                        # Google отдал ошибку (429/5xx/обрыв) — лучше показать
+                        # данные пятиминутной давности, чем уронить экран.
+                        with _read_lock:
+                            old = _read_cache_stale.get(key)
+                        if old and time.time() - old[0] < 300:
+                            return _copy_rows(old[1])
+                        raise
+                    now = time.time()
+                    with _read_lock:
+                        if _sheet_versions.get(name, 0) == ver:
+                            if len(_read_cache) > 400:
+                                _read_cache.clear()
+                            _read_cache[key] = (now, _copy_rows(val), ver)
+                        if len(_read_cache_stale) > 800:
+                            _read_cache_stale.clear()
+                        _read_cache_stale[key] = (now, _copy_rows(val))
+                    return val
             return reader
 
         def writer(*a, **k):
@@ -6322,38 +6353,68 @@ _MOMV_HEADER = ["post_id", "tg_id", "views", "last_ts"]
 _moment_views_lock = threading.Lock()
 
 
-def record_moment_views(tg_id, post_ids: list):
-    """+1 просмотр каждому посту от этого человека (одним пакетом: одно чтение,
-    одна запись обновлений, одна дозапись новых строк)."""
-    ids = [p for p in dict.fromkeys(post_ids) if p]
-    if not ids:
-        return
-    me = str(tg_id)
-    now = _moment_now()
+_moment_views_pending: dict = {}  # (post_id, tg_id) -> сколько просмотров ещё не записано в таблицу
+_moment_views_last_flush = 0.0
+_MOMENT_VIEWS_FLUSH_SECONDS = 90
+
+
+def _flush_moment_views():
+    """Одна пачка в таблицу: одно чтение, одна запись обновлений, одна
+    дозапись новых строк — вместо записи на каждое открытие приложения."""
+    global _moment_views_last_flush
     with _moment_views_lock:
-        ws = _ws_or_create(config.SHEET_MOMENT_VIEWS, _MOMV_HEADER)
-        rows = ws.get_all_values()
-        index = {}
-        for i, row in enumerate(rows):
-            row = _moment_row(row, len(_MOMV_HEADER))
-            if i and row[0].strip():
-                index[(row[0], row[1])] = (i + 1, row[2])
-        cells, new_rows = [], []
-        for pid in ids:
-            hit = index.get((pid, me))
-            if hit:
-                try:
-                    n = int(hit[1] or 0)
-                except ValueError:
-                    n = 0
-                cells.append(gspread.Cell(hit[0], 3, n + 1))
-                cells.append(gspread.Cell(hit[0], 4, now))
-            else:
-                new_rows.append([pid, me, 1, now])
-        if cells:
-            ws.update_cells(cells, value_input_option="RAW")
-        if new_rows:
-            ws.append_rows(new_rows, value_input_option="RAW")
+        pending = dict(_moment_views_pending)
+        _moment_views_pending.clear()
+        _moment_views_last_flush = time.time()
+        if not pending:
+            return
+        now = _moment_now()
+        try:
+            ws = _ws_or_create(config.SHEET_MOMENT_VIEWS, _MOMV_HEADER)
+            rows = ws.get_all_values()
+            index = {}
+            for i, row in enumerate(rows):
+                row = _moment_row(row, len(_MOMV_HEADER))
+                if i and row[0].strip():
+                    index[(row[0], row[1])] = (i + 1, row[2])
+            cells, new_rows = [], []
+            for (pid, me), add in pending.items():
+                hit = index.get((pid, me))
+                if hit:
+                    try:
+                        n = int(hit[1] or 0)
+                    except ValueError:
+                        n = 0
+                    cells.append(gspread.Cell(hit[0], 3, n + add))
+                    cells.append(gspread.Cell(hit[0], 4, now))
+                else:
+                    new_rows.append([pid, me, add, now])
+            if cells:
+                ws.update_cells(cells, value_input_option="RAW")
+            if new_rows:
+                ws.append_rows(new_rows, value_input_option="RAW")
+        except Exception:
+            # не потеряем просмотры: вернём в очередь до следующей попытки
+            for k, v in pending.items():
+                _moment_views_pending[k] = _moment_views_pending.get(k, 0) + v
+            raise
+
+
+def record_moment_views(tg_id, post_ids: list):
+    """+1 просмотр каждому посту от этого человека. Копим в памяти и пишем в
+    таблицу не чаще раза в ~90 с (иначе массовые заходы упирались бы в квоту
+    записи Google и роняли всё приложение)."""
+    me = str(tg_id)
+    with _moment_views_lock:
+        for pid in dict.fromkeys(post_ids):
+            if pid:
+                _moment_views_pending[(pid, me)] = _moment_views_pending.get((pid, me), 0) + 1
+        due = time.time() - _moment_views_last_flush > _MOMENT_VIEWS_FLUSH_SECONDS
+    if due:
+        try:
+            _flush_moment_views()
+        except Exception:
+            pass
 
 
 def get_moment_view_stats() -> dict:
@@ -6371,6 +6432,14 @@ def get_moment_view_stats() -> dict:
         st = out.setdefault(row[0], {"views": 0, "viewers": 0})
         st["views"] += n
         st["viewers"] += 1
+    with _moment_views_lock:
+        pend = dict(_moment_views_pending)
+    stored = {(row[0], row[1]) for row in (_moment_row(r, 2) for r in ws.get_all_values()[1:]) if row[0].strip()}
+    for (pid, me), add in pend.items():
+        st = out.setdefault(pid, {"views": 0, "viewers": 0})
+        st["views"] += add
+        if (pid, me) not in stored:
+            st["viewers"] += 1
     return out
 
 
