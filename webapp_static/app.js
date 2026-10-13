@@ -898,10 +898,10 @@
       if (active && point.status !== "Сдано") {
         var nearBtn = document.createElement("button");
         nearBtn.className = "btn-ghost";
-        markStepBtn(nearBtn, "arriving", "Подъезжаю", "Подъезжаю", stepInfoNow);
+        markStepBtn(nearBtn, "arriving", "Подъезжаю", "🔔 Подъезжаю", stepInfoNow);
         nearBtn.addEventListener("click", function (e) {
           e.stopPropagation();
-          sendStep(point, "/api/route/arriving", "arriving", nearBtn, "Подъезжаю", "Подъезжаю");
+          sendStep(point, "/api/route/arriving", "arriving", nearBtn, "Подъезжаю", "🔔 Подъезжаю");
         });
         cashRow.appendChild(nearBtn);
       }
