@@ -43,6 +43,7 @@
                            // курьеров-администраторов (см. renderCourierDetail)
     logisticsDateISO: null,
     starts: {},          // {courier_tg_id: "ЧЧ:ММ"} — время "Старта" на state.date, см. renderStartBadge
+    nearSent: {},         // {дата|точка: true} — «Подъезжаю» уже нажато в этом сеансе
     cash: {},             // {точка: сумма наличных, собранных на ней за state.date}, см. buildCard
     kpiPeriod: "today",   // "today" | "yesterday" | "day2".."day5" | "7d" | "30d" | "custom" — период для шкалы эффективности в Профиле
     kpiCustomFrom: null,  // ISO (YYYY-MM-DD) — для kpiPeriod "custom"
@@ -833,6 +834,26 @@
     if (state.role === "courier" && (active || point.status === "Сдано")) {
       var cashRow = document.createElement("div");
       cashRow.className = "card-actions-secondary";
+      if (active && point.status !== "Сдано") {
+        var nearKey = state.date + "|" + point.point;
+        var nearBtn = document.createElement("button");
+        nearBtn.className = "btn-ghost";
+        nearBtn.textContent = state.nearSent[nearKey] ? "Клиентам сообщили" : "Подъезжаю";
+        nearBtn.disabled = !!state.nearSent[nearKey];
+        nearBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          nearBtn.disabled = true;
+          api("/api/route/arriving", { method: "POST", body: { date: state.date, point: point.point } })
+            .then(function (res) {
+              state.nearSent[nearKey] = true;
+              nearBtn.textContent = "Клиентам сообщили";
+              haptic("success");
+              toast(res.sent ? "Клиентам отправлено: " + res.sent : "Клиенты уже предупреждены");
+            })
+            .catch(function (err) { nearBtn.disabled = false; toast("Не удалось: " + err.message); });
+        });
+        cashRow.appendChild(nearBtn);
+      }
       var cashBtn = document.createElement("button");
       cashBtn.className = "btn-ghost cash-btn";
       cashBtn.textContent = "💵 Наличные";
@@ -2702,6 +2723,26 @@
         var sub = el("div");
         body.appendChild(sub);
         loadCouriersManageScreen(sub);
+      });
+    }));
+    rows.appendChild(buildProfileRow(ICON_EYE, "Оповещения клиентам", function () {
+      wizardStep(function (body) {
+        body.appendChild(el("h2", "wizard-title", "Оповещения клиентам"));
+        var sub = el("div");
+        body.appendChild(sub);
+        sub.appendChild(el("div", "skeleton-block"));
+        api("/api/route/near-notify").then(function (data) {
+          sub.innerHTML = "";
+          var card = el("div", "card");
+          card.appendChild(buildToggleRow("Курьер рядом", "Клиентам точки приходит «вы следующие» (после сдачи предыдущей точки) и «курьер подъезжает» (по кнопке «Подъезжаю»).", data.enabled, function (next) {
+            return api("/api/route/near-notify", { method: "POST", body: { enabled: next } })
+              .then(function () { toast(next ? "Оповещения включены" : "Оповещения выключены"); });
+          }));
+          sub.appendChild(card);
+        }).catch(function (err) {
+          sub.innerHTML = "";
+          sub.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+        });
       });
     }));
     rows.appendChild(buildProfileRow(ICON_CLOCK, "Время сдачи заказов", function () {

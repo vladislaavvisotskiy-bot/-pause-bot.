@@ -837,6 +837,7 @@ async def api_notify(request: web.Request):
     return web.json_response({
         "morning_on": not client.get("notify_morning_off"),
         "menu_on": not client.get("notify_menu_off"),
+        "courier_on": not client.get("notify_courier_off"),
         "time": times.get(str(tg_id)) or "",
         "default_time": config.WARM_BROADCAST_TIME,
     })
@@ -856,6 +857,8 @@ async def api_notify_set(request: web.Request):
         if value and not sheets.valid_notify_time(value):
             return web.json_response({"error": "bad_time"}, status=400)
         await _retry_sheets(sheets.set_notify_time, tg_id, value)
+    if "courier_on" in body:
+        await _retry_sheets(sheets.update_client_field, client["row"], config.COL_NOTIFY_COURIER_OFF, "" if body["courier_on"] else "Да")
     if "menu_on" in body:
         col = config.COL_NOTIFY_MENU_OFF
         await _retry_sheets(sheets.update_client_field, client["row"], col, "" if body["menu_on"] else "Да")

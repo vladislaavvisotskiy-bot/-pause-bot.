@@ -299,6 +299,7 @@ def _load_clients(force=False):
             "order_count": int(order_count_raw) if order_count_raw.isdigit() else 0,
             "notify_morning_off": cell(config.COL_NOTIFY_MORNING_OFF).lower() == "да",
             "notify_menu_off": cell(config.COL_NOTIFY_MENU_OFF).lower() == "да",
+            "notify_courier_off": cell(config.COL_NOTIFY_COURIER_OFF).lower() == "да",
         })
     _cache["clients"] = clients
     _cache["clients_ts"] = now
@@ -572,6 +573,7 @@ def update_client_field(client_row: int, col: int, value: str):
     в профиле после сохранения). Воспроизведено и подтверждено на
     реальном аккаунте."""
     ws = _ws(config.SHEET_CLIENTS)
+    _ensure_sheet_columns(ws, col)
     ws.update_cells([gspread.Cell(client_row, col, value)], value_input_option="RAW")
     _cache["clients"] = None
 
@@ -2981,6 +2983,39 @@ def close_giveaway_window():
     до публикации следующего меню."""
     ws = _ws(config.SHEET_REFERENCE)
     ws.update_acell(config.REF_GIVEAWAY_CLOSED_CELL, "Да")
+
+
+def is_courier_notify_disabled() -> bool:
+    """Админ «Маршрута» выключил оповещения клиентам «курьер рядом»."""
+    ws = _ws(config.SHEET_REFERENCE)
+    return (ws.acell(config.REF_COURIER_NOTIFY_OFF_CELL).value or "").strip().lower() == "да"
+
+
+def set_courier_notify_disabled(disabled: bool):
+    ws = _ws(config.SHEET_REFERENCE)
+    ws.update_acell(config.REF_COURIER_NOTIFY_OFF_CELL, "Да" if disabled else "")
+
+
+_CN_HEADER = ["Дата", "Точка", "Клиент", "Вид", "Время"]
+
+
+def get_courier_near_log(date_str: str) -> set:
+    """{(client_id, вид)} — кому на эту дату уже отправляли «курьер рядом»."""
+    ws = _ws_or_create(config.SHEET_COURIER_NEAR_LOG, _CN_HEADER)
+    out = set()
+    for r in ws.get_all_values()[1:]:
+        if len(r) >= 4 and r[0].strip() == date_str:
+            out.add((r[2].strip(), r[3].strip()))
+    return out
+
+
+def add_courier_near_log(date_str: str, point: str, entries: list):
+    """entries: [(client_id, вид), ...]"""
+    if not entries:
+        return
+    ws = _ws_or_create(config.SHEET_COURIER_NEAR_LOG, _CN_HEADER)
+    now = _now().strftime("%H:%M")
+    ws.append_rows([[date_str, point, str(cid), kind, now] for cid, kind in entries], value_input_option="RAW")
 
 
 def is_broadcasts_disabled() -> bool:

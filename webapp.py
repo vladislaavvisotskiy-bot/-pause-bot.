@@ -971,6 +971,63 @@ async def api_route_complete(request: web.Request):
             if point not in mine:
                 return web.json_response({"error": "forbidden"}, status=403)
         await _retry_sheets(sheets.mark_route_delivered, date_str, point, retries=2)
+        next_point = None
+        if request["role"] == "courier":
+            route = await _retry_sheets(sheets.get_route_for_date, date_str)
+            tg_id = str(request["tg_id"])
+            for p in sorted(route, key=lambda x: x["order"]):
+                if tg_id in p["courier_tg_ids"] and p["point"] != point and p["status"] != config.ROUTE_STATUS_DELIVERED:
+                    next_point = p
+                    break
+    bot = request.app.get("bot")
+    if next_point and bot:
+        # «Вы следующие» — клиентам следующей точки этого курьера, в фоне.
+        import courier_notify
+        _spawn_bg(courier_notify.notify_point(bot, date_str, next_point, courier_notify.KIND_NEXT))
+    return web.json_response({"ok": True})
+
+
+_bg_tasks = set()
+
+
+def _spawn_bg(coro):
+    task = asyncio.ensure_future(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+
+
+async def api_route_arriving(request: web.Request):
+    """«Подъезжаю» — курьер за несколько минут до своей точки: клиентам точки
+    уходит «курьер подъезжает». Только курьер и только по своей точке."""
+    if request["role"] != "courier":
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or await _today()
+    point = (body.get("point") or "").strip()
+    route = await _retry_sheets(sheets.get_route_for_date, date_str)
+    tg_id = str(request["tg_id"])
+    point_data = next((p for p in route if p["point"] == point and tg_id in p["courier_tg_ids"]), None)
+    if not point_data:
+        return web.json_response({"error": "forbidden"}, status=403)
+    bot = request.app.get("bot")
+    if not bot:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+    import courier_notify
+    sent = await courier_notify.notify_point(bot, date_str, point_data, courier_notify.KIND_ARRIVING)
+    return web.json_response({"ok": True, "sent": sent})
+
+
+async def api_near_notify_get(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    return web.json_response({"enabled": not await _retry_sheets(sheets.is_courier_notify_disabled)})
+
+
+async def api_near_notify_set(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    await _retry_sheets(sheets.set_courier_notify_disabled, not bool(body.get("enabled")))
     return web.json_response({"ok": True})
 
 
@@ -1118,6 +1175,9 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/route/assign", api_route_assign)
     app.router.add_post("/api/route/complete", api_route_complete)
     app.router.add_post("/api/route/start", api_route_start)
+    app.router.add_post("/api/route/arriving", api_route_arriving)
+    app.router.add_get("/api/route/near-notify", api_near_notify_get)
+    app.router.add_post("/api/route/near-notify", api_near_notify_set)
     app.router.add_get("/api/route/kpi", api_route_kpi_get)
     app.router.add_get("/api/route/deadline", api_route_deadline_get)
     app.router.add_post("/api/route/deadline", api_route_deadline_set)

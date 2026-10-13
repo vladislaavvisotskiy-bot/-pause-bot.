@@ -369,6 +369,8 @@
       "notify.morningSub": "Тёплое сообщение каждый день с напоминанием заказать",
       "notify.menuTitle": "О публикации меню",
       "notify.menuSub": "Сообщение, когда на сегодня опубликовано новое меню",
+      "notify.courierTitle": "Курьер рядом",
+      "notify.courierSub": "Сообщение, когда курьер уже едет к вам или подъезжает",
       "notify.on": "Включено", "notify.off": "Отключено",
       "notify.saveFailed": "Не удалось сохранить",
       "notify.loadFailed": "Не удалось загрузить настройки уведомлений.",
@@ -677,6 +679,8 @@
       "notify.morningSub": "Har kuni buyurtma berishni eslatuvchi iliq xabar",
       "notify.menuTitle": "Menyu e'loni haqida",
       "notify.menuSub": "Bugungi yangi menyu e'lon qilinganda xabar",
+      "notify.courierTitle": "Kuryer yaqin",
+      "notify.courierSub": "Kuryer yo'lda yoki yaqinlashganda xabar",
       "notify.on": "Yoqildi", "notify.off": "O'chirildi",
       "notify.saveFailed": "Saqlab bo'lmadi",
       "notify.loadFailed": "Bildirishnoma sozlamalarini yuklab bo'lmadi.",
@@ -985,6 +989,8 @@
       "notify.morningSub": "A warm daily message reminding you to order",
       "notify.menuTitle": "Menu published",
       "notify.menuSub": "A message when today's new menu is published",
+      "notify.courierTitle": "Courier nearby",
+      "notify.courierSub": "A message when the courier is on the way or arriving",
       "notify.on": "Enabled", "notify.off": "Disabled",
       "notify.saveFailed": "Couldn't save",
       "notify.loadFailed": "Couldn't load notification settings.",
@@ -4350,6 +4356,16 @@
           data.menu_on,
           function (on) {
             api("/api/notify", { method: "POST", body: { menu_on: on } })
+              .then(function () { toast(on ? t("notify.on") : t("notify.off")); })
+              .catch(function () { toast(t("notify.saveFailed")); });
+          }
+        ));
+        card.appendChild(buildToggleRow(
+          t("notify.courierTitle"),
+          t("notify.courierSub"),
+          data.courier_on !== false,
+          function (on) {
+            api("/api/notify", { method: "POST", body: { courier_on: on } })
               .then(function () { toast(on ? t("notify.on") : t("notify.off")); })
               .catch(function () { toast(t("notify.saveFailed")); });
           }
