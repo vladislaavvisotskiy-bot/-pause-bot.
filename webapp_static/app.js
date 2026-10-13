@@ -1728,6 +1728,7 @@
         }
         // Конкретная сумма: списывается с самых старых дней.
         var onHand = days.reduce(function (s, d) { return s + d.remaining; }, 0);
+        if (data.net_balance !== undefined) onHand = Math.min(onHand, data.net_balance);
         var amountCard = el("div", "card");
         var af = el("div", "field");
         af.innerHTML = "<label>Забрать сумму (на руках " + fmtSum(onHand) + ")</label>";
@@ -2104,6 +2105,11 @@
         haptic("select");
         openCashDayHistory(courier.tg_id, true, "Общая сумма у курьера");
       });
+      var bd = data.breakdown;
+      if (bd) {
+        totalBox.appendChild(el("div", "cash-day-sub",
+          "Собрано всего " + fmtSum(bd.collected) + " − забрали " + fmtSum(bd.received) + " − оплачено из наличных " + fmtSum(bd.paid_from_cash)));
+      }
       boxesHolder.appendChild(totalBox);
 
       var pairRow = el("div", "cash-box-pair");

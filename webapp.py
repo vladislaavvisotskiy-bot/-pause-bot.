@@ -634,6 +634,7 @@ async def api_courier_cash_summary(request: web.Request):
     balance_as_of = await _retry_sheets(sheets.get_courier_cash_balance_as_of, tg_id, date_str)
     return web.json_response({
         "date": date_str, "cash_day": cash_day, "earned_day": earned_day, "balance_as_of": balance_as_of,
+        "breakdown": await _retry_sheets(sheets.get_courier_cash_breakdown, tg_id, date_str),
     })
 
 
@@ -646,7 +647,8 @@ async def api_courier_cash_by_day(request: web.Request):
     if not _courier_scope_ok(request, tg_id):
         return web.json_response({"error": "forbidden"}, status=403)
     days = await _retry_sheets(sheets.get_courier_cash_by_day, tg_id)
-    return web.json_response({"days": days})
+    net = await _retry_sheets(sheets.get_courier_cash_balance_as_of, tg_id, await _today())
+    return web.json_response({"days": days, "net_balance": net})
 
 
 async def api_courier_cash_day_entries(request: web.Request):

@@ -5825,6 +5825,26 @@ def get_courier_cash_balance_as_of(courier_tg_id, date_str: str = None) -> int:
     return collected - withdrawn
 
 
+def get_courier_cash_breakdown(courier_tg_id, date_str: str = None) -> dict:
+    """Из чего складывается «Общая сумма у курьера» на конец date_str:
+    собрано всего − забрали у курьера − оплачено из его наличных."""
+    date_str = date_str or today_date_str()
+    collected = get_cash_total(courier_tg_id, None, date_str)
+    received = paid = 0
+    for row in _iter_settlement_rows(courier_tg_id, None, date_str):
+        try:
+            amount = int(row[config.SETL_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        t = row[config.SETL_TYPE - 1].strip()
+        if t == config.SETTLEMENT_TYPE_CASH_RECEIVED:
+            received += amount
+        elif t == config.SETTLEMENT_TYPE_PAID_FROM_CASH:
+            paid += amount
+    return {"collected": collected, "received": received, "paid_from_cash": paid,
+            "balance": collected - received - paid}
+
+
 def get_courier_cash_by_day(courier_tg_id) -> list:
     """[{"date","collected","withdrawn","remaining"}, ...] — по всем
     дням, где у курьера было хоть какое-то движение (сбор или списание),
@@ -6010,7 +6030,9 @@ def withdraw_courier_cash_amount(courier_tg_id, courier_name: str, amount: int) 
     with _pay_shift_lock:
         days = [d for d in get_courier_cash_by_day(courier_tg_id) if d["remaining"] > 0]
         days.sort(key=lambda d: _parse_ru_date_safe(d["date"]))
-        available = sum(d["remaining"] for d in days)
+        # Реально на руках — общий остаток (дни с минусом уменьшают его).
+        available = min(sum(d["remaining"] for d in days),
+                        get_courier_cash_balance_as_of(courier_tg_id, get_active_menu_date()))
         if amount <= 0:
             return {"error": "bad_amount"}
         if amount > available:
