@@ -1011,3 +1011,4 @@ p { margin: 0; color: var(--ink-soft); }
 .btn-primary.step-done, .btn-ghost.step-done { background: var(--success-soft); color: var(--success); border-color: transparent; }
 .card-actions-secondary { display: flex; gap: 10px; }
 .card-actions-secondary > button { flex: 1; }
+.btn-ghost:disabled { opacity: .4; pointer-events: none; }

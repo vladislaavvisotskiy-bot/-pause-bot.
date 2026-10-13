@@ -593,6 +593,7 @@
         info[kind] = res.time || _nowHHMM();
         delete btn.dataset.busy;
         markStepBtn(btn, kind, doneLabel, idleLabel, info);
+        if (btn.onStepDone) btn.onStepDone();
         haptic("success");
         toast(res.already ? "Уже отправлено ранее"
           : (res.recipients ? "Клиентам отправлено: " + res.recipients : "Отмечено (получателей нет)"));
@@ -899,8 +900,12 @@
         var nearBtn = document.createElement("button");
         nearBtn.className = "btn-ghost";
         markStepBtn(nearBtn, "arriving", "Подъезжаю", "🔔 Подъезжаю", stepInfoNow);
+        // «Подъезжаю» недоступна, пока курьер не нажал «Поехали».
+        nearBtn.disabled = !stepInfoNow.going;
+        goBtn.onStepDone = function () { nearBtn.disabled = false; };
         nearBtn.addEventListener("click", function (e) {
           e.stopPropagation();
+          if (nearBtn.disabled) return;
           sendStep(point, "/api/route/arriving", "arriving", nearBtn, "Подъезжаю", "🔔 Подъезжаю");
         });
         cashRow.appendChild(nearBtn);
