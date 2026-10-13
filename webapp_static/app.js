@@ -5,6 +5,14 @@
   if (tg) {
     tg.ready();
     tg.expand();
+    // Полный экран (Bot API 8.0+) — только на телефонах; свайп вниз не закрывает приложение.
+    try {
+      var mobile = tg.platform === "ios" || tg.platform === "android";
+      if (mobile && tg.isVersionAtLeast && tg.isVersionAtLeast("8.0")) {
+        tg.requestFullscreen();
+        if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+      }
+    } catch (e) {}
   }
 
   var state = {
