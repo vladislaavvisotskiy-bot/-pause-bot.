@@ -1607,7 +1607,11 @@
   // todayRuDate() — дата по часам БРАУЗЕРА, которая может на день
   // отличаться от даты сервера (другой часовой пояс на устройстве) — это
   // и давало "0 собранных" при реально собранных наличных.
+  var _lastPayStart = 0;
   function confirmAndPayShift(courierTgId, dateRu, amount, onSaved) {
+    // Защита от случайного двойного нажатия.
+    if (Date.now() - _lastPayStart < 1500) return;
+    _lastPayStart = Date.now();
     api(cashSummaryUrl(courierTgId)).then(function (summary) {
       if (summary.balance_as_of >= amount) {
         confirmSheet(
@@ -1625,15 +1629,24 @@
       toast("Не удалось загрузить остаток наличных: " + err.message);
     });
 
-    function doPay(fromCash) {
+    function doPay(fromCash, repay) {
       api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/pay-shift", {
-        method: "POST", body: { date: dateRu, amount: amount, from_cash: fromCash },
+        method: "POST", body: { date: dateRu, amount: amount, from_cash: fromCash, repay: !!repay },
       }).then(function () {
         haptic("success");
         toast("Оплата сохранена");
         if (onSaved) onSaved();
       }).catch(function (err) {
-        if (err.data && err.data.error === "insufficient_cash") {
+        if (err.data && err.data.error === "already_paid") {
+          confirmSheet(
+            "Вы уже оплатили курьеру",
+            "За " + dateRu + " уже оплачено " + fmtSum(err.data.amount) + ". Заплатить ещё " + fmtSum(amount) + "? Итого будет " + fmtSum(err.data.amount + amount) + ".",
+            [
+              { label: "Да, заплатить ещё", className: "btn-primary", onClick: function () { doPay(fromCash, true); } },
+              { label: "Отмена", className: "btn-ghost" },
+            ]
+          );
+        } else if (err.data && err.data.error === "insufficient_cash") {
           toast("Недостаточно наличных у курьера: доступно " + fmtSum(err.data.available));
         } else {
           toast("Не удалось сохранить: " + err.message);
@@ -1860,29 +1873,80 @@
       body.appendChild(el("h2", "wizard-title", "Доход курьера"));
       var listWrap = el("div");
       body.appendChild(listWrap);
-      listWrap.appendChild(el("div", "skeleton-block"));
-      api(earningsByDayUrl(courierTgId)).then(function (data) {
+      var canManage = !!(courierTgId && state.isRouteAdmin);
+
+      function load() {
         listWrap.innerHTML = "";
-        var days = data.days || [];
-        if (!days.length) {
-          listWrap.appendChild(el("div", "empty-note", "Пока нет записей."));
-          return;
-        }
-        var card = el("div", "card");
-        days.forEach(function (d, idx) {
-          var row = el("div", "cash-day-row" + (idx ? " cash-day-row-sep" : ""));
-          var head = el("div", "cash-day-head");
-          head.appendChild(el("div", "cash-day-date", d.date));
-          head.appendChild(el("strong", "cash-day-remaining", fmtSum(d.amount)));
-          row.appendChild(head);
-          row.appendChild(el("div", "cash-day-sub", d.from_cash ? "Оплачено из наличных клиентов" : "Оплачено отдельно"));
-          card.appendChild(row);
+        listWrap.appendChild(el("div", "skeleton-block"));
+        api(earningsByDayUrl(courierTgId)).then(function (data) {
+          listWrap.innerHTML = "";
+          var days = data.days || [];
+          if (!days.length) {
+            listWrap.appendChild(el("div", "empty-note", "Пока нет записей."));
+            return;
+          }
+          var card = el("div", "card");
+          days.forEach(function (d, idx) {
+            var row = el("div", "cash-day-row" + (idx ? " cash-day-row-sep" : ""));
+            var head = el("div", "cash-day-head");
+            head.appendChild(el("div", "cash-day-date", d.date));
+            head.appendChild(el("strong", "cash-day-remaining", fmtSum(d.amount)));
+            row.appendChild(head);
+            row.appendChild(el("div", "cash-day-sub", d.from_cash ? "Оплачено из наличных клиентов" : "Оплачено отдельно"));
+            if (canManage) {
+              var acts = el("div", "checkout-attach-row");
+              var edit = el("button", "btn-text", "Изменить");
+              edit.addEventListener("click", function () { editShiftPayment(courierTgId, d, load); });
+              var del = el("button", "btn-text", "Удалить");
+              del.addEventListener("click", function () {
+                confirmSheet("Удалить оплату?", d.date + ": " + fmtSum(d.amount) + (d.from_cash ? ". Эта сумма вернётся в «Наличные у курьера»." : "."), [
+                  { label: "Да, удалить", className: "btn-primary", onClick: function () {
+                    api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/shift-delete", { method: "POST", body: { date: d.date } })
+                      .then(function () { haptic("success"); toast("Оплата удалена"); load(); })
+                      .catch(function (err) { toast("Не удалось удалить: " + err.message); });
+                  } },
+                  { label: "Отмена", className: "btn-ghost" },
+                ]);
+              });
+              acts.appendChild(edit); acts.appendChild(del);
+              row.appendChild(acts);
+            }
+            card.appendChild(row);
+          });
+          listWrap.appendChild(card);
+        }).catch(function (err) {
+          listWrap.innerHTML = "";
+          listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
         });
-        listWrap.appendChild(card);
-      }).catch(function (err) {
-        listWrap.innerHTML = "";
-        listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      }
+      load();
+    });
+  }
+
+  function editShiftPayment(courierTgId, d, onDone) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", "Изменить оплату"));
+      var f = el("div", "field");
+      f.innerHTML = "<label>" + escapeHtml(d.date) + " — сумма за смену</label>";
+      var inp = document.createElement("input");
+      inp.type = "number"; inp.inputMode = "numeric"; inp.min = "0"; inp.value = d.amount;
+      f.appendChild(inp);
+      body.appendChild(f);
+      var save = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+      save.addEventListener("click", function () {
+        var amount = parseInt(inp.value, 10) || 0;
+        if (amount <= 0) { toast("Введите сумму"); return; }
+        save.disabled = true;
+        api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/shift-edit", { method: "POST", body: { date: d.date, amount: amount } })
+          .then(function () { haptic("success"); toast("Сохранено"); onDone(); wizardBack(); })
+          .catch(function (err) {
+            save.disabled = false;
+            toast(err.data && err.data.error === "insufficient_cash"
+              ? "Недостаточно наличных у курьера: доступно " + fmtSum(err.data.available)
+              : "Не удалось сохранить: " + err.message);
+          });
       });
+      body.appendChild(save);
     });
   }
 

@@ -5864,7 +5864,10 @@ def get_courier_cash_by_day(courier_tg_id) -> list:
     return out
 
 
-def pay_courier_shift(courier_tg_id, courier_name: str, date_str: str, amount: int, from_cash: bool) -> dict:
+_pay_shift_lock = threading.Lock()
+
+
+def pay_courier_shift(courier_tg_id, courier_name: str, date_str: str, amount: int, from_cash: bool, repay: bool = False) -> dict:
     """Записывает "Заработок"/"Оплата за смену" за date_str (см.
     set_logistics_expense). Если from_cash=True — оплата выбрана "из уже
     собранных курьером наличных": сумма ДОПОЛНИТЕЛЬНО списывается с
@@ -5884,15 +5887,102 @@ def pay_courier_shift(courier_tg_id, courier_name: str, date_str: str, amount: i
     календарным today_date_str() не увидены бы вовсе (отсюда "0
     собранных" при реально собранных деньгах) — воспроизведено и
     подтверждено."""
+    with _pay_shift_lock:
+        return _pay_courier_shift_locked(courier_tg_id, courier_name, date_str, amount, from_cash, repay)
+
+
+def _pay_courier_shift_locked(courier_tg_id, courier_name, date_str, amount, from_cash, repay):
+    existing = get_courier_shift_payment(courier_tg_id, date_str)
+    if existing and existing["amount"] > 0 and not repay:
+        return {"error": "already_paid", "amount": existing["amount"], "from_cash": existing["from_cash"]}
     if from_cash:
         available = get_courier_cash_balance_as_of(courier_tg_id, get_active_menu_date())
         if amount > available:
             return {"error": "insufficient_cash", "available": available}
-    set_logistics_expense(date_str, courier_tg_id, courier_name, amount, from_cash=from_cash)
+    total = amount + (existing["amount"] if existing else 0)
+    set_logistics_expense(date_str, courier_tg_id, courier_name, total,
+                          from_cash=from_cash or bool(existing and existing["from_cash"]))
     if from_cash:
         record_courier_settlement(
             courier_tg_id, courier_name, config.SETTLEMENT_TYPE_PAID_FROM_CASH, amount, date_str=date_str,
         )
+    return {"ok": True}
+
+
+def get_courier_shift_payment(courier_tg_id, date_str: str):
+    """Уже записанная оплата за смену курьеру на дату: {"amount","from_cash"} или None."""
+    for row in _iter_logistics_rows(courier_tg_id, date_str, date_str):
+        try:
+            amount = int(row[config.LOG_SHIFT_PAY - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        from_cash = len(row) >= config.LOG_FROM_CASH and row[config.LOG_FROM_CASH - 1].strip().lower() == "да"
+        return {"amount": amount, "from_cash": from_cash}
+    return None
+
+
+def _cash_settlement_rows(courier_tg_id, date_str: str) -> list:
+    """Номера строк (1-based) «Оплата из наличных» этого курьера за дату и их сумма."""
+    ws = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER)
+    out, total = [], 0
+    for i, row in enumerate(ws.get_all_values()):
+        if i + 1 < config.SETL_DATA_START_ROW or len(row) < config.SETL_AMOUNT:
+            continue
+        if (row[config.SETL_DATE - 1].strip() == date_str and row[config.SETL_COURIER_TG_ID - 1].strip() == str(courier_tg_id)
+                and row[config.SETL_TYPE - 1].strip() == config.SETTLEMENT_TYPE_PAID_FROM_CASH):
+            out.append(i + 1)
+            try:
+                total += int(row[config.SETL_AMOUNT - 1].strip() or 0)
+            except ValueError:
+                pass
+    return out, total
+
+
+def _delete_cash_settlements(courier_tg_id, date_str: str) -> int:
+    rows, total = _cash_settlement_rows(courier_tg_id, date_str)
+    if rows:
+        ws = _ws_or_create(config.SHEET_COURIER_SETTLEMENTS, _SETL_HEADER)
+        for r in sorted(rows, reverse=True):
+            ws.delete_rows(r)
+        _invalidate_settlement_raw_cache()
+    return total
+
+
+def delete_courier_shift(courier_tg_id, date_str: str) -> bool:
+    """Удаляет оплату за смену курьеру на дату; если она была из наличных —
+    возвращает эти деньги в «Наличные у курьера» (удаляет списание)."""
+    existing = get_courier_shift_payment(courier_tg_id, date_str)
+    if not existing:
+        return False
+    if existing["from_cash"]:
+        _delete_cash_settlements(courier_tg_id, date_str)
+    ws = _ws_or_create(config.SHEET_LOGISTICS_EXPENSES, _LOG_HEADER)
+    target = str(courier_tg_id)
+    for i, row in enumerate(ws.get_all_values()):
+        if (i + 1 >= config.LOG_DATA_START_ROW and len(row) >= config.LOG_COURIER_TG_ID
+                and row[config.LOG_DATE - 1].strip() == date_str and row[config.LOG_COURIER_TG_ID - 1].strip() == target):
+            ws.delete_rows(i + 1)
+            break
+    _invalidate_logistics_raw_cache()
+    return True
+
+
+def edit_courier_shift(courier_tg_id, courier_name: str, date_str: str, new_amount: int) -> dict:
+    """Меняет сумму оплаты за смену. Если оплата была из наличных — списание
+    пересчитывается на новую сумму (проверяя, что наличных хватает)."""
+    existing = get_courier_shift_payment(courier_tg_id, date_str)
+    if not existing:
+        return {"error": "not_found"}
+    if existing["from_cash"]:
+        _rows, old_cash = _cash_settlement_rows(courier_tg_id, date_str)
+        available = get_courier_cash_balance_as_of(courier_tg_id, get_active_menu_date()) + old_cash
+        if new_amount > available:
+            return {"error": "insufficient_cash", "available": available}
+        _delete_cash_settlements(courier_tg_id, date_str)
+        set_logistics_expense(date_str, courier_tg_id, courier_name, new_amount, from_cash=True)
+        record_courier_settlement(courier_tg_id, courier_name, config.SETTLEMENT_TYPE_PAID_FROM_CASH, new_amount, date_str=date_str)
+    else:
+        set_logistics_expense(date_str, courier_tg_id, courier_name, new_amount, from_cash=False)
     return {"ok": True}
 
 

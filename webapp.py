@@ -697,10 +697,41 @@ async def api_courier_pay_shift(request: web.Request):
     courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
     if not courier:
         return web.json_response({"error": "not_found"}, status=404)
-    result = await _retry_sheets(sheets.pay_courier_shift, tg_id, courier["name"], date_str, amount, from_cash)
+    result = await _retry_sheets(sheets.pay_courier_shift, tg_id, courier["name"], date_str, amount, from_cash,
+                                 bool(body.get("repay")))
     if "error" in result:
-        return web.json_response(result, status=400)
+        return web.json_response(result, status=409 if result["error"] == "already_paid" else 400)
     return web.json_response(result)
+
+
+async def api_courier_shift_edit(request: web.Request):
+    """Изменить сумму уже внесённой оплаты за смену (карточка курьера → «Доход курьера»)."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    date_str = (body.get("date") or "").strip()
+    try:
+        amount = int(body.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if not date_str or amount <= 0:
+        return web.json_response({"error": "bad_amount"}, status=400)
+    couriers = await _retry_sheets(sheets.get_couriers)
+    courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
+    name = courier["name"] if courier else ""
+    result = await _retry_sheets(sheets.edit_courier_shift, tg_id, name, date_str, amount)
+    return web.json_response(result, status=400 if "error" in result else 200)
+
+
+async def api_courier_shift_delete(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    date_str = (body.get("date") or "").strip()
+    ok = await _retry_sheets(sheets.delete_courier_shift, tg_id, date_str)
+    return web.json_response({"ok": ok}, status=200 if ok else 404)
 
 
 # ---------------------------------------------------------------------------
@@ -1023,6 +1054,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/couriers/manage/{tg_id}/notify-off", api_courier_notify_off_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/withdraw-cash", api_courier_withdraw_cash)
     app.router.add_post("/api/couriers/manage/{tg_id}/pay-shift", api_courier_pay_shift)
+    app.router.add_post("/api/couriers/manage/{tg_id}/shift-edit", api_courier_shift_edit)
+    app.router.add_post("/api/couriers/manage/{tg_id}/shift-delete", api_courier_shift_delete)
     app.router.add_get("/api/courier/cash-summary", api_courier_cash_summary)
     app.router.add_get("/api/courier/cash-by-day", api_courier_cash_by_day)
     app.router.add_get("/api/courier/cash-day-entries", api_courier_cash_day_entries)
