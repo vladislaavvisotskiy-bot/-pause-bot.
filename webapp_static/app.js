@@ -2074,6 +2074,31 @@
     actionsRow.appendChild(withdrawBtn);
     actionsRow.appendChild(payBtn);
     wrap.appendChild(actionsRow);
+    if (state.isOwner || state.canToggleMode === false) {
+      var resetBtn = el("button", "btn-text", "Очистить историю платежей");
+      resetBtn.addEventListener("click", function () {
+        confirmSheet(
+          "Очистить историю платежей курьера?",
+          "Удалятся его оплаты за смену и списания наличных (копия сохранится в листе «Архив истории курьеров»), " +
+          "наличные и остаток начнут считаться с сегодняшнего дня. Записи «кто сколько дал» останутся. " +
+          "Расходы на этого курьера пропадут и из Финансов за прошлые дни. Остаток наличных на руках у курьера тоже обнулится в приложении.",
+          [
+            { label: "Да, очистить", className: "btn-primary", onClick: function () {
+              resetBtn.disabled = true;
+              api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/reset-history", { method: "POST", body: {} })
+                .then(function (res) {
+                  haptic("success");
+                  toast("История очищена: оплат " + res.shift_payments + ", списаний " + res.settlements);
+                  loadAll();
+                })
+                .catch(function (err) { resetBtn.disabled = false; toast("Не удалось очистить: " + err.message); });
+            } },
+            { label: "Отмена", className: "btn-ghost" },
+          ]
+        );
+      });
+      wrap.appendChild(resetBtn);
+    }
     root.appendChild(wrap);
 
     var selectedDate = todayRuDate();

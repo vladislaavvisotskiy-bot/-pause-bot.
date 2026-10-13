@@ -749,6 +749,25 @@ async def api_courier_shift_edit(request: web.Request):
     return web.json_response(result, status=400 if "error" in result else 200)
 
 
+async def api_courier_reset_history(request: web.Request):
+    """Очистка платежной истории одного курьера (только владелец/главный админ)."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    try:
+        me = int(request["tg_id"])
+    except (TypeError, ValueError):
+        me = None
+    if me != config.OWNER_TG_ID and me not in config.ADMIN_IDS:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    couriers = await _retry_sheets(sheets.get_couriers)
+    courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
+    if not courier or courier.get("archived"):
+        return web.json_response({"error": "not_found"}, status=404)
+    res = await _retry_sheets(sheets.reset_courier_history, tg_id, courier["name"])
+    return web.json_response({"ok": True, **res})
+
+
 async def api_courier_shift_delete(request: web.Request):
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -1081,6 +1100,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/couriers/manage/{tg_id}/notify-off", api_courier_notify_off_set)
     app.router.add_post("/api/couriers/manage/{tg_id}/withdraw-cash", api_courier_withdraw_cash)
     app.router.add_post("/api/couriers/manage/{tg_id}/pay-shift", api_courier_pay_shift)
+    app.router.add_post("/api/couriers/manage/{tg_id}/reset-history", api_courier_reset_history)
     app.router.add_post("/api/couriers/manage/{tg_id}/shift-edit", api_courier_shift_edit)
     app.router.add_post("/api/couriers/manage/{tg_id}/shift-delete", api_courier_shift_delete)
     app.router.add_get("/api/courier/cash-summary", api_courier_cash_summary)

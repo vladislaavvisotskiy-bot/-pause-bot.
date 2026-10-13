@@ -4340,6 +4340,7 @@ def get_couriers() -> list:
             "is_route_admin": (row[config.COURIER_IS_ROUTE_ADMIN - 1].strip().lower() == "да") if len(row) >= config.COURIER_IS_ROUTE_ADMIN else False,
             "disabled": (row[config.COURIER_DISABLED - 1].strip().lower() == "да") if len(row) >= config.COURIER_DISABLED else False,
             "notify_off": (row[config.COURIER_NOTIFY_OFF - 1].strip().lower() == "да") if len(row) >= config.COURIER_NOTIFY_OFF else False,
+            "cash_from": row[config.COURIER_CASH_FROM - 1].strip() if len(row) >= config.COURIER_CASH_FROM else "",
         })
     try:
         out.extend(_former_couriers({c["tg_id"] for c in out}))
@@ -5642,10 +5643,31 @@ def record_cash_collection(date_str: str, courier_tg_id, courier_name: str, poin
     _invalidate_cash_raw_cache()
 
 
+def _courier_cash_from(courier_tg_id):
+    """Дата начала расчётов кассы курьера (см. reset_courier_history) или None."""
+    if courier_tg_id is None:
+        return None
+    target = str(courier_tg_id)
+    for c in get_couriers():
+        if c["tg_id"] == target and c.get("cash_from"):
+            try:
+                return dt.datetime.strptime(c["cash_from"], "%d.%m.%Y")
+            except ValueError:
+                return None
+    return None
+
+
 def get_cash_total(courier_tg_id, date_from: str = None, date_to: str = None) -> int:
     """Сумма наличных, собранных курьером (за период, либо за всё время,
     если date_from/date_to не переданы) — для "Мои доходы" (курьер) и
-    карточки курьера в "Курьеры" (админ)."""
+    карточки курьера в "Курьеры" (админ). Учитывает «считать с даты»
+    (см. reset_courier_history)."""
+    base = _courier_cash_from(courier_tg_id)
+    if base:
+        if date_to and _parse_ru_date_safe(date_to) < base:
+            return 0
+        if not date_from or _parse_ru_date_safe(date_from) < base:
+            date_from = base.strftime("%d.%m.%Y")
     total = 0
     for row in _iter_cash_rows(courier_tg_id, date_from, date_to):
         try:
@@ -5825,6 +5847,44 @@ def get_courier_cash_balance_as_of(courier_tg_id, date_str: str = None) -> int:
     return collected - withdrawn
 
 
+def reset_courier_history(courier_tg_id, courier_name: str = "") -> dict:
+    """Очищает платежную историю одного курьера и начинает кассу с сегодня:
+    строки «Расчёты с курьерами» и «Расходы на логистику» (оплата за смену) этого
+    курьера копируются в лист-архив и удаляются; в «Курьеры» пишется дата «считать с»
+    (раньше неё собранные наличные в остаток не входят). Записи «кто сколько дал»
+    (лист «Наличные») не трогаются. Возвращает число перенесённых строк."""
+    target = str(courier_tg_id).strip()
+    stamp = _now().strftime("%d.%m.%Y %H:%M")
+    archive = _ws_or_create(config.SHEET_COURIER_HISTORY_ARCHIVE, ["Когда очищено", "Курьер", "Лист", "Строка"])
+    counts = {}
+    with _pay_shift_lock:
+        for sheet_name, id_col, header in (
+            (config.SHEET_COURIER_SETTLEMENTS, config.SETL_COURIER_TG_ID, _SETL_HEADER),
+            (config.SHEET_LOGISTICS_EXPENSES, config.LOG_COURIER_TG_ID, _LOG_HEADER),
+        ):
+            ws = _ws_or_create(sheet_name, header)
+            values = ws.get_all_values()
+            keep, moved = [], []
+            for i, row in enumerate(values):
+                if i == 0:
+                    keep.append(row)
+                elif len(row) >= id_col and row[id_col - 1].strip() == target:
+                    moved.append(row)
+                else:
+                    keep.append(row)
+            counts[sheet_name] = len(moved)
+            if moved:
+                archive.append_rows([[stamp, courier_name or target, sheet_name, " | ".join(r)] for r in moved],
+                                    value_input_option="RAW")
+                ws.clear()
+                ws.update(keep, "A1", value_input_option="RAW")
+        _invalidate_settlement_raw_cache()
+        _invalidate_logistics_raw_cache()
+        _set_courier_flag(target, config.COURIER_CASH_FROM, today_date_str())
+    return {"settlements": counts.get(config.SHEET_COURIER_SETTLEMENTS, 0),
+            "shift_payments": counts.get(config.SHEET_LOGISTICS_EXPENSES, 0)}
+
+
 def get_courier_cash_breakdown(courier_tg_id, date_str: str = None) -> dict:
     """Из чего складывается «Общая сумма у курьера» на конец date_str:
     собрано всего − забрали у курьера − оплачено из его наличных."""
@@ -5852,8 +5912,11 @@ def get_courier_cash_by_day(courier_tg_id) -> list:
     "Общая сумма у курьера" и для выбора дней в "Забрать наличные" (см.
     webapp.api_courier_cash_by_day/api_courier_withdraw_cash)."""
     collected_by_day = {}
+    base = _courier_cash_from(courier_tg_id)
     for row in _iter_cash_rows(courier_tg_id):
         date_str = row[config.CASH_DATE - 1].strip()
+        if base and _parse_ru_date_safe(date_str) < base:
+            continue
         try:
             amount = int(row[config.CASH_AMOUNT - 1].strip() or 0)
         except ValueError:
