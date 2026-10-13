@@ -1487,7 +1487,9 @@ def append_orders_batch(date_str: str, zone: str, point: str, client_id, items: 
             (config.O_QTY, int(item["qty"])),
             (config.O_GARNISH, item.get("garnish", "") or ""),
             (config.O_PAYMENT, payments[i]),
-            (config.O_COMMENT, comment or ""),
+            # Комментарий к заказу — один раз, в первой строке корзины
+            # (не дублируем одно и то же во всех позициях).
+            (config.O_COMMENT, (comment or "") if i == 0 else ""),
         ]
         if screenshot:
             updates.append((config.O_SCREENSHOT, screenshot))
