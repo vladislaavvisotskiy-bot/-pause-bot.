@@ -422,6 +422,7 @@ async def api_logistics_get(request: web.Request):
         "couriers": [
             {"tg_id": c["tg_id"], "name": c["name"], "shift_pay": shift_pay.get(c["tg_id"], 0)}
             for c in couriers
+            if not c.get("archived") or shift_pay.get(c["tg_id"], 0) > 0
         ],
         "delivery_expense": delivery_expense,
     })

@@ -4341,9 +4341,52 @@ def get_couriers() -> list:
             "disabled": (row[config.COURIER_DISABLED - 1].strip().lower() == "да") if len(row) >= config.COURIER_DISABLED else False,
             "notify_off": (row[config.COURIER_NOTIFY_OFF - 1].strip().lower() == "да") if len(row) >= config.COURIER_NOTIFY_OFF else False,
         })
+    try:
+        out.extend(_former_couriers({c["tg_id"] for c in out}))
+    except Exception:
+        pass
     _cache["couriers"] = out
     _cache["couriers_ts"] = now
     return out
+
+
+def _former_couriers(existing_ids: set) -> list:
+    """Курьеры, которых удалили из листа «Курьеры», но чьи данные остались в
+    истории (наличные, расчёты, оплата за смену, маршруты прошлых дней).
+    Возвращаются как недействующие ("archived": True, отключены, без пушей) —
+    чтобы прошлые дни маршрута и деньги этого курьера по-прежнему были видны.
+    Имя — из первой записи истории, где оно есть, иначе сам ID."""
+    found = {}  # tg_id -> name
+
+    def _add(tid, name=""):
+        tid = (tid or "").strip()
+        if not tid or tid in existing_ids:
+            return
+        if name and not found.get(tid):
+            found[tid] = name.strip()
+        else:
+            found.setdefault(tid, "")
+
+    for rows, start, id_col, name_col in (
+        (_cash_raw_rows(), config.CASH_DATA_START_ROW, config.CASH_COURIER_TG_ID, config.CASH_COURIER_NAME),
+        (_logistics_raw_rows(), config.LOG_DATA_START_ROW, config.LOG_COURIER_TG_ID, config.LOG_COURIER_NAME),
+        (_settlement_raw_rows(), config.SETL_DATA_START_ROW, config.SETL_COURIER_TG_ID, config.SETL_COURIER_NAME),
+    ):
+        for i, row in enumerate(rows):
+            if i + 1 < start or len(row) < id_col:
+                continue
+            _add(row[id_col - 1], row[name_col - 1] if len(row) >= name_col else "")
+    route_rows = _ws(config.SHEET_ROUTE).get_all_values()
+    for i, row in enumerate(route_rows):
+        if i + 1 < config.ROUTE_DATA_START_ROW or len(row) < config.ROUTE_COURIER_TG_ID:
+            continue
+        for cid in _parse_courier_ids(row[config.ROUTE_COURIER_TG_ID - 1]):
+            _add(cid)
+    return [{
+        "tg_id": tid, "name": name or tid, "status": "Не действует", "phone": "",
+        "kpi_hidden": True, "is_route_admin": False, "disabled": True, "notify_off": True,
+        "archived": True,
+    } for tid, name in found.items()]
 
 
 def _ensure_sheet_columns(ws, col: int):
@@ -4414,7 +4457,16 @@ def set_courier_disabled(tg_id: str, disabled: bool) -> bool:
     (курьер не удалён, просто временно отключён). Доступно ЛЮБОМУ
     администратору "Маршрута", не только владельцу (в отличие от
     set_courier_route_admin)."""
-    return _set_courier_flag(tg_id, config.COURIER_DISABLED, "Да" if disabled else "")
+    if _set_courier_flag(tg_id, config.COURIER_DISABLED, "Да" if disabled else ""):
+        return True
+    if not disabled:
+        # Курьер был удалён из листа: возвращаем его строкой (имя — из истории).
+        ghost = next((c for c in get_couriers() if c["tg_id"] == str(tg_id).strip() and c.get("archived")), None)
+        if ghost:
+            add_courier(ghost["tg_id"], ghost["name"] if ghost["name"] != ghost["tg_id"] else "")
+            _cache["couriers"] = None
+            return True
+    return False
 
 
 def set_courier_notify_off(tg_id: str, off: bool) -> bool:
@@ -4705,7 +4757,7 @@ def sync_daily_route(date_str: str, people: dict = None) -> list:
 
     dp_index = _delivery_points_index()
     couriers = get_couriers()
-    all_courier_ids = ",".join(c["tg_id"] for c in couriers)
+    all_courier_ids = ",".join(c["tg_id"] for c in couriers if not c.get("archived"))
 
     missing_sorted = sorted(missing, key=lambda p: dp_index.get(p, {}).get("priority", 0))
     new_rows = []
@@ -5226,7 +5278,7 @@ def add_route_point(date_str: str, point_name: str):
 
     existing = get_route_for_date(date_str)  # заодно синхронизирует
     couriers = get_couriers()
-    all_courier_ids = ",".join(c["tg_id"] for c in couriers)
+    all_courier_ids = ",".join(c["tg_id"] for c in couriers if not c.get("archived"))
     # В конец текущего списка (см. sync_daily_route) — не по каталожному
     # "Приоритету", чтобы не воткнуться в середину уже расставленного на
     # сегодня порядка.

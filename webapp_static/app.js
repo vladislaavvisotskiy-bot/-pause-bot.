@@ -1064,15 +1064,24 @@
   // и только когда флаг включён и есть хотя бы один курьер в справочнике.
   // При выключенном флаге/роли курьера контейнер просто остаётся скрытым —
   // остальной экран не отличается от того, что было до этой функции.
+  // Бывшие (удалённые из «Курьеры») курьеры показываются на дне, только если
+  // у них есть точки в маршруте этого дня — иначе они не засоряют сегодняшний экран.
+  function dayCouriers() {
+    return state.couriers.filter(function (c) {
+      return !c.archived || state.points.some(function (p) { return (p.courier_tg_ids || []).indexOf(c.tg_id) !== -1; });
+    });
+  }
+
   function renderCourierTabs() {
     var container = document.getElementById("courier-tabs");
-    if (!state.splitView || state.role !== "admin" || !state.couriers.length) {
+    var tabCouriers = dayCouriers();
+    if (!state.splitView || state.role !== "admin" || !tabCouriers.length) {
       container.hidden = true;
       return;
     }
     // Курьер, на чью вкладку админ переключился, мог с тех пор пропасть из
     // справочника — откатываемся на "Все", а не оставляем пустую вкладку.
-    if (state.courierTab !== "all" && !state.couriers.some(function (c) { return c.tg_id === state.courierTab; })) {
+    if (state.courierTab !== "all" && !tabCouriers.some(function (c) { return c.tg_id === state.courierTab; })) {
       state.courierTab = "all";
     }
 
@@ -1089,7 +1098,7 @@
     });
     container.appendChild(allBtn);
 
-    state.couriers.forEach(function (c) {
+    tabCouriers.forEach(function (c) {
       var btn = document.createElement("button");
       btn.className = "date-pill courier-tab" + (state.courierTab === c.tg_id ? " active" : "");
       var dot = document.createElement("span");
@@ -1330,7 +1339,7 @@
         .then(function () { inputEl.disabled = false; });
     }
 
-    state.couriers.forEach(function (c) {
+    dayCouriers().forEach(function (c) {
       var row = document.createElement("div");
       row.className = "visibility-row";
 
