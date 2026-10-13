@@ -679,13 +679,21 @@ async def api_courier_withdraw_cash(request: web.Request):
         return web.json_response({"error": "forbidden"}, status=403)
     tg_id = request.match_info.get("tg_id", "")
     body = await request.json()
-    days = body.get("days") or {}
-    if not isinstance(days, dict) or not days:
-        return web.json_response({"error": "bad_request"}, status=400)
     couriers = await _retry_sheets(sheets.get_couriers)
     courier = next((c for c in couriers if c["tg_id"] == tg_id), None)
     if not courier:
         return web.json_response({"error": "not_found"}, status=404)
+    if body.get("amount") is not None:
+        # «Забрать» конкретную сумму — списываем с самых старых дней.
+        try:
+            amount = int(body.get("amount"))
+        except (TypeError, ValueError):
+            amount = 0
+        res = await _retry_sheets(sheets.withdraw_courier_cash_amount, tg_id, courier["name"], amount)
+        return web.json_response(res, status=400 if "error" in res else 200)
+    days = body.get("days") or {}
+    if not isinstance(days, dict) or not days:
+        return web.json_response({"error": "bad_request"}, status=400)
     total = await _retry_sheets(sheets.withdraw_courier_cash, tg_id, courier["name"], days)
     return web.json_response({"ok": True, "total": total})
 

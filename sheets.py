@@ -6003,6 +6003,30 @@ def withdraw_courier_cash(courier_tg_id, courier_name: str, day_amounts: dict) -
     return total
 
 
+def withdraw_courier_cash_amount(courier_tg_id, courier_name: str, amount: int) -> dict:
+    """«Забрать» ровно amount: списывает с самых старых дней, где у курьера
+    остались наличные. Больше, чем на руках, забрать нельзя —
+    {"error": "too_much", "available": N}."""
+    with _pay_shift_lock:
+        days = [d for d in get_courier_cash_by_day(courier_tg_id) if d["remaining"] > 0]
+        days.sort(key=lambda d: _parse_ru_date_safe(d["date"]))
+        available = sum(d["remaining"] for d in days)
+        if amount <= 0:
+            return {"error": "bad_amount"}
+        if amount > available:
+            return {"error": "too_much", "available": available}
+        left, alloc = amount, {}
+        for d in days:
+            take = min(left, d["remaining"])
+            if take > 0:
+                alloc[d["date"]] = take
+                left -= take
+            if left <= 0:
+                break
+        total = withdraw_courier_cash(courier_tg_id, courier_name, alloc)
+    return {"ok": True, "total": total}
+
+
 # ---------------------------------------------------------------------------
 # PAUSE Club — лента (PAUSE App, см. pauseapp.py). Публикация/удаление —
 # только из самого приложения, отдельным экраном админа; в /admin бота

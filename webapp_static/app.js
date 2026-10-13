@@ -1726,6 +1726,36 @@
           listWrap.appendChild(el("div", "empty-note", "У курьера сейчас нет наличных на руках."));
           return;
         }
+        // Конкретная сумма: списывается с самых старых дней.
+        var onHand = days.reduce(function (s, d) { return s + d.remaining; }, 0);
+        var amountCard = el("div", "card");
+        var af = el("div", "field");
+        af.innerHTML = "<label>Забрать сумму (на руках " + fmtSum(onHand) + ")</label>";
+        var amountInp = document.createElement("input");
+        amountInp.type = "number"; amountInp.inputMode = "numeric"; amountInp.min = "0"; amountInp.placeholder = "0";
+        af.appendChild(amountInp);
+        amountCard.appendChild(af);
+        var amountBtn = el("button", "btn-primary", "Забрать эту сумму");
+        amountBtn.addEventListener("click", function () {
+          var amount = parseInt(amountInp.value, 10) || 0;
+          if (amount <= 0) { toast("Введите сумму"); return; }
+          if (amount > onHand) { toast("На руках только " + fmtSum(onHand)); return; }
+          amountBtn.disabled = true;
+          api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/withdraw-cash", {
+            method: "POST", body: { amount: amount },
+          }).then(function (res) {
+            haptic("success");
+            toast("Забрано наличных: " + fmtSum(res.total));
+            onDone();
+            wizardBack();
+          }).catch(function (err) {
+            amountBtn.disabled = false;
+            toast(err.data && err.data.error === "too_much" ? "На руках только " + fmtSum(err.data.available) : "Не удалось: " + err.message);
+          });
+        });
+        amountCard.appendChild(amountBtn);
+        listWrap.appendChild(amountCard);
+        listWrap.appendChild(el("div", "profile-section-title", "Или выбрать дни"));
         var card = el("div", "card");
         var checks = [];
         days.forEach(function (d) {
