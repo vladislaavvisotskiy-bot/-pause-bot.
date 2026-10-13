@@ -2515,7 +2515,12 @@ async def api_ops_broadcast_menu(request: web.Request):
     bot = request.app.get("bot")
     if not bot:
         return web.json_response({"error": "bot_unavailable"}, status=503)
-    res = await menu_broadcast.start(bot, date_str, request["tg_id"], force=bool(body.get("force")))
+    # Ручная рассылка той же даты, что активное меню, берёт текст/фото, заданные при его публикации.
+    photo_ids, caption = [], ""
+    if date_str == await _retry_sheets(sheets.get_active_menu_date):
+        photo_ids, caption = await _retry_sheets(sheets.get_today_menu_photos)
+    res = await menu_broadcast.start(bot, date_str, request["tg_id"], force=bool(body.get("force")),
+                                     caption=caption, photo_ids=photo_ids)
     if res == "running":
         return web.json_response({"error": "already_running"}, status=409)
     if res == "disabled":
@@ -2541,12 +2546,15 @@ async def api_ops_menu_draft_publish(request: web.Request):
     if not date_str:
         return web.json_response({"error": "date_required"}, status=400)
 
+    # Текст/фото рассылки из черновика — читаем ДО публикации (она чистит черновик).
+    photo_ids, caption = await _retry_sheets(sheets.get_draft_menu)
     await _retry_sheets(sheets.publish_draft_menu, date_str)
 
     bot = request.app.get("bot")
     will_broadcast = False
     if bot:
-        will_broadcast = (await menu_broadcast.start(bot, date_str, request["tg_id"])) == "started"
+        will_broadcast = (await menu_broadcast.start(
+            bot, date_str, request["tg_id"], caption=caption, photo_ids=photo_ids)) == "started"
 
     return web.json_response({"ok": True, "date": date_str, "broadcasted": will_broadcast})
 

@@ -8,6 +8,7 @@
 import asyncio
 import logging
 
+from aiogram.types import InputMediaPhoto
 from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError, TelegramBadRequest
 
 import config
@@ -39,7 +40,31 @@ async def _notify_admins(bot, admin_id, text: str):
             logger.exception("Рассылка меню: не удалось отправить итог админу %s", a)
 
 
-async def run(bot, date_str: str, admin_id):
+async def _send_one(bot, tg_id: int, nm: str, when: str, caption: str, photo_ids: list):
+    """Одно сообщение клиенту. Свой текст/фото админа — как есть ({name} в тексте
+    заменяется на имя); иначе стандартный текст."""
+    if not caption and not photo_ids:
+        text = (texts.APP_MENU_BROADCAST_TEXT.format(name=nm, when=when) if nm
+                else texts.APP_MENU_BROADCAST_TEXT_NONAME.format(when=when))
+        await bot.send_message(tg_id, text, reply_markup=kb.menu_broadcast_kb())
+        return
+    text = caption.replace("{name}", nm or "").strip()
+    if not photo_ids:
+        await bot.send_message(tg_id, text, reply_markup=kb.menu_broadcast_kb())
+    elif len(photo_ids) == 1:
+        if len(text) <= 1024:
+            await bot.send_photo(tg_id, photo_ids[0], caption=text or None, reply_markup=kb.menu_broadcast_kb())
+        else:
+            await bot.send_photo(tg_id, photo_ids[0])
+            await bot.send_message(tg_id, text, reply_markup=kb.menu_broadcast_kb())
+    else:
+        media = [InputMediaPhoto(media=f, caption=(text[:1024] if i == 0 and text else None)) for i, f in enumerate(photo_ids[:10])]
+        await bot.send_media_group(tg_id, media)
+        if len(text) > 1024:
+            await bot.send_message(tg_id, text, reply_markup=kb.menu_broadcast_kb())
+
+
+async def run(bot, date_str: str, admin_id, caption: str = "", photo_ids: list = None):
     st = state
     try:
         clients = await _retry_sheets(sheets.get_broadcast_clients)
@@ -55,14 +80,14 @@ async def run(bot, date_str: str, admin_id):
             targets.append(c)
         st.update(total=len(targets), sent=0, failed=0, blocked=0, skipped_off=skipped_off)
         when = when_label(date_str)
+        photo_ids = list(photo_ids or [])
+        caption = (caption or "").strip()
         delay = max(config.BROADCAST_DELAY_SECONDS, 0.08)
         for c in targets:
             nm = (c.get("name") or "").strip()
-            text = (texts.APP_MENU_BROADCAST_TEXT.format(name=nm, when=when) if nm
-                    else texts.APP_MENU_BROADCAST_TEXT_NONAME.format(when=when))
             for attempt in range(3):
                 try:
-                    await bot.send_message(int(c["tg_id"]), text, reply_markup=kb.menu_broadcast_kb())
+                    await _send_one(bot, int(c["tg_id"]), nm, when, caption, photo_ids)
                     st["sent"] += 1
                     break
                 except TelegramRetryAfter as e:
@@ -85,7 +110,7 @@ async def run(bot, date_str: str, admin_id):
             await _retry_sheets(sheets.log_menu_broadcast, date_str, st["total"], st["sent"], st["failed"], admin_id or "авто")
         except Exception:
             logger.exception("Рассылка меню: не удалось записать журнал")
-        report = (f"Рассылка о меню {when} завершена.\n"
+        report = (f"Рассылка о меню {when} завершена" + (" (ваш текст/фото)" if (caption or photo_ids) else "") + ".\n"
                   f"Получили: {st['sent']}\n"
                   f"Не получили: {st['failed']}"
                   + (f" (заблокировали бота: {st['blocked']})" if st["blocked"] else "") + "\n"
@@ -99,7 +124,7 @@ async def run(bot, date_str: str, admin_id):
         st["done_at"] = sheets.today_date_str()
 
 
-async def start(bot, date_str: str, admin_id, force: bool = False) -> str:
+async def start(bot, date_str: str, admin_id, force: bool = False, caption: str = "", photo_ids: list = None) -> str:
     """Запускает рассылку в фоне. Возвращает: "started" | "running" |
     "disabled" (рассылки выключены в настройках) | "already_sent" (на эту дату
     уже рассылали — при автозапуске повторно не шлём)."""
@@ -112,7 +137,7 @@ async def start(bot, date_str: str, admin_id, force: bool = False) -> str:
         if log:
             return "already_sent"
     state.update(running=True, date=date_str, total=0, sent=0, failed=0, blocked=0, skipped_off=0)
-    task = asyncio.ensure_future(run(bot, date_str, admin_id))
+    task = asyncio.ensure_future(run(bot, date_str, admin_id, caption, photo_ids))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return "started"

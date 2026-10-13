@@ -5245,23 +5245,10 @@
     }));
     body.appendChild(rows);
 
-    var photoCard = el("div", "card menu-draft-summary");
-    photoCard.appendChild(el("div", "profile-section-title", "Текст и фото рассылки клиентам"));
-    if (d.photo_urls.length) {
-      var thumbRow = el("div", "menu-draft-photo-row");
-      d.photo_urls.forEach(function (u) {
-        var img = el("img", "menu-draft-photo-thumb");
-        img.alt = "";
-        setPhotoSrc(img, u);
-        thumbRow.appendChild(img);
-      });
-      photoCard.appendChild(thumbRow);
-    } else {
-      photoCard.appendChild(el("div", "empty-note", "Фото пока не загружено"));
-    }
-    photoCard.appendChild(el("div", "menu-draft-caption", escapeHtml(d.caption || "Текста пока нет")));
-    photoCard.addEventListener("click", function () { wizardStep(renderMenuDraftPhotoStep); });
-    body.appendChild(photoCard);
+    var hasBc = d.photo_urls.length || (d.caption || "").trim();
+    var bcRows = el("div", "card profile-nav-list");
+    bcRows.appendChild(buildProfileRow(ICON_BELL, "Текст и фото рассылки" + (hasBc ? " — задано" : " — стандартная"), function () { wizardStep(renderMenuDraftPhotoStep); }));
+    body.appendChild(bcRows);
 
     var previewBtn = el("button", "btn-ghost", "Предпросмотр как у клиента");
     previewBtn.addEventListener("click", function () { wizardStep(renderMenuDraftPreviewStep); });
@@ -5644,7 +5631,7 @@
     body.appendChild(attachBtn);
 
     var captionField = el("div", "field");
-    captionField.innerHTML = '<label>Текст объявления</label><textarea id="menu-draft-caption" rows="4"></textarea>';
+    captionField.innerHTML = '<label>Текст рассылки</label><textarea id="menu-draft-caption" rows="6" placeholder="Если пусто и без фото — отправится стандартное сообщение. {name} подставит имя клиента"></textarea>';
     body.appendChild(captionField);
     var captionInput = captionField.querySelector("textarea");
     captionInput.value = menuDraft.caption || "";
