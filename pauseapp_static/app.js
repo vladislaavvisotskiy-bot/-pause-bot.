@@ -5,6 +5,15 @@
   if (tg) {
     tg.ready();
     tg.expand();
+    // Полный экран (Bot API 8.0+) — только на телефонах; на компьютере
+    // Telegram открывает обычное окно. Свайп вниз не закрывает приложение.
+    try {
+      var mobile = tg.platform === "ios" || tg.platform === "android";
+      if (mobile && tg.isVersionAtLeast && tg.isVersionAtLeast("8.0")) {
+        tg.requestFullscreen();
+        if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+      }
+    } catch (e) {}
     // Раньше здесь стоял тёмно-зелёный (#0D332B) — на макете системная
     // шапка Telegram НЕ подкрашена, она обычная светлая, поэтому теперь
     // отдаём Telegram тот же кремовый тон, что и весь остальной фон, а не
