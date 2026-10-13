@@ -618,7 +618,7 @@
       recordRouteStart();
       if (!done) callStep("/api/route/going", "going", "Выехал", btn, t1, t2, numEl);
     }));
-    wrap.appendChild(stepBtn(2, "Подъезжаю", "Клиентам придёт: курьер подъезжает", "arriving", function (btn, t1, t2, numEl, done) {
+    wrap.appendChild(stepBtn(2, "Подъезжаю", "Клиентам придёт: курьер будет через 5 минут", "arriving", function (btn, t1, t2, numEl, done) {
       if (!done) callStep("/api/route/arriving", "arriving", "Подъезжаю", btn, t1, t2, numEl);
     }));
     var doneBtn = document.createElement("button");

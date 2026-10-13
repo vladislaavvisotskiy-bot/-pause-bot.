@@ -101,7 +101,7 @@
     ["Подъезжаю", "Yaqinlashyapman"],
     ["Выехал", "Yo'lga chiqdi"],
     ["Клиентам придёт: курьер выехал", "Mijozlarga xabar: kuryer yo'lga chiqdi", "x"],
-    ["Клиентам придёт: курьер подъезжает", "Mijozlarga xabar: kuryer yaqinlashmoqda", "x"],
+    ["Клиентам придёт: курьер будет через 5 минут", "Mijozlarga xabar: kuryer 5 daqiqadan keyin yetib keladi", "x"],
     ["Заказ передан клиенту", "Buyurtma mijozga topshirildi", "x"],
     ["Отправляем…", "Yuborilmoqda…", "x"],
     ["Не получилось, нажмите ещё раз", "Bo'lmadi, yana bir marta bosing", "x"],
