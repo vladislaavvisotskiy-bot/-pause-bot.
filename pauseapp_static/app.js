@@ -5388,7 +5388,8 @@
   // Новый сет: пишется в таблицу сетов (клиентам виден только в выбранном
   // меню), себестоимость нужна для расчёта прибыли в Финансах.
   // Правка существующего сета: те же поля, что при добавлении, уже заполненные.
-  // Техническое название менять нельзя — на него завязаны заказы и отчёты.
+  // Техническое название можно менять (сервер переименует его и в прошлых
+  // заказах); у вариантов одной группы (с компотом/без) — нельзя.
   function renderMenuEditSetStep(body, c) {
     wizardPhaseEl.innerHTML = "";
     body.appendChild(el("h2", "wizard-title", "Изменить сет"));
@@ -5404,7 +5405,7 @@
       card.appendChild(f);
       return inp;
     }
-    field("Техническое название", "text", c.technical_names.join(" / "), true);
+    var techIn = field("Техническое название", "text", c.technical_names.join(" / "), c.is_group);
     var nameIn = field("Название для клиентов", "text", c.display_name);
     var rows = c.technical_names.map(function (tn) {
       var price = c.prices[tn] || 0;
@@ -5434,12 +5435,17 @@
       }).then(function (d) {
         haptic("success");
         menuDraft.catalog = d.catalog;
+        if (payload.technical_name && _menuSetsSelected) {
+          _menuSetsSelected = _menuSetsSelected.map(function (k) { return k === c.key ? payload.technical_name : k; });
+          menuDraft.selected_keys = menuDraft.selected_keys.map(function (k) { return k === c.key ? payload.technical_name : k; });
+        }
         toast("Сохранено");
         wizardBack();
         wizardReplace(renderMenuDraftSetsStep);
       }).catch(function (err) {
         saveBtn.disabled = false;
-        toast(err.message === "bad_number" ? "Проверьте цену и себестоимость" : ("Не удалось сохранить: " + err.message));
+        var m = { bad_number: "Проверьте цену и себестоимость", exists: "Сет с таким названием уже есть", bad_name: "Название не должно содержать запятую", in_group: "Название сета из пары вариантов менять нельзя" };
+        toast(m[err.message] || ("Не удалось сохранить: " + err.message));
       });
     }
     saveBtn.addEventListener("click", function () {
@@ -5452,9 +5458,9 @@
         variants.push({ technical: rows[i].tn, price: p, cost: cs });
       }
       var payload = { display_name: nameIn.value.trim(), variants: variants };
-      if (priceChanged) {
-        showConfirm("Суммы заказов считаются по текущей цене сета, поэтому новая цена изменит и суммы прошлых заказов с этим сетом. Сохранить?", "Сохранить", function () { doSave(payload); });
-      } else doSave(payload);
+      var newTech = techIn.value.trim();
+      if (!c.is_group && newTech && newTech !== c.key) payload.technical_name = newTech;
+      doSave(payload);
     });
     body.appendChild(saveBtn);
   }

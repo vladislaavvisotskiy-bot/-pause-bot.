@@ -440,7 +440,8 @@ def _row_amount(row: list, prices: dict) -> int:
         qty = int(row[config.O_QTY - 1].strip() or 0) if len(row) >= config.O_QTY else 0
     except ValueError:
         qty = 0
-    amount = qty * prices.get(set_name, 0)
+    order_date = row[config.O_DATE - 1] if len(row) >= config.O_DATE else ""
+    amount = qty * _price_for(set_name, order_date, prices)
     if not amount and len(row) >= config.O_SUM:
         try:
             amount = int(row[config.O_SUM - 1].replace(" ", "").replace(",", "") or 0)
@@ -614,7 +615,7 @@ def _order_amount(o: dict, prices: dict) -> int:
         qty = int(str(o["qty"]).strip() or 0)
     except ValueError:
         qty = 0
-    amount = qty * prices.get(o["set"], 0)
+    amount = qty * _price_for(o["set"], o.get("date", ""), prices)
     if not amount and o.get("sum"):
         try:
             amount = int(str(o["sum"]).replace(" ", "").replace(",", "") or 0)
@@ -1267,7 +1268,7 @@ def get_client_order_groups(client_id, limit=10, rows=None) -> list:
                 q = int(str(r["qty"]).strip() or 0)
             except ValueError:
                 q = 0
-            amt = q * prices.get(r["set"], 0)
+            amt = q * _price_for(r["set"], r.get("date", ""), prices)
             if not amt and r.get("sum"):
                 try:
                     amt = int(str(r["sum"]).replace(" ", "").replace(",", "") or 0)
@@ -2064,6 +2065,70 @@ def add_catalog_set(name: str, display_name: str, price: int, cost: int, has_gar
     return target
 
 
+_PH_HEADER = ["Сет", "Цена", "Действует с"]
+_price_hist_cache = {"v": None, "ts": 0.0}
+_PRICE_EPOCH = "01.01.2000"
+
+
+def get_price_history() -> dict:
+    """{сет: [(дата, цена), ...]} по возрастанию даты — цена, действовавшая с
+    этой даты (по дате доставки заказа). Нет записей = только текущая цена."""
+    now = time.time()
+    if _price_hist_cache["v"] is not None and now - _price_hist_cache["ts"] < 60:
+        return _price_hist_cache["v"]
+    ws = _ws_or_create(config.SHEET_PRICE_HISTORY, _PH_HEADER)
+    out = {}
+    for r in ws.get_all_values()[1:]:
+        if len(r) < 3 or not r[0].strip():
+            continue
+        try:
+            d = dt.datetime.strptime(r[2].strip(), "%d.%m.%Y").date()
+            p = int(str(r[1]).replace(" ", "").replace(",", ""))
+        except ValueError:
+            continue
+        out.setdefault(r[0].strip(), []).append((d, p))
+    for v in out.values():
+        v.sort(key=lambda x: x[0])
+    _price_hist_cache["v"] = out
+    _price_hist_cache["ts"] = now
+    return out
+
+
+def _price_for(set_name: str, date_str: str, prices: dict) -> int:
+    """Цена сета на дату заказа: из истории изменений, иначе текущая."""
+    try:
+        hist = get_price_history().get((set_name or "").strip())
+    except Exception:
+        hist = None
+    if hist:
+        try:
+            day = dt.datetime.strptime((date_str or "").strip(), "%d.%m.%Y").date()
+        except ValueError:
+            day = None
+        if day is not None:
+            price = None
+            for eff, p in hist:
+                if eff <= day:
+                    price = p
+            if price is not None:
+                return price
+    return prices.get(set_name, 0)
+
+
+def _record_price_change(name: str, old_price: int, new_price: int):
+    """Фиксирует смену цены: новая действует с сегодняшней даты, всё, что
+    раньше, остаётся по прежней цене."""
+    ws = _ws_or_create(config.SHEET_PRICE_HISTORY, _PH_HEADER)
+    rows = ws.get_all_values()
+    has = any(len(r) > 0 and r[0].strip() == name for r in rows[1:])
+    new_rows = []
+    if not has:
+        new_rows.append([name, old_price, _PRICE_EPOCH])
+    new_rows.append([name, new_price, _now().strftime("%d.%m.%Y")])
+    ws.append_rows(new_rows, value_input_option="RAW")
+    _price_hist_cache["v"] = None
+
+
 def update_set_price_cost(technical_name: str, price: int, cost: int):
     """Меняет цену (G) и валовую прибыль (P = цена − себестоимость) у
     существующего сета. Техническое имя не меняется (на него завязаны заказы)."""
@@ -2073,6 +2138,12 @@ def update_set_price_cost(technical_name: str, price: int, cost: int):
     for i, row in enumerate(rows):
         if row and row[0].strip().lower() == name:
             r = 2 + i
+            try:
+                old_price = int(str(row[1]).replace(" ", "").replace(",", "")) if len(row) > 1 else 0
+            except ValueError:
+                old_price = 0
+            if old_price and old_price != int(price):
+                _record_price_change(row[0].strip(), old_price, int(price))
             ws.update_cells([
                 gspread.Cell(r, 7, int(price)),
                 gspread.Cell(r, config.REF_SET_MARGIN_COL, int(price) - int(cost)),
@@ -2080,6 +2151,61 @@ def update_set_price_cost(technical_name: str, price: int, cost: int):
             _invalidate_ref_set_table_cache()
             return
     raise ValueError("not_found")
+
+
+def rename_catalog_set(old: str, new: str):
+    """Переименовывает техническое название сета везде, где оно хранится:
+    таблица сетов, ВСЕ прошлые заказы, избранное, черновик/каталог меню, история цен
+    и т.п. — чтобы старые заказы остались привязаны к сету (и к его цене/прибыли).
+    Название для клиентов сохраняется как было. ValueError: "exists",
+    "not_found", "in_group" (сет входит в пару вариантов — переименовывать нельзя)."""
+    old, new = old.strip(), new.strip()
+    if old == new:
+        return
+    if old in config.SET_VARIANT_GROUP or old in config.SET_VARIANTS:
+        raise ValueError("in_group")
+    ref = _ws(config.SHEET_REFERENCE)
+    rows = ref.get(config.REF_SET_TABLE_RANGE)
+    target = None
+    for i, row in enumerate(rows):
+        n = row[0].strip().lower() if row and row[0] else ""
+        if n == new.lower() and n != old.lower():
+            raise ValueError("exists")
+        if n == old.lower():
+            target = 2 + i
+    if target is None:
+        raise ValueError("not_found")
+    keep_display = display_set_name(old)
+    cells = [gspread.Cell(target, 6, new),
+             gspread.Cell(target, config.REF_SET_DISPLAY_NAME_COL, keep_display if keep_display != new else "")]
+    ref.update_cells(cells, value_input_option="RAW")
+    # списки "сеты сегодня"/"черновик" — имена через запятую
+    for cell in (config.REF_TODAY_SETS_CELL, config.REF_DRAFT_SETS_CELL):
+        raw = ref.acell(cell).value or ""
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        if old in parts:
+            ref.update_acell(cell, ", ".join(new if p == old else p for p in parts))
+    _invalidate_ref_set_table_cache()
+
+    def _rename_col(sheet_name, col, header=None):
+        try:
+            ws = _ws_or_create(sheet_name, header) if header else _ws(sheet_name)
+        except Exception:
+            return
+        vals = ws.col_values(col)
+        upd = [gspread.Cell(i + 1, col, new) for i, v in enumerate(vals) if i and v.strip() == old]
+        for k in range(0, len(upd), 500):
+            ws.update_cells(upd[k:k + 500], value_input_option="RAW")
+
+    _rename_col(config.SHEET_ORDERS, config.O_SET)
+    _rename_col(config.SHEET_FAVORITES, config.FAV_SET_KEY)
+    _rename_col(config.SHEET_PRICE_HISTORY, 1, _PH_HEADER)
+    _rename_col(config.SHEET_DRAFT_CARDS, 1, _DC_HEADER)
+    _rename_col(config.SHEET_MENU_ARCHIVE, 2, _MA_HEADER)
+    _rename_col(config.SHEET_SET_STORIES, 1, _SS_HEADER)
+    _price_hist_cache["v"] = None
+    _cache["set_stories"] = None
+    _invalidate_orders_raw_cache()
 
 
 def get_sets() -> list:

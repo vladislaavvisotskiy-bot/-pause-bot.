@@ -2203,13 +2203,24 @@ async def api_ops_menu_edit_set(request: web.Request):
         if not tech or price <= 0 or cost < 0:
             return web.json_response({"error": "bad_number"}, status=400)
         clean.append((tech, price, cost))
+    new_tech = (body.get("technical_name") or "").strip()
+    key = set_key
+    if new_tech and new_tech != set_key:
+        if "," in new_tech or "|" in new_tech or len(new_tech) > 60:
+            return web.json_response({"error": "bad_name"}, status=400)
+        try:
+            await _retry_sheets(sheets.rename_catalog_set, set_key, new_tech)
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=409)
+        key = new_tech
+        clean = [(new_tech if t == set_key else t, p, c) for t, p, c in clean]
     for tech, price, cost in clean:
         try:
             await _retry_sheets(sheets.update_set_price_cost, tech, price, cost)
         except ValueError:
             return web.json_response({"error": "not_found"}, status=404)
-    await _retry_sheets(sheets.set_set_display_name, set_key, (body.get("display_name") or "").strip())
-    return web.json_response({"ok": True})
+    await _retry_sheets(sheets.set_set_display_name, key, (body.get("display_name") or "").strip())
+    return web.json_response({"ok": True, "key": key})
 
 
 async def api_ops_menu_add_set(request: web.Request):
