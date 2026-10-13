@@ -1898,16 +1898,7 @@
               var edit = el("button", "btn-text", "Изменить");
               edit.addEventListener("click", function () { editShiftPayment(courierTgId, d, load); });
               var del = el("button", "btn-text", "Удалить");
-              del.addEventListener("click", function () {
-                confirmSheet("Удалить оплату?", d.date + ": " + fmtSum(d.amount) + (d.from_cash ? ". Эта сумма вернётся в «Наличные у курьера»." : "."), [
-                  { label: "Да, удалить", className: "btn-primary", onClick: function () {
-                    api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/shift-delete", { method: "POST", body: { date: d.date } })
-                      .then(function () { haptic("success"); toast("Оплата удалена"); load(); })
-                      .catch(function (err) { toast("Не удалось удалить: " + err.message); });
-                  } },
-                  { label: "Отмена", className: "btn-ghost" },
-                ]);
-              });
+              del.addEventListener("click", function () { deleteShiftPayment(courierTgId, d, load); });
               acts.appendChild(edit); acts.appendChild(del);
               row.appendChild(acts);
             }
@@ -1921,6 +1912,17 @@
       }
       load();
     });
+  }
+
+  function deleteShiftPayment(courierTgId, d, onDone) {
+    confirmSheet("Удалить оплату?", d.date + ": " + fmtSum(d.amount) + (d.from_cash ? ". Эта сумма вернётся в «Наличные у курьера»." : "."), [
+      { label: "Да, удалить", className: "btn-primary", onClick: function () {
+        api("/api/couriers/manage/" + encodeURIComponent(courierTgId) + "/shift-delete", { method: "POST", body: { date: d.date } })
+          .then(function () { haptic("success"); toast("Оплата удалена"); onDone(); })
+          .catch(function (err) { toast("Не удалось удалить: " + err.message); });
+      } },
+      { label: "Отмена", className: "btn-ghost" },
+    ]);
   }
 
   function editShiftPayment(courierTgId, d, onDone) {
@@ -2387,6 +2389,21 @@
         });
         row.appendChild(payBtn);
         couriersList.appendChild(row);
+        if (c.shift_pay > 0) {
+          var dRu = isoToRu(state.logisticsDateISO);
+          var paidRow = el("div", "checkout-attach-row");
+          paidRow.appendChild(el("span", "logistics-field-suffix", "Оплачено " + fmtSum(c.shift_pay)));
+          var editBtn = el("button", "btn-text", "Изменить");
+          editBtn.addEventListener("click", function () {
+            editShiftPayment(c.tg_id, { date: dRu, amount: c.shift_pay, from_cash: c.from_cash }, function () { loadForDate(state.logisticsDateISO); });
+          });
+          var delBtn = el("button", "btn-text", "Удалить");
+          delBtn.addEventListener("click", function () {
+            deleteShiftPayment(c.tg_id, { date: dRu, amount: c.shift_pay, from_cash: c.from_cash }, function () { loadForDate(state.logisticsDateISO); });
+          });
+          paidRow.appendChild(editBtn); paidRow.appendChild(delBtn);
+          couriersList.appendChild(paidRow);
+        }
       });
     }
 

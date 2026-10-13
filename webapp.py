@@ -420,7 +420,8 @@ async def api_logistics_get(request: web.Request):
     return web.json_response({
         "date": date_str,
         "couriers": [
-            {"tg_id": c["tg_id"], "name": c["name"], "shift_pay": shift_pay.get(c["tg_id"], 0)}
+            {"tg_id": c["tg_id"], "name": c["name"], "shift_pay": shift_pay.get(c["tg_id"], 0),
+             "from_cash": bool((sheets.get_courier_shift_payment(c["tg_id"], date_str) or {}).get("from_cash"))}
             for c in couriers
             if not c.get("archived") or shift_pay.get(c["tg_id"], 0) > 0
         ],
