@@ -2168,6 +2168,13 @@ async def api_ops_menu_draft(request: web.Request):
     photo_ids, caption = await _retry_sheets(sheets.get_draft_menu)
     selected_keys = await _retry_sheets(sheets.get_draft_sets_raw)
     catalog = await _catalog_overview()
+    # Фото и состав в черновике — только введённые для ЭТОГО меню; данные
+    # прошлого меню из справочника сюда не подтягиваем.
+    draft_cards = await _retry_sheets(sheets.get_draft_cards)
+    for c in catalog:
+        dc = draft_cards.get(c["key"]) or {}
+        c["photo_url"] = _resolve_photo_url(dc.get("photo", ""))
+        c["description"] = dc.get("description", "")
     catalog_by_key = {c["key"]: c for c in catalog}
 
     garnish = {}
@@ -2209,6 +2216,99 @@ async def api_ops_menu_draft_sets(request: web.Request):
         return web.json_response({"error": "bad_sets"}, status=400)
     clean = [str(s).strip() for s in sets if str(s).strip()]
     await _retry_sheets(sheets.set_draft_sets, clean)
+    await _retry_sheets(sheets.ensure_draft_cards, clean)
+    return web.json_response({"ok": True})
+
+
+async def api_ops_menu_draft_card_photo(request: web.Request):
+    """Фото карточки сета в ЧЕРНОВИКЕ (multipart "photo") — как
+    api_ops_menu_set_photo, но пишет в черновик, а не в справочник."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_key = request.match_info.get("set_key", "")
+    if not set_key:
+        return web.json_response({"error": "set_required"}, status=400)
+    if not config.MEDIA_CHAT_ID:
+        return web.json_response({"error": "media_chat_not_configured"}, status=503)
+    bot = request.app.get("bot")
+    if not bot:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "photo":
+        return web.json_response({"error": "photo_required"}, status=400)
+    data = await field.read(decode=False)
+    if not data:
+        return web.json_response({"error": "photo_required"}, status=400)
+    if len(data) > MAX_SCREENSHOT_BYTES:
+        return web.json_response({"error": "too_large"}, status=400)
+    try:
+        msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=field.filename or "set.jpg"))
+    except Exception:
+        logger.exception("PAUSE App: не удалось загрузить фото карточки черновика (set=%s)", set_key)
+        return web.json_response({"error": "upload_failed"}, status=502)
+    file_id = msg.photo[-1].file_id
+    await _retry_sheets(sheets.set_draft_card, set_key, file_id, None)
+    return web.json_response({"ok": True, "photo_url": _resolve_photo_url(file_id)})
+
+
+async def api_ops_menu_draft_card_description(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    set_key = request.match_info.get("set_key", "")
+    if not set_key:
+        return web.json_response({"error": "set_required"}, status=400)
+    body = await request.json()
+    description = (body.get("description") or "").strip()
+    await _retry_sheets(sheets.set_draft_card, set_key, None, description)
+    return web.json_response({"ok": True})
+
+
+async def api_ops_menu_archive(request: web.Request):
+    """Каталог — карточки ранее опубликованных меню."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    archive = await _retry_sheets(sheets.get_menu_archive)
+    catalog = {c["key"]: c for c in await _catalog_overview()}
+    items = []
+    for a in archive:
+        c = catalog.get(a["key"])
+        if not c:
+            continue
+        items.append({
+            "id": a["id"], "key": a["key"], "display_name": c["display_name"],
+            "photo_url": _resolve_photo_url(a["photo"]), "description": a["description"],
+            "garnishes": a["garnishes"], "date": a["date"],
+            "prices": [c["prices"][t] for t in c["technical_names"]] if c["is_group"] else [c["prices"][c["key"]]],
+            "has_garnish": c["has_garnish"],
+        })
+    return web.json_response({"items": items})
+
+
+async def api_ops_menu_archive_use(request: web.Request):
+    """Добавляет карточку из каталога в черновик меню (без публикации):
+    сет попадает в выбранные, фото/состав/гарниры копируются в черновик."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    cid = request.match_info.get("card_id", "")
+    archive = await _retry_sheets(sheets.get_menu_archive)
+    card = next((a for a in archive if a["id"] == cid), None)
+    if not card:
+        return web.json_response({"error": "not_found"}, status=404)
+    selected = await _retry_sheets(sheets.get_draft_sets_raw)
+    if card["key"] not in selected:
+        selected = selected + [card["key"]]
+        await _retry_sheets(sheets.set_draft_sets, selected)
+    await _retry_sheets(sheets.set_draft_card, card["key"], card["photo"], card["description"])
+    if card["garnishes"]:
+        await _retry_sheets(sheets.set_draft_garnishes_for_set, card["key"], card["garnishes"])
+    return web.json_response({"ok": True, "key": card["key"]})
+
+
+async def api_ops_menu_archive_delete(request: web.Request):
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    await _retry_sheets(sheets.delete_menu_archive, request.match_info.get("card_id", ""))
     return web.json_response({"ok": True})
 
 
@@ -2650,6 +2750,11 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/menu/draft/garnish", api_ops_menu_draft_garnish)
     app.router.add_post("/api/ops/menu/draft/photo", api_ops_menu_draft_photo)
     app.router.add_post("/api/ops/menu/draft/publish", api_ops_menu_draft_publish)
+    app.router.add_post("/api/ops/menu/draft/card/{set_key}/photo", api_ops_menu_draft_card_photo)
+    app.router.add_post("/api/ops/menu/draft/card/{set_key}/description", api_ops_menu_draft_card_description)
+    app.router.add_get("/api/ops/menu/archive", api_ops_menu_archive)
+    app.router.add_post("/api/ops/menu/archive/{card_id}/use", api_ops_menu_archive_use)
+    app.router.add_post("/api/ops/menu/archive/{card_id}/delete", api_ops_menu_archive_delete)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_get("/api/feed", api_feed_list)
     app.router.add_post("/api/feed", api_feed_publish)

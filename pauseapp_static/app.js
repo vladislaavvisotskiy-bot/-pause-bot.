@@ -4883,18 +4883,18 @@
           menuRows.appendChild(buildProfileRow(ICON_EDIT, "Меню дня", function () {
             wizardStep(function (b) { openMenuDraftWizard(b); });
           }));
-          menuRows.appendChild(buildProfileRow(ICON_CAMERA, "Карточки сетов", function () {
+          menuRows.appendChild(buildProfileRow(ICON_CAMERA, "Каталог", function () {
             wizardStep(function (b) {
-              opsStepHeader(b, "Карточки сетов");
+              opsStepHeader(b, "Каталог");
               var sub = el("div");
               sub.appendChild(el("div", "skeleton-block"));
               b.appendChild(sub);
-              loadMenuCatalogList(sub);
+              loadMenuArchive(sub);
             });
           }));
-          menuRows.appendChild(buildProfileRow(ICON_TAG, "Названия для покупателей", function () {
+          menuRows.appendChild(buildProfileRow(ICON_TAG, "Название сетов", function () {
             wizardStep(function (b) {
-              opsStepHeader(b, "Названия для покупателей");
+              opsStepHeader(b, "Название сетов");
               var sub = el("div");
               sub.appendChild(el("div", "skeleton-block"));
               b.appendChild(sub);
@@ -4983,41 +4983,58 @@
   // от черновика, постоянные catalog-атрибуты (см. api_ops_menu_catalog).
   // -------------------------------------------------------------------
 
-  // Общий блок-подсказка по формату фото + живое демо того же самого
-  // переключателя "свёрнуто/развёрнуто", что видит клиент на карточке
-  // сета (.menu-set-card/.menu-set-thumb — те же классы, тот же CSS, не
-  // имитация). getPhotoUrl — функция, чтобы демо подхватывало СВЕЖЕЕ фото
-  // сразу после выбора файла, до какой-либо отправки на сервер.
-  function buildPhotoFormatDemo(getPhotoUrl) {
-    var wrap = el("div", "photo-format-demo");
-    wrap.appendChild(el("div", "field-hint",
-      "Совет по фото: альбомная ориентация, примерно 4:3 (например 1600×1200), блюдо по центру кадра — " +
-      "тогда оно одинаково хорошо смотрится и маленькой квадратной миниатюрой в списке, и широким баннером, " +
-      "когда карточку разворачивают. Нажмите карточку ниже, чтобы увидеть оба варианта."));
-    var expanded = false;
-    var demoCard = el("div", "card menu-set-card");
-    function render() {
-      demoCard.innerHTML = "";
-      demoCard.classList.toggle("expanded", expanded);
-      var url = getPhotoUrl();
-      if (url) {
-        var img = el("img", "menu-set-thumb");
-        img.alt = "";
-        if (/^blob:|^https?:\/\//.test(url)) img.src = url; else setPhotoSrc(img, url);
-        demoCard.appendChild(img);
-      } else {
-        demoCard.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
-      }
-      var body = el("div", "menu-set-card-body");
-      body.appendChild(el("div", "menu-set-card-name", "Так будет выглядеть карточка"));
-      body.appendChild(el("div", "menu-set-card-note",
-        expanded ? "Развёрнуто (широкий формат 16:9) — нажмите, чтобы свернуть" : "Свёрнуто (квадрат) — нажмите, чтобы развернуть"));
-      demoCard.appendChild(body);
+  // Карточка сета для админки — та же широкая карточка, что видит клиент
+  // (.menu-wide-card: фото с названием и ценой, по тапу раскрывается состав),
+  // только без выбора и заказа. item: {display_name, price_text, photo_url,
+  // description: [строки], garnish_list: [..]}.
+  function buildAdminWideCard(item, open) {
+    var card = el("div", "card menu-set-card menu-wide-card admin-wide-card" + (open ? " expanded" : ""));
+    var photo = el("div", "menu-wide-photo");
+    if (item.photo_url) {
+      var img = el("img");
+      img.alt = "";
+      img.addEventListener("error", function () { img.remove(); photo.classList.add("empty"); photo.innerHTML = ICON_LEAF; });
+      if (/^blob:|^https?:\/\//.test(item.photo_url)) img.src = item.photo_url; else setPhotoSrc(img, item.photo_url);
+      photo.appendChild(img);
+    } else {
+      photo.classList.add("empty");
+      photo.innerHTML = ICON_LEAF;
     }
-    demoCard.addEventListener("click", function () { expanded = !expanded; render(); });
-    render();
-    wrap.appendChild(demoCard);
-    return wrap;
+    var cap = el("div", "menu-wide-caption");
+    cap.appendChild(el("div", "menu-wide-name", escapeHtml(item.display_name)));
+    if (item.price_text) cap.appendChild(el("div", "menu-wide-price", escapeHtml(item.price_text)));
+    photo.appendChild(cap);
+    photo.appendChild(el("div", "menu-wide-chev menu-wide-chev-photo", ICON_CHEVRON));
+    card.appendChild(photo);
+
+    var details = el("div", "menu-wide-details");
+    var inner = el("div", "menu-wide-inner");
+    if (item.description && item.description.length) {
+      var list = el("ul", "menu-set-card-desc");
+      item.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
+      inner.appendChild(list);
+    }
+    if (item.garnish_list && item.garnish_list.length) {
+      var gr = el("div", "menu-set-chip-row");
+      item.garnish_list.forEach(function (g) { gr.appendChild(el("span", "menu-set-chip", escapeHtml(g))); });
+      inner.appendChild(gr);
+    }
+    details.appendChild(inner);
+    card.appendChild(details);
+    photo.addEventListener("click", function () { haptic("select"); card.classList.toggle("expanded"); });
+    return card;
+  }
+
+  function adminSetPriceText(c) {
+    if (c.is_group) {
+      var min = Math.min.apply(null, c.technical_names.map(function (t) { return c.prices[t]; }));
+      return t("menu.from", { sum: fmtSumComma(min) });
+    }
+    return fmtSumComma(c.prices[c.key]);
+  }
+
+  function adminDescLines(text) {
+    return (text || "").split("\n").filter(function (l) { return l.trim(); });
   }
 
   // Гарниры — чипы: уже добавленные (можно убрать тапом), подсказки из
@@ -5113,16 +5130,18 @@
     var d = menuDraft;
 
     var rows = el("div", "card profile-nav-list");
-    var setsLabel = d.selected_keys.length ? (d.selected_keys.length + " выбрано") : "весь каталог";
+    var setsLabel = d.selected_keys.length ? (d.selected_keys.length + " выбрано") : "не выбраны";
     rows.appendChild(buildProfileRow(ICON_ORDERS, "Сеты сегодня — " + setsLabel, function () { wizardStep(renderMenuDraftSetsStep); }));
     var garnishCount = Object.keys(d.garnish).length;
     rows.appendChild(buildProfileRow(ICON_SLIDERS, "Гарниры" + (garnishCount ? " — " + garnishCount : ""), function () { wizardStep(renderMenuDraftGarnishStep); }));
-    var dishKeys = d.selected_keys.length ? d.selected_keys : d.catalog.map(function (c) { return c.key; });
-    var missingDishes = dishKeys.filter(function (key) {
+    var missingDishes = d.selected_keys.filter(function (key) {
       var c = _menuDraftCatalogItem(key);
       return !c || !c.photo_url || !c.description;
     }).length;
-    rows.appendChild(buildProfileRow(ICON_CAMERA, "Фото и описание блюд" + (missingDishes ? " — не хватает " + missingDishes : ""), function () { wizardStep(renderMenuDraftDishesStep); }));
+    rows.appendChild(buildProfileRow(ICON_CAMERA, "Фото и описание блюд" + (d.selected_keys.length ? (missingDishes ? " — не хватает " + missingDishes : " — готово") : ""), function () {
+      if (!d.selected_keys.length) { toast("Сначала выберите сеты на сегодня"); return; }
+      wizardStep(renderMenuDraftDishesStep);
+    }));
     body.appendChild(rows);
 
     var photoCard = el("div", "card menu-draft-summary");
@@ -5191,7 +5210,9 @@
     var publishBtn = el("button", "btn-primary wizard-footer-btn", "Опубликовать меню");
     publishBtn.addEventListener("click", function () {
       if (!/^\d{2}\.\d{2}\.\d{4}$/.test(selectedDate)) { toast("Укажите дату в формате ДД.ММ.ГГГГ"); return; }
-      showConfirm("Опубликовать меню на " + selectedDate + "? Клиенты сразу увидят новое меню.", "Опубликовать", function () {
+      if (!d.selected_keys.length) { toast("Выберите сеты на сегодня"); return; }
+      var warn = missingDishes ? " У " + missingDishes + " сет(а) нет фото или описания." : "";
+      showConfirm("Опубликовать меню на " + selectedDate + "? Клиенты сразу увидят новое меню." + warn, "Опубликовать", function () {
         publishBtn.disabled = true;
         api("/api/ops/menu/draft/publish", { method: "POST", body: { date: selectedDate } }).then(function (res) {
           haptic("success");
@@ -5211,10 +5232,6 @@
     wizardPhaseEl.innerHTML = "";
     if (_menuSetsSelected === null) _menuSetsSelected = menuDraft.selected_keys.slice();
     body.appendChild(el("h2", "wizard-title", "Сеты сегодня"));
-    body.appendChild(el("p", "center-note",
-      "Отметьте, что сегодня в меню. Если не отметить ни одного — клиенты увидят весь каталог целиком " +
-      "(так безопаснее, чем оставить меню вовсе без кнопок заказа)."));
-
     var listCard = el("div", "card");
     menuDraft.catalog.forEach(function (c) {
       var isSel = _menuSetsSelected.indexOf(c.key) !== -1;
@@ -5265,9 +5282,7 @@
       return c.has_garnish && menuDraft.selected_keys.indexOf(c.key) !== -1;
     });
     if (!garnishSets.length) {
-      body.appendChild(el("div", "empty-note",
-        "Среди выбранных сегодня сетов нет ни одного с гарниром — сначала отметьте сеты на предыдущем шаге, " +
-        "или включите гарнир сету в \"Карточки сетов\"."));
+      body.appendChild(el("div", "empty-note", "Среди выбранных сегодня сетов нет сетов с гарниром."));
       return;
     }
 
@@ -5306,7 +5321,7 @@
   // Найти элемент каталога по ключу сета — тот же массив объектов, что
   // отдаёт /api/ops/menu/draft (menuDraft.catalog), используется и для
   // карточек предпросмотра, и для шага "Фото и описание блюд": один и
-  // тот же объект, поэтому правка фото/описания в renderMenuCatalogDetail
+  // тот же объект, поэтому правка фото/описания в renderMenuDraftCardEditor
   // (ниже) сразу видна и в предпросмотре, без повторной загрузки черновика.
   function _menuDraftCatalogItem(key) {
     for (var i = 0; i < menuDraft.catalog.length; i++) {
@@ -5322,13 +5337,9 @@
   function renderMenuDraftDishesStep(body) {
     wizardPhaseEl.innerHTML = "";
     body.appendChild(el("h2", "wizard-title", "Фото и описание блюд"));
-    body.appendChild(el("p", "center-note",
-      "Фото и состав для каждого сегодняшнего блюда — именно это клиент видит на карточке в приложении. " +
-      "Не путать с «Текстом и фото рассылки» на предыдущем экране — это текст объявления в чате бота."));
-
-    var keys = menuDraft.selected_keys.length ? menuDraft.selected_keys : menuDraft.catalog.map(function (c) { return c.key; });
+    var keys = menuDraft.selected_keys;
     if (!keys.length) {
-      body.appendChild(el("div", "empty-note", "Сначала отметьте сеты на сегодня."));
+      body.appendChild(el("div", "empty-note", "Сначала выберите сеты на сегодня."));
       return;
     }
     var listCard = el("div", "card profile-nav-list");
@@ -5338,9 +5349,9 @@
       var missing = [];
       if (!c.photo_url) missing.push("нет фото");
       if (!c.description) missing.push("нет описания");
-      var label = c.display_name + (missing.length ? " — ⚠ " + missing.join(", ") : " — ✓ готово");
+      var label = c.display_name + (missing.length ? " — " + missing.join(", ") : " — готово");
       listCard.appendChild(buildProfileRow(ICON_CAMERA, label, function () {
-        wizardStep(function (b) { renderMenuCatalogDetail(b, c, menuDraft.garnish_reference); });
+        wizardStep(function (b) { renderMenuDraftCardEditor(b, c); });
       }));
     });
     body.appendChild(listCard);
@@ -5349,9 +5360,6 @@
   function renderMenuDraftPhotoStep(body) {
     wizardPhaseEl.innerHTML = "";
     body.appendChild(el("h2", "wizard-title", "Текст и фото рассылки"));
-    body.appendChild(el("p", "center-note",
-      "Фото и текст объявления, которое бот отправит клиентам о новом меню — не карточки блюд (их фото и " +
-      "состав редактируются в «Фото и описание блюд»)."));
 
     var photoUrls = menuDraft.photo_urls.slice();
     var pendingFiles = [];
@@ -5373,11 +5381,6 @@
     }
     renderThumbs();
     body.appendChild(thumbsWrap);
-
-    body.appendChild(buildPhotoFormatDemo(function () {
-      if (pendingFiles.length) return URL.createObjectURL(pendingFiles[pendingFiles.length - 1]);
-      return photoUrls[0] || "";
-    }));
 
     var fileInput = el("input");
     fileInput.type = "file";
@@ -5448,69 +5451,20 @@
   }
 
   function buildMenuPreviewItems() {
-    var keys = menuDraft.selected_keys.length ? menuDraft.selected_keys : menuDraft.catalog.map(function (c) { return c.key; });
-    return keys.map(function (key) {
-      var c = null;
-      for (var i = 0; i < menuDraft.catalog.length; i++) {
-        if (menuDraft.catalog[i].key === key) { c = menuDraft.catalog[i]; break; }
-      }
+    return menuDraft.selected_keys.map(function (key) {
+      var c = _menuDraftCatalogItem(key);
       if (!c) return null;
-      var priceText = c.is_group
-        ? c.technical_names.map(function (t) { return fmtSum(c.prices[t]); }).join(" / ")
-        : fmtSum(c.prices[c.key]);
       return {
-        display_name: c.display_name, price_text: priceText,
+        display_name: c.display_name, price_text: adminSetPriceText(c),
         garnish_list: menuDraft.garnish[key] || [],
-        photo_url: c.photo_url,
-        description: c.description ? c.description.split("\n").filter(function (l) { return l.trim(); }) : [],
+        photo_url: c.photo_url, description: adminDescLines(c.description),
       };
     }).filter(Boolean);
-  }
-
-  // Карточка предпросмотра — визуально ИДЕНТИЧНА клиентской
-  // (.menu-set-card/.menu-set-thumb, тот же CSS), но полностью
-  // read-only: без выбора гарнира/варианта, без "Добавить в заказ", без
-  // избранного — это предпросмотр для админа, а не форма заказа, тап по
-  // карточке только разворачивает/сворачивает фото, как и было.
-  function buildMenuPreviewCard(item) {
-    var card = el("div", "card menu-set-card");
-    var expanded = false;
-    function render() {
-      card.innerHTML = "";
-      card.classList.toggle("expanded", expanded);
-      if (item.photo_url) {
-        var img = el("img", "menu-set-thumb");
-        img.alt = "";
-        setPhotoSrc(img, item.photo_url);
-        card.appendChild(img);
-      } else {
-        card.appendChild(el("div", "menu-set-thumb menu-set-thumb-empty", ICON_LEAF));
-      }
-      var cbody = el("div", "menu-set-card-body");
-      var head = el("div", "menu-set-card-head");
-      head.appendChild(el("div", "menu-set-card-name", escapeHtml(item.display_name)));
-      head.appendChild(el("div", "menu-set-card-chevron" + (expanded ? " up" : ""), ICON_CHEVRON));
-      cbody.appendChild(head);
-      if (item.description.length) {
-        var list = el("ul", "menu-set-card-desc");
-        item.description.forEach(function (line) { list.appendChild(el("li", null, escapeHtml(line))); });
-        cbody.appendChild(list);
-      }
-      cbody.appendChild(el("div", "menu-set-card-price", item.price_text));
-      if (item.garnish_list.length) {
-        cbody.appendChild(el("div", "menu-set-card-note", "Гарнир: " + item.garnish_list.map(function (g) { return escapeHtml(g); }).join(", ")));
-      }
-      card.appendChild(cbody);
-    }
-    card.addEventListener("click", function () { expanded = !expanded; render(); });
-    render();
-    return card;
   }
 
   function renderMenuDraftPreviewStep(body) {
     wizardPhaseEl.innerHTML = "";
     body.appendChild(el("h2", "wizard-title", "Предпросмотр"));
-    body.appendChild(el("p", "center-note", "Ровно так сеты увидят клиенты — фото сворачивается/разворачивается по тапу, как в самом приложении."));
 
     if (menuDraft.photo_urls.length || menuDraft.caption) {
       var annCard = el("div", "card");
@@ -5532,142 +5486,175 @@
     if (!items.length) {
       body.appendChild(el("div", "empty-note", "Пока нет ни одного выбранного сета."));
     } else {
-      items.forEach(function (item) { body.appendChild(buildMenuPreviewCard(item)); });
+      var grid = el("div", "menu-set-grid");
+      items.forEach(function (item) { grid.appendChild(buildAdminWideCard(item, false)); });
+      body.appendChild(grid);
     }
   }
 
-  // --- "Карточки сетов" — постоянные catalog-атрибуты (фото/описание/
-  // гарнир-флаг), НЕ часть черновика меню (см. api_ops_menu_catalog). ---
+  // --- Редактор карточки сета в ЧЕРНОВИКЕ: фото и состав только для этого
+  // меню (прошлые данные не подтягиваются), сверху — карточка как у клиента. ---
+
+  function renderMenuDraftCardEditor(body, c) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", c.display_name));
+
+    var pendingUrl = "";
+    var previewWrap = el("div");
+    body.appendChild(previewWrap);
+
+    var fileInput = el("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.style.display = "none";
+    var attachBtn = el("button", "btn-ghost", c.photo_url ? "Заменить фото" : "Добавить фото");
+    attachBtn.addEventListener("click", function () { fileInput.click(); });
+    body.appendChild(fileInput);
+    body.appendChild(attachBtn);
+
+    var descField = el("div", "field");
+    descField.innerHTML = '<label>Состав</label><textarea rows="6" placeholder="Каждая строка — отдельный пункт"></textarea>';
+    body.appendChild(descField);
+    var descInput = descField.querySelector("textarea");
+    descInput.value = c.description || "";
+
+    function drawPreview() {
+      previewWrap.innerHTML = "";
+      previewWrap.appendChild(buildAdminWideCard({
+        display_name: c.display_name, price_text: adminSetPriceText(c),
+        photo_url: pendingUrl || c.photo_url, description: adminDescLines(descInput.value),
+        garnish_list: menuDraft.garnish[c.key] || [],
+      }, true));
+    }
+    descInput.addEventListener("input", drawPreview);
+    drawPreview();
+
+    fileInput.addEventListener("change", function () {
+      if (!fileInput.files || !fileInput.files[0]) return;
+      var file = fileInput.files[0];
+      pendingUrl = URL.createObjectURL(file);
+      drawPreview();
+      attachBtn.disabled = true;
+      attachBtn.textContent = "Загружаю…";
+      apiUpload("/api/ops/menu/draft/card/" + encodeURIComponent(c.key) + "/photo", file, file.name).then(function (res) {
+        haptic("success");
+        c.photo_url = res.photo_url;
+        pendingUrl = "";
+        attachBtn.disabled = false;
+        attachBtn.textContent = "Заменить фото";
+        drawPreview();
+      }).catch(function (err) {
+        pendingUrl = "";
+        attachBtn.disabled = false;
+        attachBtn.textContent = c.photo_url ? "Заменить фото" : "Добавить фото";
+        drawPreview();
+        toast("Не удалось загрузить фото: " + err.message);
+      });
+    });
+
+    var garnishCard = el("div", "card");
+    garnishCard.appendChild(buildToggleRow("Гарнир на выбор", "", c.has_garnish, function (next) {
+      api(_menuCatalogUrl(c.key, "garnish-flag"), { method: "POST", body: { enabled: next } }).then(function () {
+        haptic("success");
+        c.has_garnish = next;
+      }).catch(function (err) { toast("Не удалось сохранить: " + err.message); });
+    }));
+    body.appendChild(garnishCard);
+
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    saveBtn.addEventListener("click", function () {
+      saveBtn.disabled = true;
+      api("/api/ops/menu/draft/card/" + encodeURIComponent(c.key) + "/description", { method: "POST", body: { description: descInput.value } }).then(function () {
+        haptic("success");
+        c.description = descInput.value.trim();
+        wizardBack();
+      }).catch(function (err) {
+        saveBtn.disabled = false;
+        toast("Не удалось сохранить: " + err.message);
+      });
+    });
+    body.appendChild(saveBtn);
+  }
 
   function _menuCatalogUrl(key, suffix) {
     return "/api/ops/menu/catalog/" + encodeURIComponent(key) + "/" + suffix;
   }
 
-  function loadMenuCatalogList(root) {
+  // --- "Каталог" — карточки всех ранее опубликованных меню. Тап открывает
+  // карточку как у клиента и даёт добавить её в меню дня (без публикации). ---
+
+  function loadMenuArchive(root) {
     root.innerHTML = "";
     root.appendChild(el("div", "skeleton-block"));
-    api("/api/ops/menu/catalog").then(function (data) {
+    api("/api/ops/menu/archive").then(function (data) {
       root.innerHTML = "";
-      var list = el("div", "card profile-nav-list");
-      data.sets.forEach(function (c) {
-        list.appendChild(buildProfileRow(ICON_CAMERA, c.display_name, function () {
-          wizardStep(function (b) { renderMenuCatalogDetail(b, c, data.garnish_reference); });
-        }));
+      if (!data.items.length) {
+        root.appendChild(el("div", "empty-note", "Каталог пока пуст. Карточки появятся здесь после публикации меню."));
+        return;
+      }
+      var grid = el("div", "home-mini-row");
+      data.items.forEach(function (it) {
+        var card = el("button", "home-mini-card");
+        var photo = el("div", "home-mini-photo");
+        if (it.photo_url) {
+          var img = el("img");
+          img.alt = ""; img.loading = "lazy";
+          img.addEventListener("error", function () { img.remove(); photo.innerHTML = ICON_LEAF; photo.classList.add("empty"); });
+          setPhotoSrc(img, it.photo_url);
+          photo.appendChild(img);
+        } else { photo.classList.add("empty"); photo.innerHTML = ICON_LEAF; }
+        card.appendChild(photo);
+        card.appendChild(el("div", "home-mini-name", escapeHtml(it.display_name)));
+        var first = adminDescLines(it.description)[0] || "";
+        card.appendChild(el("div", "catalog-mini-sub", escapeHtml(first || it.date)));
+        card.addEventListener("click", function () {
+          haptic("select");
+          wizardStep(function (b) { renderMenuArchiveDetail(b, it); });
+        });
+        grid.appendChild(card);
       });
-      root.appendChild(list);
+      root.appendChild(grid);
     }).catch(function (err) {
       root.innerHTML = "";
       root.appendChild(el("div", "empty-note", "Не удалось загрузить каталог: " + err.message));
     });
   }
 
-  function renderMenuCatalogDetail(body, c, garnishReference) {
+  function renderMenuArchiveDetail(body, it) {
     wizardPhaseEl.innerHTML = "";
-    body.appendChild(el("h2", "wizard-title", c.display_name));
+    var price = it.prices.length > 1
+      ? t("menu.from", { sum: fmtSumComma(Math.min.apply(null, it.prices)) })
+      : fmtSumComma(it.prices[0] || 0);
+    body.appendChild(buildAdminWideCard({
+      display_name: it.display_name, price_text: price, photo_url: it.photo_url,
+      description: adminDescLines(it.description), garnish_list: it.garnishes,
+    }, true));
+    if (it.date) body.appendChild(el("div", "catalog-detail-date", "Публиковалась " + escapeHtml(it.date)));
 
-    var photoUrl = c.photo_url;
-    var pendingFile = null;
-    var thumbWrap = el("div", "menu-draft-photo-row");
-    function renderThumb() {
-      thumbWrap.innerHTML = "";
-      var img = el("img", "menu-draft-photo-thumb");
-      img.alt = "";
-      if (pendingFile) img.src = URL.createObjectURL(pendingFile);
-      else if (photoUrl) setPhotoSrc(img, photoUrl);
-      else { thumbWrap.appendChild(el("div", "empty-note", "Фото пока нет")); return; }
-      thumbWrap.appendChild(img);
-    }
-    renderThumb();
-    body.appendChild(thumbWrap);
-
-    body.appendChild(buildPhotoFormatDemo(function () {
-      if (pendingFile) return URL.createObjectURL(pendingFile);
-      return photoUrl || "";
-    }));
-
-    var fileInput = el("input");
-    fileInput.type = "file";
-    fileInput.accept = "image/*";
-    fileInput.style.display = "none";
-    var attachBtn = el("button", "btn-ghost", "Выбрать фото");
-    attachBtn.addEventListener("click", function () { fileInput.click(); });
-    fileInput.addEventListener("change", function () {
-      if (!fileInput.files || !fileInput.files[0]) return;
-      pendingFile = fileInput.files[0];
-      renderThumb();
-      attachBtn.disabled = true;
-      attachBtn.textContent = "Загружаю…";
-      apiUpload(_menuCatalogUrl(c.key, "photo"), pendingFile, pendingFile.name).then(function (res) {
+    var addBtn = el("button", "btn-primary wizard-footer-btn", "Добавить в меню на сегодня");
+    addBtn.addEventListener("click", function () {
+      addBtn.disabled = true;
+      api("/api/ops/menu/archive/" + encodeURIComponent(it.id) + "/use", { method: "POST", body: {} }).then(function () {
         haptic("success");
-        photoUrl = res.photo_url;
-        c.photo_url = res.photo_url;
-        pendingFile = null;
-        attachBtn.disabled = false;
-        attachBtn.textContent = "Выбрать фото";
-        renderThumb();
+        toast("Добавлено в меню дня");
+        wizardBack();
       }).catch(function (err) {
-        attachBtn.disabled = false;
-        attachBtn.textContent = "Выбрать фото";
-        toast("Не удалось загрузить фото: " + err.message);
+        addBtn.disabled = false;
+        toast("Не удалось добавить: " + err.message);
       });
     });
-    body.appendChild(fileInput);
-    body.appendChild(attachBtn);
+    body.appendChild(addBtn);
 
-    var descField = el("div", "field");
-    descField.innerHTML = '<label>Описание (состав, каждая строка — отдельный пункт)</label><textarea id="menu-catalog-desc" rows="4"></textarea>';
-    body.appendChild(descField);
-    var descInput = descField.querySelector("textarea");
-    descInput.value = c.description || "";
-    var descSaveBtn = el("button", "btn-ghost", "Сохранить описание");
-    descSaveBtn.addEventListener("click", function () {
-      descSaveBtn.disabled = true;
-      api(_menuCatalogUrl(c.key, "description"), { method: "POST", body: { description: descInput.value } }).then(function () {
-        haptic("success");
-        c.description = descInput.value;
-        descSaveBtn.disabled = false;
-        toast("Описание сохранено");
-      }).catch(function (err) {
-        descSaveBtn.disabled = false;
-        toast("Не удалось сохранить: " + err.message);
+    var delBtn = el("button", "btn-text", "Удалить из каталога");
+    delBtn.addEventListener("click", function () {
+      showConfirm("Удалить карточку из каталога? В уже опубликованном меню она останется.", "Удалить", function () {
+        api("/api/ops/menu/archive/" + encodeURIComponent(it.id) + "/delete", { method: "POST", body: {} }).then(function () {
+          haptic("success");
+          wizardBack();
+        }).catch(function (err) { toast("Не удалось удалить: " + err.message); });
       });
     });
-    body.appendChild(descSaveBtn);
-
-    var storyField = el("div", "field");
-    storyField.innerHTML = '<label>История блюда (показывается на Главной: интересные факты, происхождение)</label><textarea rows="6"></textarea>';
-    body.appendChild(storyField);
-    var storyInput = storyField.querySelector("textarea");
-    storyInput.value = c.story || "";
-    var storySaveBtn = el("button", "btn-ghost", "Сохранить историю");
-    storySaveBtn.addEventListener("click", function () {
-      storySaveBtn.disabled = true;
-      api(_menuCatalogUrl(c.key, "story"), { method: "POST", body: { story: storyInput.value } }).then(function () {
-        haptic("success");
-        c.story = storyInput.value;
-        storySaveBtn.disabled = false;
-        toast("История сохранена");
-      }).catch(function (err) {
-        storySaveBtn.disabled = false;
-        toast("Не удалось сохранить: " + err.message);
-      });
-    });
-    body.appendChild(storySaveBtn);
-
-    var garnishCard = el("div", "card");
-    garnishCard.appendChild(buildToggleRow("Гарнир доступен", "Можно ли вообще выбирать гарнир к этому сету", c.has_garnish, function (next) {
-      api(_menuCatalogUrl(c.key, "garnish-flag"), { method: "POST", body: { enabled: next } }).then(function () {
-        haptic("success");
-        c.has_garnish = next;
-      }).catch(function (err) {
-        toast("Не удалось сохранить: " + err.message);
-      });
-    }));
-    body.appendChild(garnishCard);
-
-    if (garnishReference && garnishReference.length) {
-      body.appendChild(el("p", "center-note", "Справочник гарниров: " + garnishReference.join(", ") + ". Какие именно доступны СЕГОДНЯ — задаётся в \"Меню дня\" → \"Гарниры\"."));
-    }
+    body.appendChild(delBtn);
   }
 
   // --- "Названия для покупателей" — переопределение texts.SET_DISPLAY_
@@ -5680,7 +5667,6 @@
     root.appendChild(el("div", "skeleton-block"));
     api("/api/ops/menu/catalog").then(function (data) {
       root.innerHTML = "";
-      root.appendChild(el("p", "center-note", "Как сет называется для покупателя — в боте и в приложении. Пусто — вернётся имя по умолчанию."));
       data.sets.forEach(function (c) {
         var card = el("div", "card");
         var techLabel = c.is_group ? c.technical_names.join(" / ") : c.key;

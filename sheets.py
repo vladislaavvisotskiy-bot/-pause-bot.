@@ -4,6 +4,7 @@
 через эти функции — если завтра поменяются столбцы, править нужно только тут.
 """
 import copy
+import hashlib
 import json
 import os
 import random
@@ -2493,6 +2494,124 @@ def reset_draft_set_garnishes():
         ws.update_cells(cells)
 
 
+# --- Карточки сетов В ЧЕРНОВИКЕ (Mini App → Меню дня): фото и состав вводятся
+# заново на каждое меню, старые данные из постоянного справочника сюда не
+# подтягиваются. При публикации переносятся в справочник (их видят клиенты) и
+# копируются в архив "Каталог меню" (см. archive_menu_card). ---
+
+_DC_HEADER = ["Сет", "Фото", "Описание"]
+_draft_cards_lock = threading.Lock()
+
+
+def get_draft_cards() -> dict:
+    """{ключ сета: {"photo": file_id, "description": текст}}. Наличие записи =
+    сет выбран в черновике через Mini App (даже с пустыми полями)."""
+    ws = _ws_or_create(config.SHEET_DRAFT_CARDS, _DC_HEADER)
+    out = {}
+    for r in ws.get_all_values()[1:]:
+        if r and r[0].strip():
+            out[r[0].strip()] = {
+                "photo": r[1].strip() if len(r) > 1 else "",
+                "description": r[2] if len(r) > 2 else "",
+            }
+    return out
+
+
+def set_draft_card(key: str, photo=None, description=None):
+    """Пишет фото и/или описание карточки черновика (None — не менять)."""
+    key = key.strip()
+    with _draft_cards_lock:
+        ws = _ws_or_create(config.SHEET_DRAFT_CARDS, _DC_HEADER)
+        rows = ws.get_all_values()
+        for i, r in enumerate(rows):
+            if i and r and r[0].strip() == key:
+                cells = []
+                if photo is not None:
+                    cells.append(gspread.Cell(i + 1, 2, photo))
+                if description is not None:
+                    cells.append(gspread.Cell(i + 1, 3, description))
+                if cells:
+                    ws.update_cells(cells, value_input_option="RAW")
+                return
+        ws.append_row([key, photo or "", description or ""], value_input_option="RAW")
+
+
+def ensure_draft_cards(keys: list):
+    """Заводит пустые записи для выбранных сетов (признак "меню собирается через Mini App")."""
+    with _draft_cards_lock:
+        ws = _ws_or_create(config.SHEET_DRAFT_CARDS, _DC_HEADER)
+        have = {r[0].strip() for r in ws.get_all_values()[1:] if r and r[0].strip()}
+        new = [[k, "", ""] for k in keys if k and k not in have]
+        if new:
+            ws.append_rows(new, value_input_option="RAW")
+
+
+def clear_draft_cards():
+    with _draft_cards_lock:
+        ws = _ws_or_create(config.SHEET_DRAFT_CARDS, _DC_HEADER)
+        if len(ws.get_all_values()) > 1:
+            ws.clear()
+            ws.update([_DC_HEADER], "A1")
+
+
+_MA_HEADER = ["ID", "Сет", "Название", "Фото", "Описание", "Гарниры", "Опубликовано"]
+_menu_archive_lock = threading.Lock()
+
+
+def _archive_id(key: str, description: str) -> str:
+    norm = " ".join((description or "").lower().split())
+    return hashlib.md5((key.strip() + "|" + norm).encode("utf-8")).hexdigest()[:10]
+
+
+def archive_menu_card(key: str, display_name: str, photo: str, description: str, garnishes: list, date_str: str):
+    """Сохраняет карточку в "Каталог меню". Тот же сет с тем же составом
+    обновляется (фото/дата), а не дублируется."""
+    if not (photo or (description or "").strip()):
+        return
+    cid = _archive_id(key, description)
+    row = [cid, key, display_name, photo or "", description or "", ", ".join(garnishes or []), date_str]
+    with _menu_archive_lock:
+        ws = _ws_or_create(config.SHEET_MENU_ARCHIVE, _MA_HEADER)
+        rows = ws.get_all_values()
+        for i, r in enumerate(rows):
+            if i and r and r[0].strip() == cid:
+                ws.update([row], f"A{i + 1}", value_input_option="RAW")
+                return
+        ws.append_row(row, value_input_option="RAW")
+
+
+def get_menu_archive() -> list:
+    """Архив карточек, новые сверху: [{"id","key","display_name","photo","description","garnishes","date"}]."""
+    ws = _ws_or_create(config.SHEET_MENU_ARCHIVE, _MA_HEADER)
+    out = []
+    for r in ws.get_all_values()[1:]:
+        if not r or not r[0].strip():
+            continue
+        r = r + [""] * (7 - len(r))
+        out.append({
+            "id": r[0].strip(), "key": r[1].strip(), "display_name": r[2].strip(),
+            "photo": r[3].strip(), "description": r[4],
+            "garnishes": [g.strip() for g in r[5].split(",") if g.strip()], "date": r[6].strip(),
+        })
+
+    def _k(it):
+        try:
+            return dt.datetime.strptime(it["date"], "%d.%m.%Y")
+        except ValueError:
+            return dt.datetime.min
+    out.sort(key=_k, reverse=True)
+    return out
+
+
+def delete_menu_archive(cid: str):
+    with _menu_archive_lock:
+        ws = _ws_or_create(config.SHEET_MENU_ARCHIVE, _MA_HEADER)
+        for i, r in enumerate(ws.get_all_values()):
+            if i and r and r[0].strip() == cid:
+                ws.delete_rows(i + 1)
+                return
+
+
 def start_new_menu_draft(photo_ids: list, caption: str):
     """Начинает НОВЫЙ черновик меню (координатор прислал фото/текст) —
     сохраняет фото/подпись и сбрасывает сеты/гарниры черновика на "не
@@ -2505,6 +2624,7 @@ def start_new_menu_draft(photo_ids: list, caption: str):
     set_draft_menu(photo_ids, caption)
     set_draft_sets([])
     reset_draft_set_garnishes()
+    clear_draft_cards()
 
 
 def clear_menu_draft():
@@ -2513,6 +2633,7 @@ def clear_menu_draft():
     ws.update_acell(config.REF_DRAFT_MENU2_CELL, "")
     ws.update_acell(config.REF_DRAFT_SETS_CELL, "")
     reset_draft_set_garnishes()
+    clear_draft_cards()
 
 
 def publish_draft_menu(date_str: str):
@@ -2525,7 +2646,25 @@ def publish_draft_menu(date_str: str):
     photo_ids, caption = get_draft_menu()
     set_today_menu_photos(photo_ids, caption)
     set_active_menu_date(date_str)
-    set_today_sets(get_draft_sets_raw())
+    selected = get_draft_sets_raw()
+    set_today_sets(selected)
+
+    # Карточки из Mini App: фото/состав выбранных сетов уходят в справочник
+    # (их видят клиенты; пустое поле = очищено, старое блюдо не остаётся) и
+    # копируются в архив "Каталог меню". Сеты без записи (меню через бот)
+    # не трогаем.
+    cards = get_draft_cards()
+    for key in selected:
+        card = cards.get(key)
+        if card is None:
+            continue
+        set_set_photo(key, card["photo"])
+        set_set_description(key, card["description"])
+        try:
+            archive_menu_card(key, display_set_name(key), card["photo"], card["description"],
+                              get_draft_garnishes_for_set(key), date_str)
+        except Exception:
+            pass
 
     ws = _ws(config.SHEET_REFERENCE)
     rows = ws.get(config.REF_SET_GARNISH_RANGE)

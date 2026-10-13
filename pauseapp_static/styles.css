@@ -2273,3 +2273,9 @@ p { margin: 0; color: var(--ink-soft); }
 .pday-carousel-track { gap: 14px; }
 
 .notify-time-select { flex: none; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 15px; }
+
+/* Админка меню: карточка сета как у клиента, каталог прошлых меню */
+.admin-wide-card.menu-set-card.menu-wide-card { display: block; padding: 0; margin: 0; overflow: hidden; cursor: pointer; border-radius: 26px; }
+.admin-wide-card .menu-wide-inner .menu-set-chip-row { margin-top: 10px; }
+.catalog-mini-sub { margin-top: 2px; font-size: 12px; line-height: 1.3; color: var(--ink-soft); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.catalog-detail-date { margin: 10px 2px 0; font-size: 13px; color: var(--ink-soft); }
