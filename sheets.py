@@ -6232,6 +6232,34 @@ def set_delivery_expense(date_str: str, amount: int):
     _invalidate_delivery_raw_cache()
 
 
+def get_delivery_expense_history() -> list:
+    """Расходы на доставку через сервисы по дням, новые сверху: [{"date","amount"}]."""
+    out = []
+    for i, row in enumerate(_delivery_raw_rows()):
+        if i + 1 < config.DEL_DATA_START_ROW or len(row) < config.DEL_SUM:
+            continue
+        date_s = row[config.DEL_DATE - 1].strip()
+        if not date_s:
+            continue
+        try:
+            amount = int(row[config.DEL_SUM - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        out.append({"date": date_s, "amount": amount})
+    out.sort(key=lambda e: _parse_ru_date_safe(e["date"]), reverse=True)
+    return out
+
+
+def delete_delivery_expense(date_str: str) -> bool:
+    ws = _ws_or_create(config.SHEET_DELIVERY_EXPENSE, ["date", "sum", "updated"])
+    for i, row in enumerate(ws.get_all_values()):
+        if i + 1 >= config.DEL_DATA_START_ROW and row and row[config.DEL_DATE - 1].strip() == date_str:
+            ws.delete_rows(i + 1)
+            _invalidate_delivery_raw_cache()
+            return True
+    return False
+
+
 def get_delivery_expense_total(date_from: str, date_to: str) -> int:
     """Сумма расходов на доставку через сторонние сервисы (Яндекс, Uklon
     и т.п.) за период [date_from, date_to] включительно — одно из ДВУХ

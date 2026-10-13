@@ -429,6 +429,20 @@ async def api_logistics_get(request: web.Request):
     })
 
 
+async def api_delivery_expense_history(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    return web.json_response({"days": await _retry_sheets(sheets.get_delivery_expense_history)})
+
+
+async def api_delivery_expense_delete(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    ok = await _retry_sheets(sheets.delete_delivery_expense, (body.get("date") or "").strip())
+    return web.json_response({"ok": ok}, status=200 if ok else 404)
+
+
 async def api_logistics_set(request: web.Request):
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -1045,6 +1059,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/route_admin/mode", api_route_admin_mode_set)
     app.router.add_get("/api/logistics", api_logistics_get)
     app.router.add_post("/api/logistics", api_logistics_set)
+    app.router.add_get("/api/logistics/delivery-history", api_delivery_expense_history)
+    app.router.add_post("/api/logistics/delivery-delete", api_delivery_expense_delete)
     app.router.add_get("/api/delivery_points", api_delivery_points)
     app.router.add_get("/api/couriers", api_couriers)
     app.router.add_get("/api/couriers/manage", api_couriers_manage_list)

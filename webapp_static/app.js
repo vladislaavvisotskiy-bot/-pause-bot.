@@ -1914,6 +1914,79 @@
     });
   }
 
+  // История расходов на доставку через сервисы (Яндекс, Uklon и др.) — по дням,
+  // с правкой и удалением.
+  function openDeliveryExpenseHistory(onChanged) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", "Доставка через сервисы"));
+      var listWrap = el("div");
+      body.appendChild(listWrap);
+      function load() {
+        listWrap.innerHTML = "";
+        listWrap.appendChild(el("div", "skeleton-block"));
+        api("/api/logistics/delivery-history").then(function (data) {
+          listWrap.innerHTML = "";
+          var days = data.days || [];
+          if (!days.length) { listWrap.appendChild(el("div", "empty-note", "Пока нет записей.")); return; }
+          var total = days.reduce(function (s, x) { return s + x.amount; }, 0);
+          var card = el("div", "card");
+          days.forEach(function (d, idx) {
+            var row = el("div", "cash-day-row" + (idx ? " cash-day-row-sep" : ""));
+            var head = el("div", "cash-day-head");
+            head.appendChild(el("div", "cash-day-date", d.date));
+            head.appendChild(el("strong", "cash-day-remaining", fmtSum(d.amount)));
+            row.appendChild(head);
+            var acts = el("div", "checkout-attach-row");
+            var edit = el("button", "btn-text", "Изменить");
+            edit.addEventListener("click", function () { editDeliveryExpense(d, function () { load(); onChanged(); }); });
+            var del = el("button", "btn-text", "Удалить");
+            del.addEventListener("click", function () {
+              confirmSheet("Удалить расход?", d.date + ": " + fmtSum(d.amount) + ".", [
+                { label: "Да, удалить", className: "btn-primary", onClick: function () {
+                  api("/api/logistics/delivery-delete", { method: "POST", body: { date: d.date } })
+                    .then(function () { haptic("success"); toast("Удалено"); load(); onChanged(); })
+                    .catch(function (err) { toast("Не удалось удалить: " + err.message); });
+                } },
+                { label: "Отмена", className: "btn-ghost" },
+              ]);
+            });
+            acts.appendChild(edit); acts.appendChild(del);
+            row.appendChild(acts);
+            card.appendChild(row);
+          });
+          listWrap.appendChild(card);
+          listWrap.appendChild(el("div", "ops-debtor-total", "Всего: " + fmtSum(total)));
+        }).catch(function (err) {
+          listWrap.innerHTML = "";
+          listWrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+        });
+      }
+      load();
+    });
+  }
+
+  function editDeliveryExpense(d, onDone) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", "Изменить расход"));
+      var f = el("div", "field");
+      f.innerHTML = "<label>" + escapeHtml(d.date) + " — сумма, сум</label>";
+      var inp = document.createElement("input");
+      inp.type = "number"; inp.inputMode = "numeric"; inp.min = "0"; inp.value = d.amount;
+      f.appendChild(inp);
+      body.appendChild(f);
+      var save = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+      save.addEventListener("click", function () {
+        var amount = parseInt(inp.value, 10);
+        if (!(amount >= 0)) { toast("Введите сумму"); return; }
+        save.disabled = true;
+        api("/api/logistics", { method: "POST", body: { date: d.date, delivery_expense: amount } })
+          .then(function () { haptic("success"); toast("Сохранено"); onDone(); wizardBack(); })
+          .catch(function (err) { save.disabled = false; toast("Не удалось сохранить: " + err.message); });
+      });
+      body.appendChild(save);
+    });
+  }
+
   function deleteShiftPayment(courierTgId, d, onDone) {
     confirmSheet("Удалить оплату?", d.date + ": " + fmtSum(d.amount) + (d.from_cash ? ". Эта сумма вернётся в «Наличные у курьера»." : "."), [
       { label: "Да, удалить", className: "btn-primary", onClick: function () {
@@ -2357,6 +2430,9 @@
 
     var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить расходы на доставку");
     root.appendChild(saveBtn);
+    var historyBtn = el("button", "btn-ghost", "История расходов на сервисы");
+    historyBtn.addEventListener("click", function () { openDeliveryExpenseHistory(function () { loadForDate(state.logisticsDateISO); }); });
+    root.appendChild(historyBtn);
 
     // "Оплата за смену" — у каждого курьера своя кнопка "Оплатить" (не
     // общий "Сохранить" молча для всех): перед записью всегда спрашивают
