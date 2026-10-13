@@ -1762,19 +1762,7 @@
     });
     root.appendChild(quickRow);
 
-    // "Сегодня в меню" — вместо "Популярное" с макета: реальной статистики
-    // популярности блюд в системе нет (не считается нигде), а показывать
-    // выдуманный рейтинг — фиктивные данные; вместо этого честно берём то
-    // же самое сегодняшнее меню, что и на вкладке Меню (первые несколько
-    // позиций), той же самой карточкой (см. buildMenuSetCard).
-    if (m.published && m.sets && m.sets.length) {
-      root.appendChild(el("div", "profile-section-title", t("home.inMenuToday")));
-      var list = el("div", "home-mini-row");
-      m.sets.forEach(function (s) { list.appendChild(buildHomeMiniCard(s)); });
-      root.appendChild(list);
-    }
-
-    // Лента PAUSE MOMENTS — сразу открытая, под сегодняшним меню.
+    // Лента PAUSE MOMENTS — сразу открытая, сразу под быстрыми кнопками.
     var momRoot = el("div", "home-moments");
     momRoot.id = "home-moments";
     root.appendChild(momRoot);
@@ -3201,7 +3189,7 @@
     var root = document.getElementById("club-now-cards");
     if (!root) return;
     root.innerHTML = "";
-    var cards = (state.clubCards || DEFAULT_CLUB_CARDS).filter(function (c) { return c.kind !== "moments"; });
+    var cards = state.clubCards || DEFAULT_CLUB_CARDS;
     var i = 0;
     while (i < cards.length) {
       if (cards[i].carousel) {
