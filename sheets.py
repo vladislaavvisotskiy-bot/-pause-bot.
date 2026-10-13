@@ -4397,7 +4397,28 @@ def get_couriers() -> list:
     return out
 
 
+_former_cache = {"found": None, "ts": 0.0}
+_FORMER_TTL = 180  # история «бывших» курьеров почти не меняется — сканируем её раз в 3 минуты
+
+
 def _former_couriers(existing_ids: set) -> list:
+    now = time.time()
+    if _former_cache["found"] is None or now - _former_cache["ts"] > _FORMER_TTL:
+        try:
+            _former_cache["found"] = _scan_former_couriers()
+            _former_cache["ts"] = now
+        except Exception:
+            if _former_cache["found"] is None:
+                raise
+    found = _former_cache["found"]
+    return [{
+        "tg_id": tid, "name": name or tid, "status": "Не действует", "phone": "",
+        "kpi_hidden": True, "is_route_admin": False, "disabled": True, "notify_off": True,
+        "archived": True,
+    } for tid, name in found.items() if tid not in existing_ids]
+
+
+def _scan_former_couriers() -> dict:
     """Курьеры, которых удалили из листа «Курьеры», но чьи данные остались в
     истории (наличные, расчёты, оплата за смену, маршруты прошлых дней).
     Возвращаются как недействующие ("archived": True, отключены, без пушей) —
@@ -4407,7 +4428,7 @@ def _former_couriers(existing_ids: set) -> list:
 
     def _add(tid, name=""):
         tid = (tid or "").strip()
-        if not tid or tid in existing_ids:
+        if not tid:
             return
         if name and not found.get(tid):
             found[tid] = name.strip()
@@ -4429,11 +4450,7 @@ def _former_couriers(existing_ids: set) -> list:
             continue
         for cid in _parse_courier_ids(row[config.ROUTE_COURIER_TG_ID - 1]):
             _add(cid)
-    return [{
-        "tg_id": tid, "name": name or tid, "status": "Не действует", "phone": "",
-        "kpi_hidden": True, "is_route_admin": False, "disabled": True, "notify_off": True,
-        "archived": True,
-    } for tid, name in found.items()]
+    return found
 
 
 def _ensure_sheet_columns(ws, col: int):

@@ -105,7 +105,7 @@ def _extract_tg_id(request: web.Request):
 _RETRYABLE_API_CODES = {429, 500, 502, 503, 504}
 
 
-async def _retry_sheets(fn, *args, retries: int = 2, delay: float = 1.2, **kwargs):
+async def _retry_sheets(fn, *args, retries: int = 4, delay: float = 1.2, **kwargs):
     """Google Sheets API иногда на секунду-другую отвечает 429 (Quota
     exceeded for quota metric 'Read requests'/'Write requests') под нагрузкой
     — это ровно то, что несколько раз ловилось вживую при разработке этого
@@ -141,12 +141,14 @@ async def _retry_sheets(fn, *args, retries: int = 2, delay: float = 1.2, **kwarg
             last_exc = e
             if e.code not in _RETRYABLE_API_CODES or attempt == retries:
                 raise
-            await asyncio.sleep(delay)
+            # Экспоненциальная пауза: 1.2 → 1.9 → 3.1 → 4.9 с (лимит квоты Google
+            # «отпускает» не мгновенно, короткие повторы подряд не помогали).
+            await asyncio.sleep(delay * (1.6 ** attempt))
         except requests.exceptions.RequestException as e:
             last_exc = e
             if attempt == retries:
                 raise
-            await asyncio.sleep(delay)
+            await asyncio.sleep(delay * (1.6 ** attempt))
     raise last_exc
 
 

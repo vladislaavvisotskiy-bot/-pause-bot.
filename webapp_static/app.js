@@ -106,7 +106,20 @@
     return tg ? tg.initData : "";
   }
 
+  // Разовый автоповтор при кратковременной перегрузке сервера (503/429): всегда
+  // для чтения (GET) и для запросов, помеченных idempotent (повтор безопасен).
   function api(path, options) {
+    var isGet = !(options && options.method && options.method !== "GET");
+    var safe = isGet || !!(options && options.idempotent);
+    return apiOnce(path, options).catch(function (err) {
+      if (safe && (err.status === 503 || err.status === 429)) {
+        return new Promise(function (r) { setTimeout(r, 1500); }).then(function () { return apiOnce(path, options); });
+      }
+      throw err;
+    });
+  }
+
+  function apiOnce(path, options) {
     options = options || {};
     var headers = options.headers || {};
     headers["X-Telegram-Init-Data"] = initData();
@@ -2446,7 +2459,7 @@
         var pushBtn = el("button", "btn-text", "Уведомить");
         pushBtn.addEventListener("click", function () {
           pushBtn.disabled = true;
-          api("/api/route/notify-couriers", { method: "POST", body: { date: d.date } })
+          api("/api/route/notify-couriers", { method: "POST", body: { date: d.date }, idempotent: true })
             .then(function (res) {
               pushBtn.disabled = false;
               if (res.notified) toast("Курьеров уведомлено: " + res.notified);
