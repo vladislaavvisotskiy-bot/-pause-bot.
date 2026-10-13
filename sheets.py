@@ -3009,6 +3009,16 @@ def get_courier_near_log(date_str: str) -> set:
     return out
 
 
+def get_courier_steps(date_str: str) -> dict:
+    """{точка: {вид: "ЧЧ:ММ"}} — какие шаги курьер уже нажал (строки с клиентом "*")."""
+    ws = _ws_or_create(config.SHEET_COURIER_NEAR_LOG, _CN_HEADER)
+    out = {}
+    for r in ws.get_all_values()[1:]:
+        if len(r) >= 5 and r[0].strip() == date_str and r[2].strip() == "*":
+            out.setdefault(r[1].strip(), {})[r[3].strip()] = r[4].strip()
+    return out
+
+
 def add_courier_near_log(date_str: str, point: str, entries: list):
     """entries: [(client_id, вид), ...]"""
     if not entries:

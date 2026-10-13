@@ -43,7 +43,7 @@
                            // курьеров-администраторов (см. renderCourierDetail)
     logisticsDateISO: null,
     starts: {},          // {courier_tg_id: "ЧЧ:ММ"} — время "Старта" на state.date, см. renderStartBadge
-    nearSent: {},         // {дата|точка: true} — «Подъезжаю» уже нажато в этом сеансе
+    steps: {},            // {точка: {going, arriving, ...}} — какие шаги курьер уже нажал на state.date
     cash: {},             // {точка: сумма наличных, собранных на ней за state.date}, см. buildCard
     kpiPeriod: "today",   // "today" | "yesterday" | "day2".."day5" | "7d" | "30d" | "custom" — период для шкалы эффективности в Профиле
     kpiCustomFrom: null,  // ISO (YYYY-MM-DD) — для kpiPeriod "custom"
@@ -549,6 +549,86 @@
     return "";
   }
 
+  // Кнопки курьера у активной точки — три понятных шага сверху вниз:
+  // 1 «Поехали» (клиентам: курьер выехал), 2 «Подъезжаю» (клиентам: подъезжает),
+  // 3 «Сдано». Выполненный шаг становится зелёным с временем и числом клиентов.
+  // Кнопка реагирует мгновенно (сообщения уходят в фоне).
+  function stepInfo(pointName) {
+    state.steps = state.steps || {};
+    return state.steps[pointName] || (state.steps[pointName] = {});
+  }
+
+  function buildStepButtons(point) {
+    var wrap = document.createElement("div");
+    wrap.className = "steps";
+
+    function stepBtn(num, title, hint, kind, onGo) {
+      var info = stepInfo(point.point);
+      var done = info[kind];
+      var btn = document.createElement("button");
+      btn.className = "step-btn" + (done ? " done" : "");
+      var numEl = document.createElement("span");
+      numEl.className = "step-num";
+      numEl.textContent = done ? "✓" : String(num);
+      var txt = document.createElement("span");
+      txt.className = "step-text";
+      var t1 = document.createElement("span");
+      t1.className = "step-title";
+      t1.textContent = done ? title + " · " + done : title;
+      var t2 = document.createElement("span");
+      t2.className = "step-hint";
+      t2.textContent = info[kind + "_note"] || hint;
+      txt.appendChild(t1);
+      txt.appendChild(t2);
+      btn.appendChild(numEl);
+      btn.appendChild(txt);
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        onGo(btn, t1, t2, numEl, !!done);
+      });
+      return btn;
+    }
+
+    function callStep(path, kind, title, btn, t1, t2, numEl) {
+      var info = stepInfo(point.point);
+      btn.disabled = true;
+      t2.textContent = "Отправляем…";
+      haptic("select");
+      api(path, { method: "POST", body: { date: state.date, point: point.point } })
+        .then(function (res) {
+          info[kind] = res.time || _nowHHMM();
+          info[kind + "_note"] = res.already ? "Уже отправлено ранее"
+            : (res.recipients ? "Клиентам отправлено: " + res.recipients : "Отмечено (получателей нет)");
+          haptic("success");
+          btn.classList.add("done");
+          numEl.textContent = "✓";
+          t1.textContent = title + " · " + info[kind];
+          t2.textContent = info[kind + "_note"];
+          btn.disabled = false;
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          t2.textContent = "Не получилось, нажмите ещё раз";
+          toast("Не удалось: " + err.message);
+        });
+    }
+
+    wrap.appendChild(stepBtn(1, "Поехали", "Клиентам придёт: курьер выехал", "going", function (btn, t1, t2, numEl, done) {
+      openLink(yandexMapsUrl(point));
+      recordRouteStart();
+      if (!done) callStep("/api/route/going", "going", "Выехал", btn, t1, t2, numEl);
+    }));
+    wrap.appendChild(stepBtn(2, "Подъезжаю", "Клиентам придёт: курьер подъезжает", "arriving", function (btn, t1, t2, numEl, done) {
+      if (!done) callStep("/api/route/arriving", "arriving", "Подъезжаю", btn, t1, t2, numEl);
+    }));
+    var doneBtn = document.createElement("button");
+    doneBtn.className = "step-btn step-final";
+    doneBtn.innerHTML = '<span class="step-num">3</span><span class="step-text"><span class="step-title">Сдано</span><span class="step-hint">Заказ передан клиенту</span></span>';
+    doneBtn.addEventListener("click", function (e) { e.stopPropagation(); completePoint(point.point); });
+    wrap.appendChild(doneBtn);
+    return wrap;
+  }
+
   function buildCard(point, index, active) {
     var totalPeople = point.people.length;
     var card = document.createElement("div");
@@ -811,19 +891,7 @@
     // Кнопки курьера у активной точки — всегда на виду, не прячем их за
     // разворачиванием карточки (это самое частое действие).
     if (state.role === "courier" && active && point.status !== "Сдано") {
-      var actions = document.createElement("div");
-      actions.className = "card-actions";
-      var goBtn = document.createElement("button");
-      goBtn.className = "btn-primary";
-      goBtn.textContent = "Поехали";
-      goBtn.addEventListener("click", function () { openLink(yandexMapsUrl(point)); recordRouteStart(); });
-      var doneBtn = document.createElement("button");
-      doneBtn.className = "btn-primary success";
-      doneBtn.textContent = "Сдано";
-      doneBtn.addEventListener("click", function () { completePoint(point.point); });
-      actions.appendChild(goBtn);
-      actions.appendChild(doneBtn);
-      card.appendChild(actions);
+      card.appendChild(buildStepButtons(point));
     }
 
     // "Наличные" — отдельной строкой под основными кнопками, не толкает
@@ -834,26 +902,6 @@
     if (state.role === "courier" && (active || point.status === "Сдано")) {
       var cashRow = document.createElement("div");
       cashRow.className = "card-actions-secondary";
-      if (active && point.status !== "Сдано") {
-        var nearKey = state.date + "|" + point.point;
-        var nearBtn = document.createElement("button");
-        nearBtn.className = "btn-ghost";
-        nearBtn.textContent = state.nearSent[nearKey] ? "Клиентам сообщили" : "Подъезжаю";
-        nearBtn.disabled = !!state.nearSent[nearKey];
-        nearBtn.addEventListener("click", function (e) {
-          e.stopPropagation();
-          nearBtn.disabled = true;
-          api("/api/route/arriving", { method: "POST", body: { date: state.date, point: point.point } })
-            .then(function (res) {
-              state.nearSent[nearKey] = true;
-              nearBtn.textContent = "Клиентам сообщили";
-              haptic("success");
-              toast(res.sent ? "Клиентам отправлено: " + res.sent : "Клиенты уже предупреждены");
-            })
-            .catch(function (err) { nearBtn.disabled = false; toast("Не удалось: " + err.message); });
-        });
-        cashRow.appendChild(nearBtn);
-      }
       var cashBtn = document.createElement("button");
       cashBtn.className = "btn-ghost cash-btn";
       cashBtn.textContent = "💵 Наличные";
@@ -1004,6 +1052,7 @@
       state.visible = data.visible !== false;
       state.starts = data.starts || {};
       state.cash = data.cash || {};
+      state.steps = data.steps || {};
       render();
     }).catch(function (err) {
       toast("Не удалось загрузить маршрут: " + err.message);

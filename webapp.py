@@ -320,6 +320,7 @@ async def api_route_get(request: web.Request):
     return web.json_response({
         "date": date_str, "role": role, "points": route, "depot": depot,
         "visible": visible, "starts": starts, "cash": cash,
+        "steps": await _retry_sheets(sheets.get_courier_steps, date_str),
     })
 
 
@@ -1001,34 +1002,12 @@ async def api_route_complete(request: web.Request):
             if point not in mine:
                 return web.json_response({"error": "forbidden"}, status=403)
         await _retry_sheets(sheets.mark_route_delivered, date_str, point, retries=2)
-        next_point = None
-        if request["role"] == "courier":
-            route = await _retry_sheets(sheets.get_route_for_date, date_str)
-            tg_id = str(request["tg_id"])
-            for p in sorted(route, key=lambda x: x["order"]):
-                if tg_id in p["courier_tg_ids"] and p["point"] != point and p["status"] != config.ROUTE_STATUS_DELIVERED:
-                    next_point = p
-                    break
-    bot = request.app.get("bot")
-    if next_point and bot:
-        # «Вы следующие» — клиентам следующей точки этого курьера, в фоне.
-        import courier_notify
-        _spawn_bg(courier_notify.notify_point(bot, date_str, next_point, courier_notify.KIND_NEXT))
     return web.json_response({"ok": True})
 
 
-_bg_tasks = set()
-
-
-def _spawn_bg(coro):
-    task = asyncio.ensure_future(coro)
-    _bg_tasks.add(task)
-    task.add_done_callback(_bg_tasks.discard)
-
-
-async def api_route_arriving(request: web.Request):
-    """«Подъезжаю» — курьер за несколько минут до своей точки: клиентам точки
-    уходит «курьер подъезжает». Только курьер и только по своей точке."""
+async def _route_step(request: web.Request, kind: str):
+    """«Поехали» / «Подъезжаю»: клиентам точки уходит сообщение (в фоне), курьеру
+    ответ приходит сразу. Только курьер и только по своей точке."""
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
     body = await request.json()
@@ -1043,8 +1022,16 @@ async def api_route_arriving(request: web.Request):
     if not bot:
         return web.json_response({"error": "bot_unavailable"}, status=503)
     import courier_notify
-    sent = await courier_notify.notify_point(bot, date_str, point_data, courier_notify.KIND_ARRIVING)
-    return web.json_response({"ok": True, "sent": sent})
+    res = await courier_notify.trigger(bot, date_str, point_data, kind)
+    return web.json_response({"ok": True, **res})
+
+
+async def api_route_going(request: web.Request):
+    return await _route_step(request, "going")
+
+
+async def api_route_arriving(request: web.Request):
+    return await _route_step(request, "arriving")
 
 
 async def api_near_notify_get(request: web.Request):
@@ -1207,6 +1194,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/route/assign", api_route_assign)
     app.router.add_post("/api/route/complete", api_route_complete)
     app.router.add_post("/api/route/start", api_route_start)
+    app.router.add_post("/api/route/going", api_route_going)
     app.router.add_post("/api/route/arriving", api_route_arriving)
     app.router.add_post("/api/route/notify-couriers", api_route_notify_couriers)
     app.router.add_get("/api/route/near-notify", api_near_notify_get)
