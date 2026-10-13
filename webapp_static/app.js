@@ -549,84 +549,46 @@
     return "";
   }
 
-  // Кнопки курьера у активной точки — три понятных шага сверху вниз:
-  // 1 «Поехали» (клиентам: курьер выехал), 2 «Подъезжаю» (клиентам: подъезжает),
-  // 3 «Сдано». Выполненный шаг становится зелёным с временем и числом клиентов.
-  // Кнопка реагирует мгновенно (сообщения уходят в фоне).
+  // Кнопки курьера у активной точки — как привычно: «Поехали» и «Сдано» в ряд,
+  // ниже «Подъезжаю» и «Наличные». «Поехали» и «Подъезжаю» отправляют клиентам
+  // сообщение; нажатая кнопка сразу меняется («✓ Выехал · 12:30») и показывает
+  // тост с числом клиентов, повторное нажатие ничего не отправляет.
   function stepInfo(pointName) {
     state.steps = state.steps || {};
     return state.steps[pointName] || (state.steps[pointName] = {});
   }
 
-  function buildStepButtons(point) {
-    var wrap = document.createElement("div");
-    wrap.className = "steps";
+  function markStepBtn(btn, kind, doneLabel, idleLabel, info) {
+    if (info[kind]) {
+      btn.classList.add("step-done");
+      btn.textContent = "✓ " + doneLabel + " · " + info[kind];
+    } else {
+      btn.classList.remove("step-done");
+      btn.textContent = idleLabel;
+    }
+  }
 
-    function stepBtn(num, title, hint, kind, onGo) {
-      var info = stepInfo(point.point);
-      var done = info[kind];
-      var btn = document.createElement("button");
-      btn.className = "step-btn" + (done ? " done" : "");
-      var numEl = document.createElement("span");
-      numEl.className = "step-num";
-      numEl.textContent = done ? "✓" : String(num);
-      var txt = document.createElement("span");
-      txt.className = "step-text";
-      var t1 = document.createElement("span");
-      t1.className = "step-title";
-      t1.textContent = done ? title + " · " + done : title;
-      var t2 = document.createElement("span");
-      t2.className = "step-hint";
-      t2.textContent = info[kind + "_note"] || hint;
-      txt.appendChild(t1);
-      txt.appendChild(t2);
-      btn.appendChild(numEl);
-      btn.appendChild(txt);
-      btn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        onGo(btn, t1, t2, numEl, !!done);
+  function sendStep(point, path, kind, btn, doneLabel, idleLabel) {
+    var info = stepInfo(point.point);
+    if (info[kind]) { toast("Уже отправлено ранее"); return; }
+    if (btn.dataset.busy) return;
+    btn.dataset.busy = "1";
+    btn.textContent = "Отправляем…";
+    haptic("select");
+    api(path, { method: "POST", body: { date: state.date, point: point.point } })
+      .then(function (res) {
+        info[kind] = res.time || _nowHHMM();
+        delete btn.dataset.busy;
+        markStepBtn(btn, kind, doneLabel, idleLabel, info);
+        haptic("success");
+        toast(res.already ? "Уже отправлено ранее"
+          : (res.recipients ? "Клиентам отправлено: " + res.recipients : "Отмечено (получателей нет)"));
+      })
+      .catch(function (err) {
+        delete btn.dataset.busy;
+        btn.textContent = idleLabel;
+        toast("Не удалось: " + err.message);
       });
-      return btn;
-    }
-
-    function callStep(path, kind, title, btn, t1, t2, numEl) {
-      var info = stepInfo(point.point);
-      btn.disabled = true;
-      t2.textContent = "Отправляем…";
-      haptic("select");
-      api(path, { method: "POST", body: { date: state.date, point: point.point } })
-        .then(function (res) {
-          info[kind] = res.time || _nowHHMM();
-          info[kind + "_note"] = res.already ? "Уже отправлено ранее"
-            : (res.recipients ? "Клиентам отправлено: " + res.recipients : "Отмечено (получателей нет)");
-          haptic("success");
-          btn.classList.add("done");
-          numEl.textContent = "✓";
-          t1.textContent = title + " · " + info[kind];
-          t2.textContent = info[kind + "_note"];
-          btn.disabled = false;
-        })
-        .catch(function (err) {
-          btn.disabled = false;
-          t2.textContent = "Не получилось, нажмите ещё раз";
-          toast("Не удалось: " + err.message);
-        });
-    }
-
-    wrap.appendChild(stepBtn(1, "Поехали", "Клиентам придёт: курьер выехал", "going", function (btn, t1, t2, numEl, done) {
-      openLink(yandexMapsUrl(point));
-      recordRouteStart();
-      if (!done) callStep("/api/route/going", "going", "Выехал", btn, t1, t2, numEl);
-    }));
-    wrap.appendChild(stepBtn(2, "Подъезжаю", "Клиентам придёт: курьер будет через 5 минут", "arriving", function (btn, t1, t2, numEl, done) {
-      if (!done) callStep("/api/route/arriving", "arriving", "Подъезжаю", btn, t1, t2, numEl);
-    }));
-    var doneBtn = document.createElement("button");
-    doneBtn.className = "step-btn step-final";
-    doneBtn.innerHTML = '<span class="step-num">3</span><span class="step-text"><span class="step-title">Сдано</span><span class="step-hint">Заказ передан клиенту</span></span>';
-    doneBtn.addEventListener("click", function (e) { e.stopPropagation(); completePoint(point.point); });
-    wrap.appendChild(doneBtn);
-    return wrap;
   }
 
   function buildCard(point, index, active) {
@@ -890,8 +852,26 @@
 
     // Кнопки курьера у активной точки — всегда на виду, не прячем их за
     // разворачиванием карточки (это самое частое действие).
+    var stepInfoNow = stepInfo(point.point);
     if (state.role === "courier" && active && point.status !== "Сдано") {
-      card.appendChild(buildStepButtons(point));
+      var actions = document.createElement("div");
+      actions.className = "card-actions";
+      var goBtn = document.createElement("button");
+      goBtn.className = "btn-primary";
+      markStepBtn(goBtn, "going", "Выехал", "Поехали", stepInfoNow);
+      goBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openLink(yandexMapsUrl(point));
+        recordRouteStart();
+        if (!stepInfo(point.point).going) sendStep(point, "/api/route/going", "going", goBtn, "Выехал", "Поехали");
+      });
+      var doneBtn = document.createElement("button");
+      doneBtn.className = "btn-primary success";
+      doneBtn.textContent = "Сдано";
+      doneBtn.addEventListener("click", function () { completePoint(point.point); });
+      actions.appendChild(goBtn);
+      actions.appendChild(doneBtn);
+      card.appendChild(actions);
     }
 
     // "Наличные" — отдельной строкой под основными кнопками, не толкает
@@ -902,6 +882,16 @@
     if (state.role === "courier" && (active || point.status === "Сдано")) {
       var cashRow = document.createElement("div");
       cashRow.className = "card-actions-secondary";
+      if (active && point.status !== "Сдано") {
+        var nearBtn = document.createElement("button");
+        nearBtn.className = "btn-ghost";
+        markStepBtn(nearBtn, "arriving", "Подъезжаю", "Подъезжаю", stepInfoNow);
+        nearBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          sendStep(point, "/api/route/arriving", "arriving", nearBtn, "Подъезжаю", "Подъезжаю");
+        });
+        cashRow.appendChild(nearBtn);
+      }
       var cashBtn = document.createElement("button");
       cashBtn.className = "btn-ghost cash-btn";
       cashBtn.textContent = "💵 Наличные";
