@@ -352,6 +352,25 @@ async def api_route_visibility_set(request: web.Request):
     return web.json_response({"ok": True, "notified": notified})
 
 
+async def api_route_notify_couriers(request: web.Request):
+    """Ручная отправка «маршрут готов» курьерам на дату (повтор / тест). Возвращает
+    сколько курьеров назначено на точки, сколько из них с выключенными
+    уведомлениями и сколько реально получили."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or await _today()
+    bot = request.app.get("bot")
+    if bot is None:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+    route = await _retry_sheets(sheets.get_route_for_date, date_str)
+    ids = {cid for p in route for cid in p["courier_tg_ids"]}
+    couriers = await _retry_sheets(sheets.get_couriers)
+    muted = {c["tg_id"] for c in couriers if c["notify_off"]}
+    notified = await _send_route_ready_push(bot, date_str, ids)
+    return web.json_response({"ok": True, "assigned": len(ids), "muted": len(ids & muted), "notified": notified})
+
+
 async def _notify_couriers_route_ready(bot, date_str: str) -> int:
     """Уведомляет каждого курьера, у которого на эту дату есть хотя бы одна
     назначенная точка, что маршрут готов — с кнопкой сразу в Mini App на
@@ -1176,6 +1195,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/route/complete", api_route_complete)
     app.router.add_post("/api/route/start", api_route_start)
     app.router.add_post("/api/route/arriving", api_route_arriving)
+    app.router.add_post("/api/route/notify-couriers", api_route_notify_couriers)
     app.router.add_get("/api/route/near-notify", api_near_notify_get)
     app.router.add_post("/api/route/near-notify", api_near_notify_set)
     app.router.add_get("/api/route/kpi", api_route_kpi_get)

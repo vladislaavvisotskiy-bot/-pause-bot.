@@ -2404,7 +2404,20 @@
           setRouteVisibility(d.date, input.checked, input);
         });
 
+        var pushBtn = el("button", "btn-text", "Уведомить");
+        pushBtn.addEventListener("click", function () {
+          pushBtn.disabled = true;
+          api("/api/route/notify-couriers", { method: "POST", body: { date: d.date } })
+            .then(function (res) {
+              pushBtn.disabled = false;
+              if (res.notified) toast("Курьеров уведомлено: " + res.notified);
+              else if (!res.assigned) toast("Никто не получил: на эту дату нет курьеров на точках");
+              else toast("Никто не получил: у назначенных курьеров (" + res.assigned + ") выключены уведомления или бот недоступен");
+            })
+            .catch(function (err) { pushBtn.disabled = false; toast("Не удалось: " + err.message); });
+        });
         row.appendChild(label);
+        row.appendChild(pushBtn);
         row.appendChild(switchLabel);
         card.appendChild(row);
       });
@@ -2434,7 +2447,7 @@
         if (visible && data.notified) {
           toast("Курьер уведомлён — маршрут на " + date + " для него открыт");
         } else if (visible) {
-          toast("Видимость включена");
+          toast("Видимость включена. Уведомление не отправлено: курьер не назначен на точки этой даты, у него выключены уведомления или видимость уже была включена. Кнопка «Уведомить» отправит повторно.");
         } else {
           toast("Видимость выключена");
         }

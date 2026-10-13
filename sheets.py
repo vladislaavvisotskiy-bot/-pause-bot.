@@ -4575,17 +4575,25 @@ def _backfill_courier_into_active_route(tg_id: str):
     Mini App по умолчанию; более поздние уже синхронизированные даты (если
     админ успел открыть "завтра" заранее) не трогает — на новый день
     sync_daily_route и так включит всех текущих курьеров автоматически."""
-    date_str = get_active_menu_date()
+    today = _now().date()
+    active = get_active_menu_date()
     ws = _ws(config.SHEET_ROUTE)
     rows = ws.get_all_values()
     cells = []
+    touched = set()
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.ROUTE_DATA_START_ROW:
             continue
         if len(row) < config.ROUTE_STATUS:
             continue
-        if row[config.ROUTE_DATE - 1].strip() != date_str:
+        date_s = row[config.ROUTE_DATE - 1].strip()
+        # Сегодня, активная дата меню и любые будущие дни, где маршрут уже создан.
+        try:
+            d = dt.datetime.strptime(date_s, "%d.%m.%Y").date()
+        except ValueError:
+            continue
+        if d < today and date_s != active:
             continue
         status = row[config.ROUTE_STATUS - 1].strip()
         if status in (config.ROUTE_STATUS_REMOVED, config.ROUTE_STATUS_DELIVERED):
@@ -4596,9 +4604,11 @@ def _backfill_courier_into_active_route(tg_id: str):
             continue
         current_ids.append(tg_id)
         cells.append(gspread.Cell(r, config.ROUTE_COURIER_TG_ID, ",".join(current_ids)))
+        touched.add(date_s)
     if cells:
         ws.update_cells(cells, value_input_option="RAW")
-        _invalidate_route_cache(date_str)
+        for date_s in touched:
+            _invalidate_route_cache(date_s)
 
 
 def is_courier(tg_id) -> bool:
