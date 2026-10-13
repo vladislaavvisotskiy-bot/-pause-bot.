@@ -4376,6 +4376,7 @@ def get_couriers() -> list:
             "disabled": (row[config.COURIER_DISABLED - 1].strip().lower() == "да") if len(row) >= config.COURIER_DISABLED else False,
             "notify_off": (row[config.COURIER_NOTIFY_OFF - 1].strip().lower() == "да") if len(row) >= config.COURIER_NOTIFY_OFF else False,
             "cash_from": row[config.COURIER_CASH_FROM - 1].strip() if len(row) >= config.COURIER_CASH_FROM else "",
+            "lang": row[config.COURIER_LANG - 1].strip() if len(row) >= config.COURIER_LANG else "",
         })
     try:
         out.extend(_former_couriers({c["tg_id"] for c in out}))
@@ -4503,6 +4504,11 @@ def set_courier_disabled(tg_id: str, disabled: bool) -> bool:
             _cache["couriers"] = None
             return True
     return False
+
+
+def set_courier_lang(tg_id: str, lang: str) -> bool:
+    """Запоминает язык интерфейса курьера ("uz"/"ru") для пушей. False — такого курьера нет."""
+    return _set_courier_flag(tg_id, config.COURIER_LANG, "uz" if lang == "uz" else "ru")
 
 
 def set_courier_notify_off(tg_id: str, off: bool) -> bool:

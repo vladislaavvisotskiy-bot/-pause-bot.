@@ -282,6 +282,14 @@ async def api_me(request: web.Request):
     })
 
 
+async def api_me_lang(request: web.Request):
+    """Язык интерфейса курьера — для пушей бота на нём же."""
+    body = await request.json()
+    lang = "uz" if body.get("lang") == "uz" else "ru"
+    await _retry_sheets(sheets.set_courier_lang, str(request["tg_id"]), lang)
+    return web.json_response({"ok": True})
+
+
 async def api_route_get(request: web.Request):
     date_str = request.query.get("date") or await _today()
     role = request["role"]
@@ -392,15 +400,18 @@ async def _send_route_ready_push(bot, date_str: str, courier_ids: set) -> int:
     # "Уведомления" у курьера (см. "Курьеры" → карточка курьера,
     # sheets.set_courier_notify_off) — выключает ТОЛЬКО этот пуш, доступ
     # к самому Mini App не трогает (в отличие от COURIER_DISABLED).
-    notify_off = {c["tg_id"] for c in await _retry_sheets(sheets.get_couriers) if c["notify_off"]}
+    couriers_all = await _retry_sheets(sheets.get_couriers)
+    notify_off = {c["tg_id"] for c in couriers_all if c["notify_off"]}
+    langs = {c["tg_id"]: c.get("lang") for c in couriers_all}
     courier_ids = courier_ids - notify_off
     if not courier_ids:
         return 0
 
     url = f"{config.WEBAPP_URL}/miniapp?date={date_str}"
-    text = texts.ROUTE_READY_PUSH.format(date=date_str)
     sent = 0
     for tg_id in courier_ids:
+        # Пуш на языке, выбранном курьером в приложении (по умолчанию русский).
+        text = (texts.ROUTE_READY_PUSH_UZ if langs.get(tg_id) == "uz" else texts.ROUTE_READY_PUSH).format(date=date_str)
         try:
             await bot.send_message(int(tg_id), text, reply_markup=kb.route_ready_kb(url))
             sent += 1
@@ -1132,6 +1143,7 @@ def _static_version() -> str:
         ts = max(
             os.path.getmtime(os.path.join(STATIC_DIR, "app.js")),
             os.path.getmtime(os.path.join(STATIC_DIR, "styles.css")),
+            os.path.getmtime(os.path.join(STATIC_DIR, "i18n.js")),
         )
         return str(int(ts))
     except OSError:
@@ -1157,6 +1169,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/miniapp/", index_page)
     app.router.add_static("/miniapp/static/", STATIC_DIR, show_index=False)
     app.router.add_get("/api/me", api_me)
+    app.router.add_post("/api/me/lang", api_me_lang)
     app.router.add_get("/api/route", api_route_get)
     app.router.add_get("/api/route/dates", api_route_dates)
     app.router.add_get("/api/route/visibility", api_route_visibility_get)

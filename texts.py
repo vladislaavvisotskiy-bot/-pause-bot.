@@ -699,6 +699,7 @@ MENU_BROADCAST_BTN = "💌 Посмотреть меню"
 
 # --- Маршрут курьера: пуш о готовности (Mini App) ---
 ROUTE_READY_PUSH = "🚚 Маршрут на {date} готов — можно выезжать"
+ROUTE_READY_PUSH_UZ = "🚚 {date} sanasi uchun marshrut tayyor — yo'lga chiqishingiz mumkin"
 ROUTE_READY_BTN = "🚚 PAUSE route"
 
 # ВРЕМЕННО (убрать по просьбе админа через недельку-две, когда все привыкнут

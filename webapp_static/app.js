@@ -149,7 +149,7 @@
 
   function toast(text) {
     var el = document.getElementById("toast");
-    el.textContent = text;
+    el.textContent = window.RouteI18n ? window.RouteI18n.tr(text) : text;
     el.hidden = false;
     clearTimeout(toast._t);
     toast._t = setTimeout(function () { el.hidden = true; }, 2600);
@@ -3350,7 +3350,22 @@
     var bar = el("div", "screen-header screen-header-center");
     bar.appendChild(el("div", "screen-header-side screen-header-left"));
     bar.appendChild(el("div", "screen-header-title", escapeHtml(title)));
-    bar.appendChild(el("div", "screen-header-side screen-header-right"));
+    var rightSide = el("div", "screen-header-side screen-header-right");
+    // Выбор языка — на виду в шапке обоих экранов.
+    var i18n = window.RouteI18n;
+    var cur = i18n ? i18n.lang : "ru";
+    var pill = el("div", "lang-pill");
+    ["ru", "uz"].forEach(function (code) {
+      var b = el("button", "lang-pill-btn" + (cur === code ? " active" : ""), code === "ru" ? "RU" : "UZ");
+      b.addEventListener("click", function () {
+        if (cur === code || !i18n) return;
+        haptic("select");
+        i18n.set(code);
+      });
+      pill.appendChild(b);
+    });
+    rightSide.appendChild(pill);
+    bar.appendChild(rightSide);
     root.appendChild(bar);
   }
 

@@ -64,6 +64,7 @@ input, textarea, select { font-family: inherit; font-size: 15px; }
   gap: 8px;
 }
 .screen-header-side { flex: 0 0 40px; display: flex; align-items: center; }
+.screen-header-center .screen-header-side { flex: 1 1 0; }
 .screen-header-right { justify-content: flex-end; }
 .screen-header-title {
   flex: 1;
@@ -1000,3 +1001,8 @@ p { margin: 0; color: var(--ink-soft); }
 .person-dlv-comment { margin-top: 4px; padding: 6px 10px; border-radius: 10px; background: #f6ead2; color: #6b4a1f; font-size: 13px; line-height: 1.35; }
 
 #removed-points-btn { width: 100%; margin-top: 10px; }
+
+/* Выбор языка RU / UZ в шапке */
+.lang-pill { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--ink-soft-bg); }
+.lang-pill-btn { border: none; background: transparent; color: var(--ink-soft); font-size: 12px; font-weight: 700; letter-spacing: .04em; padding: 5px 10px; border-radius: 999px; }
+.lang-pill-btn.active { background: var(--ink); color: var(--ivory); }
