@@ -24,6 +24,7 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import math
 import os
 import random
 import time
@@ -349,6 +350,45 @@ async def api_points(request: web.Request):
     return web.json_response({"points": await _retry_sheets(sheets.get_points, zone)})
 
 
+KNOWN_POINT_RADIUS_M = 60  # метка ближе этого к уже существующей точке — это та же точка
+
+
+def _haversine_m(lat1, lon1, lat2, lon2) -> float:
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi, dl = p2 - p1, math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+async def _resolve_known_point(point: str, lat, lon):
+    """Если «новая» точка на самом деле уже есть в «Точки доставки» (то же имя
+    или метка в пределах KNOWN_POINT_RADIUS_M) — возвращает существующую точку
+    {"name", "zone"}, иначе None. Такой заказ не должен уходить на подтверждение
+    админу: туда мы и так доставляем."""
+    points = await _retry_sheets(sheets.get_delivery_points)
+    zones = await _retry_sheets(sheets.get_point_zones)
+    low = (point or "").strip().lower()
+    for p in points:
+        if low and p["name"].strip().lower() == low:
+            return {"name": p["name"], "zone": zones.get(p["name"], "")}
+    try:
+        la, lo = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None
+    best, best_d = None, None
+    for p in points:
+        try:
+            d = _haversine_m(la, lo, float(p["lat"]), float(p["lon"]))
+        except (TypeError, ValueError):
+            continue
+        if d <= KNOWN_POINT_RADIUS_M and (best_d is None or d < best_d):
+            best, best_d = p, d
+    if best:
+        return {"name": best["name"], "zone": zones.get(best["name"], "")}
+    return None
+
+
 async def api_delivery_points(request: web.Request):
     """Точки с реальными координатами — метки на карте выбора точки
     доставки (см. pauseapp_static/app.js: renderDeliveryMapPicker).
@@ -504,6 +544,11 @@ async def api_order_submit(request: web.Request):
     ticket_item_index = body.get("ticket_item_index")
     if not zone or not point:
         return web.json_response({"error": "point_required"}, status=400)
+    if is_new_point:
+        known = await _resolve_known_point(point, lat, lon)
+        if known:
+            point, is_new_point = known["name"], False
+            zone = known["zone"] or zone
 
     # Платная доставка по статусу — считаем здесь САМИ по order_count
     # клиента, не доверяя тому, что могла прислать корзина (сервер —
@@ -897,6 +942,11 @@ async def api_profile_edit(request: web.Request):
     if phone:
         await _retry_sheets(sheets.update_client_field, client["row"], config.COL_CONTACT, phone)
     if zone and point:
+        if is_new_point:
+            known = await _resolve_known_point(point, lat, lon)
+            if known:
+                point, is_new_point = known["name"], False
+                zone = known["zone"] or zone
         await _retry_sheets(sheets.update_client_point, client["row"], zone, point)
         if is_new_point and lat and lon:
             try:

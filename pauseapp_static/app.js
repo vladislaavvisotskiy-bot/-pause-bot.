@@ -7931,6 +7931,17 @@
           return;
         }
         if (!pointVal || !zoneVal) { toast(t("address.fillBoth")); return; }
+        // Метка рядом с уже существующей точкой — это та же точка, не «новая».
+        var near = null, nearD = Infinity;
+        allPoints.forEach(function (p) {
+          var d = haversineMeters(lat, lon, p.lat, p.lon);
+          if (d < nearD) { nearD = d; near = p; }
+        });
+        if (near && nearD <= 60) {
+          haptic("success");
+          onPicked({ zone: near.zone || zoneVal, point: near.name, isNewPoint: false, lat: null, lon: null });
+          return;
+        }
         haptic("success");
         onPicked({ zone: zoneVal, point: pointVal, isNewPoint: true, lat: lat, lon: lon });
       });
