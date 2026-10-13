@@ -10,6 +10,7 @@ import logging
 
 from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError, TelegramBadRequest
 
+import keyboards as kb
 import sheets
 import texts
 from webapp import _retry_sheets
@@ -18,6 +19,7 @@ logger = logging.getLogger("pause_bot")
 
 KIND_GOING = "going"
 KIND_ARRIVING = "arriving"
+KIND_DELIVERED = "delivered"
 STEP = "*"
 
 _tasks = set()
@@ -57,15 +59,15 @@ async def trigger(bot, date_str: str, point_data: dict, kind: str) -> dict:
     return {"recipients": len(targets), "time": now_hm, "already": False}
 
 
-async def _deliver(bot, date_str: str, point: str, kind: str, targets: list):
-    entries = [(STEP, kind)]  # шаг для интерфейса курьера — пишем всегда
+async def _deliver(bot, date_str: str, point: str, kind: str, targets: list, markup=None, step: bool = True):
+    entries = [(STEP, kind)] if step else []  # шаг для интерфейса курьера
     sem = asyncio.Semaphore(8)
 
     async def send(cid, tg_id, text):
         async with sem:
             for _ in range(2):
                 try:
-                    await bot.send_message(tg_id, text)
+                    await bot.send_message(tg_id, text, reply_markup=markup)
                     return (cid, kind)
                 except TelegramRetryAfter as e:
                     await asyncio.sleep(float(e.retry_after) + 1)
@@ -82,3 +84,40 @@ async def _deliver(bot, date_str: str, point: str, kind: str, targets: list):
         await _retry_sheets(sheets.add_courier_near_log, date_str, point, entries)
     except Exception:
         logger.exception("Оповещение «курьер рядом»: сбой")
+
+
+async def notify_delivered(bot, date_str: str, point_data: dict) -> int:
+    """«Сдано»: клиентам точки — «обед доставлен, оцените доставку» (кнопка открывает
+    окно оценки в PAUSE App). Отправка в фоне, каждому клиенту — раз в день."""
+    if not point_data or await _retry_sheets(sheets.is_courier_notify_disabled):
+        return 0
+    clients = {str(c["id"]): c for c in await _retry_sheets(sheets.get_broadcast_clients)}
+    log = await _retry_sheets(sheets.get_courier_near_log, date_str)
+    targets, seen = [], set()
+    for p in point_data.get("people", []):
+        cid = str(p.get("client_id") or "").strip()
+        c = clients.get(cid)
+        if not c or cid in seen or c.get("notify_courier_off") or (cid, KIND_DELIVERED) in log:
+            continue
+        seen.add(cid)
+        nm = (c.get("name") or "").strip()
+        text = texts.RATE_REQUEST_TEXT.format(name=nm) if nm else texts.RATE_REQUEST_TEXT_NONAME
+        targets.append((cid, int(c["tg_id"]), text))
+    if targets:
+        task = asyncio.ensure_future(_deliver(bot, date_str, point_data["point"], KIND_DELIVERED, targets,
+                                              markup=kb.rate_delivery_kb(date_str), step=False))
+        _tasks.add(task)
+        task.add_done_callback(_tasks.discard)
+    return len(targets)
+
+
+def notify_delivered_bg(bot, date_str: str, point_data: dict):
+    """Ставит notify_delivered в фон — «Сдано» отвечает курьеру мгновенно."""
+    async def run():
+        try:
+            await notify_delivered(bot, date_str, point_data)
+        except Exception:
+            logger.exception("Оповещение об оценке доставки: сбой")
+    task = asyncio.ensure_future(run())
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)

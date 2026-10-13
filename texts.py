@@ -724,3 +724,24 @@ COURIER_GOING_TEXT = "{name}, курьер выехал к вам. Пожалу�
 COURIER_GOING_TEXT_NONAME = "Курьер выехал к вам. Пожалуйста, подготовьтесь встретить заказ."
 COURIER_ARRIVING_TEXT = "{name}, курьер будет у вас примерно через 5 минут. Встречайте."
 COURIER_ARRIVING_TEXT_NONAME = "Курьер будет у вас примерно через 5 минут. Встречайте."
+
+# Оценка доставки после «Сдано» (courier_notify.notify_delivered, pauseapp.api_delivery_rating)
+RATE_REQUEST_TEXT = (
+    "{name}, ваш обед доставлен. Приятного аппетита!\n"
+    "Пожалуйста, оцените доставку — это займёт полминуты.\n\n"
+    "Buyurtmangiz yetkazildi. Yoqimli ishtaha! Iltimos, yetkazib berishni baholang."
+)
+RATE_REQUEST_TEXT_NONAME = (
+    "Ваш обед доставлен. Приятного аппетита!\n"
+    "Пожалуйста, оцените доставку — это займёт полминуты.\n\n"
+    "Buyurtmangiz yetkazildi. Yoqimli ishtaha! Iltimos, yetkazib berishni baholang."
+)
+RATE_REQUEST_BTN = "Оценить доставку · Baholash"
+ADMIN_DELIVERY_RATING_ALERT = (
+    "🚚 Оценка доставки {date}{edited}\n"
+    "{stars_line} ({stars}/5)\n"
+    "Клиент: {name} (ID {client_id})\n"
+    "Точка: {point}\n"
+    "Курьер: {courier}\n\n"
+    "{text}"
+)

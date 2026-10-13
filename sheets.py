@@ -3009,6 +3009,71 @@ def get_courier_near_log(date_str: str) -> set:
     return out
 
 
+_DR_HEADER = ["Дата", "Время", "Клиент", "Имя", "Точка", "Курьер", "Оценка", "Комментарий"]
+_delivery_ratings_lock = threading.Lock()
+
+
+def find_client_delivery_point(client_id, date_str: str) -> str:
+    """Точка, на которую доставили заказ клиента в эту дату ("" — заказа нет)."""
+    for i, row in enumerate(_orders_raw_rows()):
+        if i + 1 < config.ORDERS_DATA_START_ROW or len(row) < config.O_CLIENT_ID:
+            continue
+        if row[config.O_CLIENT_ID - 1].strip() != str(client_id) or row[config.O_DATE - 1].strip() != date_str:
+            continue
+        if len(row) >= config.O_COMMENT and is_canceled(row[config.O_COMMENT - 1]):
+            continue
+        return row[config.O_POINT - 1].strip() if len(row) >= config.O_POINT else ""
+    return ""
+
+
+def save_delivery_rating(date_str: str, client_id, name: str, point: str, courier: str, stars: int, comment: str) -> bool:
+    """Сохраняет оценку (одна на клиента и дату; повторная правит прежнюю).
+    Возвращает True, если это правка уже существующей оценки."""
+    now = _now().strftime("%H:%M")
+    with _delivery_ratings_lock:
+        ws = _ws_or_create(config.SHEET_DELIVERY_RATINGS, _DR_HEADER)
+        for i, row in enumerate(ws.get_all_values()):
+            if i and len(row) >= 3 and row[0].strip() == date_str and row[2].strip() == str(client_id):
+                ws.update_cells([
+                    gspread.Cell(i + 1, 2, now), gspread.Cell(i + 1, 7, int(stars)),
+                    gspread.Cell(i + 1, 8, comment or ""),
+                ], value_input_option="RAW")
+                return True
+        ws.append_row([date_str, now, str(client_id), name or "", point or "", courier or "", int(stars), comment or ""],
+                      value_input_option="RAW")
+        return False
+
+
+def get_delivery_ratings(date_str: str = None) -> list:
+    ws = _ws_or_create(config.SHEET_DELIVERY_RATINGS, _DR_HEADER)
+    out = []
+    for i, r in enumerate(ws.get_all_values()):
+        if not i or len(r) < 7 or not r[0].strip():
+            continue
+        if date_str and r[0].strip() != date_str:
+            continue
+        r = r + [""] * (8 - len(r))
+        try:
+            stars = int(r[6])
+        except ValueError:
+            continue
+        out.append({"date": r[0].strip(), "time": r[1].strip(), "client_id": r[2].strip(), "name": r[3].strip(),
+                    "point": r[4].strip(), "courier": r[5].strip(), "stars": stars, "comment": r[7].strip()})
+    return out
+
+
+def get_delivery_rating_dates() -> list:
+    """[{"date","count","avg"}] — даты с оценками, новые сверху."""
+    agg = {}
+    for r in get_delivery_ratings():
+        a = agg.setdefault(r["date"], [0, 0])
+        a[0] += 1
+        a[1] += r["stars"]
+    out = [{"date": d, "count": a[0], "avg": round(a[1] / a[0], 1)} for d, a in agg.items()]
+    out.sort(key=lambda e: _parse_ru_date_safe(e["date"]), reverse=True)
+    return out
+
+
 def get_courier_steps(date_str: str) -> dict:
     """{точка: {вид: "ЧЧ:ММ"}} — какие шаги курьер уже нажал (строки с клиентом "*")."""
     ws = _ws_or_create(config.SHEET_COURIER_NEAR_LOG, _CN_HEADER)

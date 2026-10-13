@@ -1214,6 +1214,69 @@ async def api_favorites_toggle(request: web.Request):
     return web.json_response({"ok": True, "favorited": favorited})
 
 
+async def api_delivery_rating(request: web.Request):
+    """Оценка доставки клиентом (окно открывается по ссылке из сообщения после
+    «Сдано»): звёзды 1–5 + необязательный комментарий. Хранится в листе «Оценки
+    доставки», сразу приходит админам в бот текстом."""
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=404)
+    body = await request.json()
+    date_str = (body.get("date") or "").strip()
+    try:
+        dt.datetime.strptime(date_str, "%d.%m.%Y")
+    except ValueError:
+        return web.json_response({"error": "bad_date"}, status=400)
+    try:
+        stars = int(body.get("stars") or 0)
+    except (TypeError, ValueError):
+        stars = 0
+    if not 1 <= stars <= 5:
+        return web.json_response({"error": "stars_required"}, status=400)
+    comment = (body.get("comment") or "").strip()[:1000]
+    point = await _retry_sheets(sheets.find_client_delivery_point, client["id"], date_str)
+    if not point:
+        return web.json_response({"error": "no_order"}, status=400)
+    courier = ""
+    try:
+        route = await _retry_sheets(sheets.get_route_for_date, date_str)
+        couriers = {c["tg_id"]: c["name"] for c in await _retry_sheets(sheets.get_couriers)}
+        pd = next((x for x in route if x["point"] == point), None)
+        if pd:
+            courier = ", ".join(couriers.get(i, i) for i in pd["courier_tg_ids"])
+    except Exception:
+        logger.exception("Оценка доставки: не удалось определить курьера")
+    edited = await _retry_sheets(sheets.save_delivery_rating, date_str, client["id"], client.get("name", ""), point, courier, stars, comment)
+    bot = request.app.get("bot")
+    if bot and config.ADMIN_IDS:
+        try:
+            await notify_admins(bot, texts.ADMIN_DELIVERY_RATING_ALERT.format(
+                date=date_str, edited=" (изменена)" if edited else "",
+                stars_line="★" * stars + "☆" * (5 - stars), stars=stars,
+                name=client.get("name", ""), client_id=client.get("id", ""),
+                point=point, courier=courier or "—", text=comment or "(без комментария)",
+            ))
+        except Exception:
+            logger.exception("Оценка доставки: не удалось уведомить админов")
+    return web.json_response({"ok": True})
+
+
+async def api_ops_delivery_rating_dates(request: web.Request):
+    if not (request["is_main_admin"] or request["pa_finance"]):
+        return web.json_response({"error": "forbidden"}, status=403)
+    return web.json_response({"dates": await _retry_sheets(sheets.get_delivery_rating_dates)})
+
+
+async def api_ops_delivery_ratings(request: web.Request):
+    if not (request["is_main_admin"] or request["pa_finance"]):
+        return web.json_response({"error": "forbidden"}, status=403)
+    date_str = (request.query.get("date") or "").strip()
+    items = await _retry_sheets(sheets.get_delivery_ratings, date_str or None)
+    items.sort(key=lambda r: r["time"], reverse=True)
+    return web.json_response({"ratings": items})
+
+
 async def api_feedback(request: web.Request):
     """Отзыв к конкретному заказу — та же логика, что
     handlers/profile.py: feedback_start/feedback_save."""
@@ -2922,6 +2985,9 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/feed/image/{file_id}", api_feed_image)
     app.router.add_get("/api/moments", api_moments_list)
     app.router.add_post("/api/moments", api_moments_publish)
+    app.router.add_post("/api/delivery-rating", api_delivery_rating)
+    app.router.add_get("/api/ops/delivery-ratings/dates", api_ops_delivery_rating_dates)
+    app.router.add_get("/api/ops/delivery-ratings", api_ops_delivery_ratings)
     app.router.add_post("/api/moments/views", api_moments_views)
     app.router.add_post("/api/moments/delete", api_moments_delete)
     app.router.add_post("/api/moments/comments/delete", api_moment_comment_delete)

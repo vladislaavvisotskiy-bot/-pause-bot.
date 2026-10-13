@@ -1004,6 +1004,17 @@ async def api_route_complete(request: web.Request):
             if point not in mine:
                 return web.json_response({"error": "forbidden"}, status=403)
         await _retry_sheets(sheets.mark_route_delivered, date_str, point, retries=2)
+        point_data = None
+        try:
+            route_now = await _retry_sheets(sheets.get_route_for_date, date_str)
+            point_data = next((p for p in route_now if p["point"] == point), None)
+        except Exception:
+            logger.exception("«Сдано»: не удалось получить клиентов точки для оценки доставки")
+    bot = request.app.get("bot")
+    if point_data and bot:
+        import courier_notify
+        # «Обед доставлен, оцените доставку» — клиентам этой точки, в фоне (ответ курьеру не ждёт).
+        courier_notify.notify_delivered_bg(bot, date_str, point_data)
     return web.json_response({"ok": True})
 
 

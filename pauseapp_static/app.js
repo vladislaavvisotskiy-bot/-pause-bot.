@@ -363,6 +363,14 @@
       "feedback.needSomething": "Поставьте оценку или напишите пару слов",
       "feedback.thanks": "Спасибо, что рассказали 🤎",
       "feedback.sendFailed": "Не получилось отправить: {msg}",
+      "rating.title": "Оцените доставку",
+      "rating.sub": "Как прошла доставка {date}?",
+      "rating.placeholder": "Комментарий — необязательно",
+      "rating.send": "Отправить",
+      "rating.needStars": "Поставьте оценку звёздами",
+      "rating.thanks": "Спасибо за оценку",
+      "rating.noOrder": "Не нашли ваш заказ на эту дату",
+      "rating.failed": "Не получилось отправить: {msg}",
 
       "notify.title": "Уведомления",
       "notify.morningTitle": "Напоминание о PAUSE",
@@ -673,6 +681,14 @@
       "feedback.needSomething": "Baho qo'ying yoki bir necha so'z yozing",
       "feedback.thanks": "Fikringiz uchun rahmat 🤎",
       "feedback.sendFailed": "Yuborib bo'lmadi: {msg}",
+      "rating.title": "Yetkazib berishni baholang",
+      "rating.sub": "{date} dagi yetkazib berish qanday o'tdi?",
+      "rating.placeholder": "Izoh — majburiy emas",
+      "rating.send": "Yuborish",
+      "rating.needStars": "Yulduzchalar bilan baho bering",
+      "rating.thanks": "Bahoingiz uchun rahmat",
+      "rating.noOrder": "Bu sana uchun buyurtmangiz topilmadi",
+      "rating.failed": "Yuborib bo'lmadi: {msg}",
 
       "notify.title": "Bildirishnomalar",
       "notify.morningTitle": "PAUSE haqida eslatma",
@@ -983,6 +999,14 @@
       "feedback.needSomething": "Give a rating or write a few words",
       "feedback.thanks": "Thanks for sharing 🤎",
       "feedback.sendFailed": "Couldn't send: {msg}",
+      "rating.title": "Rate the delivery",
+      "rating.sub": "How was your delivery on {date}?",
+      "rating.placeholder": "Comment — optional",
+      "rating.send": "Send",
+      "rating.needStars": "Please rate with stars",
+      "rating.thanks": "Thank you for your rating",
+      "rating.noOrder": "We could not find your order for that date",
+      "rating.failed": "Could not send: {msg}",
 
       "notify.title": "Notifications",
       "notify.morningTitle": "PAUSE reminder",
@@ -4596,7 +4620,7 @@
               ? '<div class="order-card-sums"><div><span>' + escapeHtml(t("orders.setsSum")) + '</span><span>' + fmtSum(g.sets_sum) + '</span></div>' +
                 '<div><span>' + escapeHtml(t("orders.delivery")) + '</span><span>' + fmtSum(g.delivery_fee) + '</span></div></div>'
               : "");
-          if (g.can_cancel || (!g.canceled && g.row_for_feedback)) {
+          if (g.can_cancel) {
             var actions = el("div", "order-card-actions");
             if (g.can_cancel) {
               var cancelBtn = el("button", "btn-ghost", t("orders.cancel"));
@@ -4604,11 +4628,6 @@
                 showConfirm(t("orders.cancelConfirm", { date: g.date }), t("orders.cancelYes"), function () { cancelOrder(root); });
               });
               actions.appendChild(cancelBtn);
-            }
-            if (!g.canceled && g.row_for_feedback) {
-              var fbBtn = el("button", "btn-text", t("orders.review"));
-              fbBtn.addEventListener("click", function () { openFeedback(g); });
-              actions.appendChild(fbBtn);
             }
             card.appendChild(actions);
           }
@@ -4735,6 +4754,54 @@
       if (err.code === "too_late") msg = t("orders.cancelTooLate");
       else if (err.code === "card_pending") msg = t("orders.cancelCardPending");
       toast(msg);
+    });
+  }
+
+  // Окно «Оцените доставку» — открывается ТОЛЬКО по ссылке из сообщения бота после
+  // «Сдано» (?rate=ДД.ММ.ГГГГ), отдельного входа в приложении нет. Оценка и комментарий
+  // уходят админам в бот текстом (см. pauseapp.api_delivery_rating).
+  function openDeliveryRating(date) {
+    var stars = 0;
+    openWizard(function (body) {
+      wizardPhaseEl.innerHTML = "";
+      body.appendChild(el("h2", "wizard-title", t("rating.title")));
+      body.appendChild(el("p", null, escapeHtml(t("rating.sub", { date: date }))));
+      var starsRow = el("div", "star-rating");
+      var starBtns = [];
+      for (var i = 1; i <= 5; i++) {
+        (function (n) {
+          var b = el("button", "star-btn", ICON_STAR);
+          b.setAttribute("aria-label", n + " / 5");
+          b.addEventListener("click", function () {
+            haptic("select");
+            stars = n;
+            starBtns.forEach(function (sb, idx) { sb.classList.toggle("active", idx < stars); });
+          });
+          starBtns.push(b);
+          starsRow.appendChild(b);
+        })(i);
+      }
+      body.appendChild(starsRow);
+      var field = el("div", "field");
+      field.style.marginTop = "14px";
+      field.innerHTML = '<textarea id="rating-input" rows="4" placeholder="' + escapeHtml(t("rating.placeholder")) + '"></textarea>';
+      body.appendChild(field);
+      var send = el("button", "btn-primary wizard-footer-btn", t("rating.send"));
+      send.addEventListener("click", function () {
+        if (!stars) { toast(t("rating.needStars")); return; }
+        send.disabled = true;
+        api("/api/delivery-rating", { method: "POST", body: { date: date, stars: stars, comment: document.getElementById("rating-input").value.trim() } })
+          .then(function () {
+            haptic("success");
+            toast(t("rating.thanks"));
+            closeWizard();
+          })
+          .catch(function (err) {
+            send.disabled = false;
+            toast(err.code === "no_order" ? t("rating.noOrder") : t("rating.failed", { msg: err.message }));
+          });
+      });
+      body.appendChild(send);
     });
   }
 
@@ -4967,6 +5034,16 @@
           sub.appendChild(el("div", "skeleton-block"));
           body.appendChild(sub);
           loadOpsFinance(sub);
+        });
+      }));
+    }
+    if (state.isMainAdmin || state.paFinance) {
+      rows.appendChild(buildProfileRow(ICON_OPS_DELIVERY, "Оценка доставки", function () {
+        wizardStep(function (body) {
+          opsStepHeader(body, "Оценка доставки");
+          var sub = el("div");
+          body.appendChild(sub);
+          loadOpsDeliveryRatings(sub);
         });
       }));
     }
@@ -6577,6 +6654,49 @@
   // оплачено, ждёт подтверждения и висит в долге — за выбранный период.
   var DLV_STATE_LABEL = { paid: "Оплачена", review: "Ждёт подтверждения", debt: "В долг", unpaid: "Не оплачена" };
 
+  // "Оценка доставки" (Операционный центр): даты с оценками → оценки и комментарии за день.
+  function loadOpsDeliveryRatings(root) {
+    root.innerHTML = "";
+    root.appendChild(el("div", "skeleton-block"));
+    api("/api/ops/delivery-ratings/dates").then(function (data) {
+      root.innerHTML = "";
+      var dates = data.dates || [];
+      if (!dates.length) { root.appendChild(el("div", "empty-note", "Оценок пока нет.")); return; }
+      var list = el("div", "card profile-nav-list");
+      dates.forEach(function (d) {
+        list.appendChild(buildProfileRow(ICON_OPS_DELIVERY, d.date + " · ★ " + d.avg + " · " + d.count, function () {
+          wizardStep(function (b) { renderOpsRatingsDay(b, d); });
+        }));
+      });
+      root.appendChild(list);
+    }).catch(function (err) {
+      root.innerHTML = "";
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+    });
+  }
+
+  function renderOpsRatingsDay(body, d) {
+    opsStepHeader(body, "Оценка доставки · " + d.date);
+    var wrap = el("div");
+    body.appendChild(wrap);
+    wrap.appendChild(el("div", "skeleton-block"));
+    api("/api/ops/delivery-ratings?date=" + encodeURIComponent(d.date)).then(function (data) {
+      wrap.innerHTML = "";
+      wrap.appendChild(el("div", "ops-debtor-total", "Средняя оценка: " + d.avg + " (оценок: " + d.count + ")"));
+      (data.ratings || []).forEach(function (r) {
+        var card = el("div", "card");
+        card.innerHTML =
+          '<div class="ops-order-name">' + "★".repeat(r.stars) + "☆".repeat(5 - r.stars) + " · " + escapeHtml(r.name || r.client_id) + '</div>' +
+          '<div class="order-card-items">' + escapeHtml(r.point) + (r.courier ? " · курьер: " + escapeHtml(r.courier) : "") + " · " + escapeHtml(r.time) + '</div>' +
+          (r.comment ? '<div class="order-card-items" style="margin-top:6px">' + escapeHtml(r.comment) + '</div>' : "");
+        wrap.appendChild(card);
+      });
+    }).catch(function (err) {
+      wrap.innerHTML = "";
+      wrap.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+    });
+  }
+
   function loadOpsDelivery(root) {
     var days = 0; // 0 = сегодня
     function load() {
@@ -8168,6 +8288,8 @@
       showScreen("home");
       checkPendingCare();
       if (/[?&]pay=today\b/.test(location.search)) openProfileSubscreen(t("pay.title"), loadPayToday);
+      var rateMatch = location.search.match(/[?&]rate=(\d{2}\.\d{2}\.\d{4})/);
+      if (rateMatch) openDeliveryRating(rateMatch[1]);
     }).catch(function (err) {
       var root = document.getElementById("home-root");
       root.innerHTML = "";

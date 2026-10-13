@@ -220,6 +220,13 @@ def menu_broadcast_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def rate_delivery_kb(date_str: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.RATE_REQUEST_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/?rate={date_str}"))
+    b.adjust(1)
+    return b.as_markup()
+
+
 def route_ready_kb(url: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text=texts.ROUTE_READY_BTN, web_app=WebAppInfo(url=url))
