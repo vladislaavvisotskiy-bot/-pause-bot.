@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
+import datetime as dt
 import logging
 import random
 
@@ -232,6 +233,15 @@ async def main():
         except Exception:
             logger.exception("Автодоставка для ручных заказов не удалась")
     scheduler.add_job(_autofill_delivery, "interval", minutes=2)
+
+    async def _sync_counts():
+        try:
+            n = await asyncio.to_thread(sheets.sync_client_order_counts)
+            if n:
+                logger.info("Исправлен счётчик заказов у клиентов: %s", n)
+        except Exception:
+            logger.exception("Исправление счётчика заказов не удалось")
+    scheduler.add_job(_sync_counts, "interval", minutes=10, next_run_time=dt.datetime.now() + dt.timedelta(seconds=30))
     scheduler.start()
 
     # PAUSE App (новый клиентский Mini App, пока только для админов) живёт

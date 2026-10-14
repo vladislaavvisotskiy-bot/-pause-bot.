@@ -294,6 +294,38 @@ def _order_counts_from_orders() -> dict:
     return counts
 
 
+def sync_client_order_counts() -> int:
+    """Чинит столбец «Кол-во Заказов» (Sheet1, O) там, где в ячейке НЕ формула,
+    а вписанное когда-то число (оно застывает и не растёт): пишет реальное
+    число порций из «Заказы». Ячейки с формулой не трогает. Возвращает
+    число исправленных клиентов."""
+    ws = _ws(config.SHEET_CLIENTS)
+    start = config.CLIENTS_DATA_START_ROW
+    col = gspread.utils.rowcol_to_a1(1, config.COL_ORDER_COUNT)[:-1]
+    raw = ws.get(f"{col}{start}:{col}{ws.row_count}", value_render_option="FORMULA")
+    counts = _order_counts_from_orders()
+    ids = {c["row"]: str(c["id"]) for c in _load_clients(force=True)}
+    cells = []
+    for i, r in enumerate(range(start, start + len(raw))):
+        cid = ids.get(r)
+        if not cid:
+            continue
+        cur = raw[i][0] if raw[i] else ""
+        if isinstance(cur, str) and cur.startswith("="):
+            continue
+        real = counts.get(cid, 0)
+        try:
+            cur_n = int(float(str(cur).replace(" ", "") or 0))
+        except ValueError:
+            cur_n = None
+        if cur_n != real and (real or str(cur).strip()):
+            cells.append(gspread.Cell(r, config.COL_ORDER_COUNT, real))
+    if cells:
+        ws.update_cells(cells)
+        _cache["clients"] = None
+    return len(cells)
+
+
 def _load_clients(force=False):
     now = time.time()
     if not force and _cache["clients"] is not None and now - _cache["clients_ts"] < _CACHE_TTL:
