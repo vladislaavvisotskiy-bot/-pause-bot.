@@ -850,6 +850,7 @@
       }
       if (p.sum) {
         line1.appendChild(document.createTextNode(" · " + fmtSum(p.sum)));
+        if (p.delivery) line1.appendChild(document.createTextNode(" (вкл. доставку " + fmtSum(p.delivery) + ")"));
       }
       pDiv.appendChild(name);
       pDiv.appendChild(line1);

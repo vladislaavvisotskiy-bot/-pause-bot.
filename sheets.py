@@ -4811,7 +4811,7 @@ def get_route_people(date_str: str) -> dict:
         people = by_point.setdefault(point, {})
         person = people.setdefault(client_id, {
             "client_id": client_id, "name": name, "contact": contact,
-            "telegram": telegram, "items": [], "sum": 0,
+            "telegram": telegram, "items": [], "sum": 0, "delivery": 0,
         })
         person["items"].append({
             "set": row[config.O_SET - 1].strip(),
@@ -4821,6 +4821,12 @@ def get_route_people(date_str: str) -> dict:
             person["sum"] += int(float(row[config.O_SUM - 1].strip() or 0))
         except ValueError:
             pass
+        # Платная доставка (хранится на одной строке заказа) — входит в сумму,
+        # которую курьер получает с клиента.
+        fee = _row_delivery_fee(row)
+        if fee:
+            person["sum"] += fee
+            person["delivery"] += fee
 
     try:
         dlv = get_delivery_comments_for_date(date_str)

@@ -126,6 +126,7 @@
     ["Наличные у курьера", "Kuryerdagi naqd pul", "x"],
     ["Наличные от клиентов", "Mijozlardan naqd pul", "x"],
     ["Наличные", "Naqd pul", "x"],
+    ["вкл. доставку", "yetkazib berish bilan"],
     ["💵 Наличные", "💵 Naqd pul", "x"],
     ["На точке нет заказов", "Nuqtada buyurtmalar yo'q"],
     ["← Назад к списку", "← Ro'yxatga qaytish"],
