@@ -875,11 +875,18 @@ async def admin_debtors(callback: CallbackQuery):
 
     lines = [texts.ADMIN_DEBTORS_HEADER, ""]
     total = 0
+    total_delivery = 0
     for d in debtors:
-        lines.append(f"○ {d['name']} (ID {d['id']}) — {d['sum']:,} сум".replace(",", " "))
+        line = f"○ {d['name']} (ID {d['id']}) — {d['sum']:,} сум".replace(",", " ")
+        if d.get("delivery"):
+            line += f" (в т.ч. доставка {d['delivery']:,})".replace(",", " ")
+        lines.append(line)
         total += d["sum"]
+        total_delivery += d.get("delivery", 0)
     lines.append("")
     lines.append(f"Итого: {total:,} сум".replace(",", " "))
+    if total_delivery:
+        lines.append(f"Из них доставка: {total_delivery:,} сум".replace(",", " "))
     await callback.message.answer("\n".join(lines), reply_markup=kb.admin_back_kb())
     await callback.answer()
 

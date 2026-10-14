@@ -682,9 +682,14 @@ def get_all_debtors() -> list:
         name = (clients.get(eid) or {}).get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or eid
         key = eid or name
         if key not in debts:
-            debts[key] = {"name": name, "id": eid, "sum": 0}
+            debts[key] = {"name": name, "id": eid, "sum": 0, "delivery": 0}
         if is_debt:
             debts[key]["sum"] += _row_amount(row, prices)
+            if len(row) >= config.O_DELIVERY_FEE:
+                try:
+                    debts[key]["delivery"] += int(str(row[config.O_DELIVERY_FEE - 1]).replace(" ", "").strip() or 0)
+                except ValueError:
+                    pass
     return sorted(debts.values(), key=lambda d: -d["sum"])
 
 
