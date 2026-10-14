@@ -326,6 +326,51 @@ def sync_client_order_counts() -> int:
     return len(cells)
 
 
+_LV_HEADER = ["tg_id", "client_id", "level", "date"]
+
+
+def _level_index(key: str) -> int:
+    for i, lvl in enumerate(config.CLUB_LEVELS):
+        if lvl[0] == key:
+            return i
+    return -1
+
+
+def find_level_ups() -> list:
+    """Клиенты, перешедшие на уровень выше того, за которым их уже
+    «зафиксировали» (лист «Уровни клуба»). Первый запуск и новые клиенты
+    записываются молча — поздравляем только за переход после запуска.
+    Возвращает [{"client", "level": key, "row"}]; после отправки вызвать
+    mark_level_congratulated(row, key)."""
+    ws = _ws_or_create(config.SHEET_CLUB_LEVEL_LOG, _LV_HEADER)
+    rows = ws.get_all_values()
+    known = {}
+    for i, row in enumerate(rows):
+        if i and row and row[0].strip():
+            known[row[0].strip()] = (i + 1, row[2].strip() if len(row) > 2 else "")
+    today = today_date_str()
+    ups, new_rows = [], []
+    for c in _load_clients(force=True):
+        tg = str(c.get("tg_id") or "").strip()
+        if not tg:
+            continue
+        key = get_club_level(c.get("order_count", 0))["key"]
+        if tg not in known:
+            known[tg] = (0, key)
+            new_rows.append([tg, str(c["id"]), key, today])
+        elif _level_index(key) > _level_index(known[tg][1]):
+            ups.append({"client": c, "level": key, "row": known[tg][0]})
+    if new_rows:
+        ws.append_rows(new_rows, value_input_option="RAW")
+    return ups
+
+
+def mark_level_congratulated(row: int, key: str):
+    ws = _ws_or_create(config.SHEET_CLUB_LEVEL_LOG, _LV_HEADER)
+    ws.update_cell(row, 3, key)
+    ws.update_cell(row, 4, today_date_str())
+
+
 def _load_clients(force=False):
     now = time.time()
     if not force and _cache["clients"] is not None and now - _cache["clients_ts"] < _CACHE_TTL:

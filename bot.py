@@ -234,6 +234,34 @@ async def main():
             logger.exception("Автодоставка для ручных заказов не удалась")
     scheduler.add_job(_autofill_delivery, "interval", minutes=2)
 
+    async def _level_ups():
+        if sheets.is_broadcasts_disabled():
+            return
+        try:
+            ups = await asyncio.to_thread(sheets.find_level_ups)
+        except Exception:
+            logger.exception("Не удалось проверить переходы на новый уровень")
+            return
+        for u in ups:
+            c, key = u["client"], u["level"]
+            if key not in texts.LEVEL_UP_TEXTS:
+                continue
+            fee = sheets.get_client_delivery_fee(c.get("order_count", 0))
+            try:
+                await bot.send_message(
+                    int(c["tg_id"]), texts.level_up_text(key, c.get("name"), fee),
+                    reply_markup=kb.open_pauseapp_kb() if config.WEBAPP_URL else None,
+                )
+            except Exception:
+                logger.warning("Не удалось отправить поздравление с уровнем (tg_id=%s)", c.get("tg_id"))
+            try:
+                await asyncio.to_thread(sheets.create_app_notification, c["tg_id"], texts.LEVEL_UP_BELL[key], "level_up")
+                await asyncio.to_thread(sheets.mark_level_congratulated, u["row"], key)
+            except Exception:
+                logger.exception("Не удалось записать поздравление (tg_id=%s)", c.get("tg_id"))
+            await asyncio.sleep(0.1)
+    scheduler.add_job(_level_ups, "interval", minutes=5, next_run_time=dt.datetime.now() + dt.timedelta(seconds=60))
+
     async def _sync_counts():
         try:
             n = await asyncio.to_thread(sheets.sync_client_order_counts)
