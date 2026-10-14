@@ -13,6 +13,7 @@ import uuid
 import re
 import time
 import datetime as dt
+import logging
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -20,6 +21,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 import config
+
+logger = logging.getLogger(__name__)
 import texts
 
 _SCOPES = [
@@ -267,6 +270,30 @@ def _ws_or_create(name: str, header: list) -> gspread.Worksheet:
 # Клиенты (Sheet1 / CRM)
 # ---------------------------------------------------------------------------
 
+def _order_counts_from_orders() -> dict:
+    """{id клиента: число порций} — сумма «Кол-во» по его неотменённым строкам
+    листа «Заказы» (то же, что должна считать формула «Кол-во Заказов» в
+    Sheet1, но устойчиво к текстовым числам и сломанной формуле)."""
+    counts = {}
+    for i, row in enumerate(_orders_raw_rows()):
+        if i + 1 < config.ORDERS_DATA_START_ROW or len(row) < config.O_QTY:
+            continue
+        cid = str(row[config.O_CLIENT_ID - 1]).strip()
+        if not cid:
+            continue
+        if cid.endswith(".0"):
+            cid = cid[:-2]
+        if len(row) >= config.O_COMMENT and is_canceled(row[config.O_COMMENT - 1]):
+            continue
+        try:
+            qty = int(float(str(row[config.O_QTY - 1]).replace(" ", "").replace(",", ".").strip() or 0))
+        except ValueError:
+            continue
+        if qty > 0:
+            counts[cid] = counts.get(cid, 0) + qty
+    return counts
+
+
 def _load_clients(force=False):
     now = time.time()
     if not force and _cache["clients"] is not None and now - _cache["clients_ts"] < _CACHE_TTL:
@@ -274,6 +301,11 @@ def _load_clients(force=False):
 
     ws = _ws(config.SHEET_CLIENTS)
     rows = ws.get_all_values()
+    try:
+        real_counts = _order_counts_from_orders()
+    except Exception:
+        logger.exception("Не удалось посчитать заказы клиентов по листу «Заказы»")
+        real_counts = {}
     clients = []
     for i, row in enumerate(rows):
         r = i + 1
@@ -296,7 +328,10 @@ def _load_clients(force=False):
             "telegram": cell(config.COL_TELEGRAM),
             "tg_id": cell(config.COL_TG_ID),
             "reg_date": cell(config.COL_REG_DATE),
-            "order_count": int(order_count_raw) if order_count_raw.isdigit() else 0,
+            # Формула в Sheet1 может «залипнуть» (текстовые числа, затёртая
+            # формула) — берём бóльшее из неё и реального подсчёта по «Заказы».
+            "order_count": max(int(order_count_raw) if order_count_raw.isdigit() else 0,
+                               real_counts.get(cid, 0)),
             "notify_morning_off": cell(config.COL_NOTIFY_MORNING_OFF).lower() == "да",
             "notify_menu_off": cell(config.COL_NOTIFY_MENU_OFF).lower() == "да",
             "notify_courier_off": cell(config.COL_NOTIFY_COURIER_OFF).lower() == "да",
