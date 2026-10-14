@@ -515,3 +515,9 @@ def reminder_screenshot_kb(rows_str: str) -> InlineKeyboardMarkup:
     b.button(text=texts.ATTACH_SCREENSHOT_BTN, callback_data=f"sendscreen:{rows_str}")
     b.adjust(1)
     return b.as_markup()
+
+
+def open_pause_app_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=texts.OPEN_PAUSE_APP_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
+    return b.as_markup()

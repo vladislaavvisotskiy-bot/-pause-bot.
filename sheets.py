@@ -6845,7 +6845,7 @@ def set_club_card_photo(card_id: str, file_id: str):
 # ---------------------------------------------------------------------------
 
 _MOM_HEADER = ["id", "ts", "tg_id", "name", "text", "file_ids", "status"]
-_MOMC_HEADER = ["id", "post_id", "ts", "tg_id", "name", "text", "status"]
+_MOMC_HEADER = ["id", "post_id", "ts", "tg_id", "name", "text", "status", "reply_to", "reply_name"]
 _MOML_HEADER = ["post_id", "tg_id", "ts", "status"]  # status "" — лайк стоит, "снят" — убран
 
 
@@ -6952,11 +6952,13 @@ def delete_moment(post_id: str) -> bool:
     return _set_status_by_id(config.SHEET_MOMENTS, _MOM_HEADER, post_id, 7)
 
 
-def add_moment_comment(post_id: str, tg_id, name: str, text: str) -> dict:
+def add_moment_comment(post_id: str, tg_id, name: str, text: str, reply_to: str = "", reply_name: str = "") -> dict:
     ws = _ws_or_create(config.SHEET_MOMENT_COMMENTS, _MOMC_HEADER)
     c = {"id": f"C{int(time.time() * 1000)}", "post_id": post_id, "ts": _moment_now(),
-         "tg_id": str(tg_id), "name": name or "", "text": text or ""}
-    ws.append_row([c["id"], post_id, c["ts"], c["tg_id"], c["name"], c["text"], ""], value_input_option="RAW")
+         "tg_id": str(tg_id), "name": name or "", "text": text or "",
+         "reply_to": reply_to or "", "reply_name": reply_name or ""}
+    ws.append_row([c["id"], post_id, c["ts"], c["tg_id"], c["name"], c["text"], "", c["reply_to"], c["reply_name"]],
+                  value_input_option="RAW")
     return c
 
 
@@ -6968,7 +6970,8 @@ def get_moment_comments(post_id: str) -> list:
         row = _moment_row(row, len(_MOMC_HEADER))
         if row[1] != post_id or not row[0].strip() or row[6].strip() == config.FEED_STATUS_DELETED:
             continue
-        out.append({"id": row[0], "post_id": row[1], "ts": row[2], "tg_id": row[3], "name": row[4], "text": row[5]})
+        out.append({"id": row[0], "post_id": row[1], "ts": row[2], "tg_id": row[3], "name": row[4], "text": row[5],
+                    "reply_to": row[7], "reply_name": row[8]})
     return out
 
 

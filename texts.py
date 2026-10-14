@@ -765,3 +765,5 @@ ADMIN_DELIVERY_RATING_ALERT = (
     "Курьер: {courier}\n\n"
     "{text}"
 )
+
+MOMENT_REPLY_BOT = "💬 {name} ответил(а) на ваш комментарий в PAUSE MOMENTS:\n\n«{text}»"

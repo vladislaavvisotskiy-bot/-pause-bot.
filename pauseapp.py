@@ -1679,7 +1679,8 @@ async def api_moments_delete(request: web.Request):
 
 
 def _comment_out(c: dict) -> dict:
-    return {"id": c["id"], "ts": c["ts"], "tg_id": c["tg_id"], "name": c["name"], "text": c["text"]}
+    return {"id": c["id"], "ts": c["ts"], "tg_id": c["tg_id"], "name": c["name"], "text": c["text"],
+            "reply_to": c.get("reply_to", ""), "reply_name": c.get("reply_name", "")}
 
 
 async def api_moment_comments_list(request: web.Request):
@@ -1696,17 +1697,45 @@ async def api_moment_comment_add(request: web.Request):
     if not text:
         return web.json_response({"error": "empty"}, status=400)
     post_id = request.match_info["post_id"]
-    c = await _retry_sheets(sheets.add_moment_comment, post_id, request["tg_id"], client.get("name", ""), text)
-    # Уведомление автору поста в колокольчик приложения (не себе самому).
+    reply_to = (body.get("reply_to") or "").strip()
+    target = None
+    if reply_to:
+        for x in await _retry_sheets(sheets.get_moment_comments, post_id):
+            if x["id"] == reply_to:
+                target = x
+                break
+    c = await _retry_sheets(
+        sheets.add_moment_comment, post_id, request["tg_id"], client.get("name", ""), text,
+        target["id"] if target else "", target["name"] if target else "")
+    me = str(request["tg_id"])
+    who = client.get("name") or "Кто-то"
+    snippet = text if len(text) <= 80 else text[:77] + "…"
+    notified = set()
+    # Ответ на комментарий — автору этого комментария: в колокольчик и в бот.
+    if target and target["tg_id"] and target["tg_id"] != me:
+        notified.add(target["tg_id"])
+        try:
+            await _retry_sheets(
+                sheets.create_app_notification, target["tg_id"],
+                f"{who} ответил(а) на ваш комментарий: «{snippet}»", f"moment_comment:{post_id}")
+        except Exception:
+            logger.exception("PAUSE App: не удалось записать уведомление об ответе (post=%s)", post_id)
+        bot = request.app.get("bot")
+        if bot:
+            try:
+                await bot.send_message(
+                    int(target["tg_id"]), texts.MOMENT_REPLY_BOT.format(name=who, text=snippet),
+                    reply_markup=kb.open_pause_app_kb())
+            except Exception:
+                logger.warning("PAUSE App: не удалось отправить ответ в бот (tg_id=%s)", target["tg_id"])
+    # Уведомление автору поста в колокольчик приложения (не себе самому и не
+    # второй раз тому, кому уже пришло «вам ответили»).
     try:
         author = await _retry_sheets(sheets.get_moment_author, post_id)
-        if author and author != str(request["tg_id"]):
-            snippet = text if len(text) <= 80 else text[:77] + "…"
+        if author and author != me and author not in notified:
             await _retry_sheets(
                 sheets.create_app_notification, author,
-                f"{client.get('name') or 'Кто-то'} прокомментировал(а) ваш момент: «{snippet}»",
-                f"moment_comment:{post_id}",
-            )
+                f"{who} прокомментировал(а) ваш момент: «{snippet}»", f"moment_comment:{post_id}")
     except Exception:
         logger.exception("PAUSE App: не удалось записать уведомление о комментарии (post=%s)", post_id)
     return web.json_response({"ok": True, "comment": _comment_out(c)})

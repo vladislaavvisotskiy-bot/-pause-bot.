@@ -245,7 +245,7 @@
       "mom.justNow": "сейчас", "mom.placeholder": "Что нового?", "mom.addPhoto": "Фото", "mom.publish": "Опубликовать", "mom.publishing": "Публикуем…",
       "mom.published": "Опубликовано", "mom.deleted": "Удалено", "mom.delete": "Удалить", "mom.deleteConfirm": "Удалить этот пост?", "mom.deleteCommentConfirm": "Удалить этот комментарий?",
       "mom.empty": "Здесь пока тихо — станьте первым, кто поделится моментом", "mom.comments": "Комментарии", "mom.noComments": "Комментариев пока нет — напишите первым",
-      "mom.commentPh": "Написать комментарий…", "mom.send": "Отправить", "mom.photosMax": "Не больше {n} фото", "mom.registerFirst": "Чтобы публиковать и комментировать, нужно зарегистрироваться как клиент",
+      "mom.commentPh": "Написать комментарий…", "mom.reply": "Ответить", "mom.replyTo": "Ответ для {name}", "mom.send": "Отправить", "mom.photosMax": "Не больше {n} фото", "mom.registerFirst": "Чтобы публиковать и комментировать, нужно зарегистрироваться как клиент",
       "mom.loadFailed": "Не удалось загрузить",
 
       "checkout.summaryTitle": "Сверка заказа",
@@ -563,7 +563,7 @@
       "mom.justNow": "hozir", "mom.placeholder": "Yangiliklar nima?", "mom.addPhoto": "Rasm", "mom.publish": "Joylash", "mom.publishing": "Joylanmoqda…",
       "mom.published": "Joylandi", "mom.deleted": "O'chirildi", "mom.delete": "O'chirish", "mom.deleteConfirm": "Bu postni o'chirasizmi?", "mom.deleteCommentConfirm": "Bu izohni o'chirasizmi?",
       "mom.empty": "Bu yerda hozircha jimjit — birinchi bo'lib lahza ulashing", "mom.comments": "Izohlar", "mom.noComments": "Hozircha izohlar yo'q — birinchi bo'lib yozing",
-      "mom.commentPh": "Izoh yozing…", "mom.send": "Yuborish", "mom.photosMax": "{n} tadan ko'p rasm bo'lmaydi", "mom.registerFirst": "Joylash va izoh yozish uchun mijoz sifatida ro'yxatdan o'ting",
+      "mom.commentPh": "Izoh yozing…", "mom.reply": "Javob berish", "mom.replyTo": "{name}ga javob", "mom.send": "Yuborish", "mom.photosMax": "{n} tadan ko'p rasm bo'lmaydi", "mom.registerFirst": "Joylash va izoh yozish uchun mijoz sifatida ro'yxatdan o'ting",
       "mom.loadFailed": "Yuklab bo'lmadi",
 
       "checkout.summaryTitle": "Buyurtma tekshiruvi",
@@ -881,7 +881,7 @@
       "mom.justNow": "now", "mom.placeholder": "What's new?", "mom.addPhoto": "Photo", "mom.publish": "Post", "mom.publishing": "Posting…",
       "mom.published": "Posted", "mom.deleted": "Deleted", "mom.delete": "Delete", "mom.deleteConfirm": "Delete this post?", "mom.deleteCommentConfirm": "Delete this comment?",
       "mom.empty": "It's quiet here — be the first to share a moment", "mom.comments": "Comments", "mom.noComments": "No comments yet — be the first",
-      "mom.commentPh": "Write a comment…", "mom.send": "Send", "mom.photosMax": "No more than {n} photos", "mom.registerFirst": "Register as a client to post and comment",
+      "mom.commentPh": "Write a comment…", "mom.reply": "Reply", "mom.replyTo": "Reply to {name}", "mom.send": "Send", "mom.photosMax": "No more than {n} photos", "mom.registerFirst": "Register as a client to post and comment",
       "mom.loadFailed": "Couldn't load",
 
       "checkout.summaryTitle": "Order summary",
@@ -2918,29 +2918,52 @@
           }));
         }
         main.appendChild(head);
+        if (c.reply_name) main.appendChild(el("div", "mom-reply-to", "↪ " + escapeHtml(c.reply_name)));
         main.appendChild(el("div", "mom-text", escapeHtml(c.text)));
+        if (momCanWrite()) {
+          var rbtn = el("button", "mom-reply-btn", escapeHtml(t("mom.reply")));
+          rbtn.addEventListener("click", function () { setReply(c); });
+          main.appendChild(rbtn);
+        }
         row.appendChild(main);
         list.appendChild(row);
       });
     }
+    var replyTo = null;
+    var setReply = function () {};
     api("/api/moments/" + encodeURIComponent(postId) + "/comments").then(function (data) {
       comments = data.comments || [];
       drawComments();
     }).catch(function () { list.innerHTML = ""; list.appendChild(el("div", "empty-note", escapeHtml(t("mom.loadFailed")))); });
 
     if (!momCanWrite()) { body.appendChild(el("div", "mom-note", escapeHtml(t("mom.registerFirst")))); return; }
+    var replyChip = el("div", "mom-reply-chip");
+    replyChip.style.display = "none";
+    body.appendChild(replyChip);
     var bar = el("div", "mom-comment-bar");
     var input = el("input", "mom-comment-input");
     input.type = "text"; input.placeholder = t("mom.commentPh"); input.maxLength = 600;
+    setReply = function (c) {
+      replyTo = c || null;
+      replyChip.innerHTML = "";
+      if (!replyTo) { replyChip.style.display = "none"; return; }
+      replyChip.style.display = "flex";
+      replyChip.appendChild(el("span", "", escapeHtml(t("mom.replyTo", { name: replyTo.name || t("profile.noName") }))));
+      var x = el("button", "mom-reply-x", "×");
+      x.addEventListener("click", function () { setReply(null); });
+      replyChip.appendChild(x);
+      input.focus();
+    };
     var send = el("button", "mom-comment-send", ICON_MOM_SEND);
     send.setAttribute("aria-label", t("mom.send"));
     function doSend() {
       var text = input.value.trim();
       if (!text || comments === null) return;
       send.disabled = true;
-      api("/api/moments/" + encodeURIComponent(postId) + "/comments", { method: "POST", body: { text: text } }).then(function (data) {
+      api("/api/moments/" + encodeURIComponent(postId) + "/comments", { method: "POST", body: { text: text, reply_to: replyTo ? replyTo.id : "" } }).then(function (data) {
         haptic("success");
         input.value = "";
+        setReply(null);
         comments.push(data.comment);
         post.comment_count = comments.length;
         drawComments();
