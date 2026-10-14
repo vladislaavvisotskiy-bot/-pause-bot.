@@ -879,7 +879,7 @@ async def admin_debtors(callback: CallbackQuery):
     for d in debtors:
         line = f"○ {d['name']} (ID {d['id']}) — {d['sum']:,} сум".replace(",", " ")
         if d.get("delivery"):
-            line += f" (в т.ч. доставка {d['delivery']:,})".replace(",", " ")
+            line += f" (из них доставка {d['delivery']:,})".replace(",", " ")
         lines.append(line)
         total += d["sum"]
         total_delivery += d.get("delivery", 0)
