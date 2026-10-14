@@ -253,7 +253,7 @@
       "checkout.deliveryInfoTitle": "Как считается доставка",
       "checkout.deliveryInfoText": "Стоимость доставки зависит от вашего статуса Pause Club — чем больше заказов вы уже сделали, тем дешевле (а на верхних уровнях — бесплатно). Статус считается автоматически по количеству заказов.",
       "checkout.paymentTicket": "Лепестком",
-      "checkout.paymentTicketHint": "Один лепесток = один сет бесплатно",
+      "checkout.paymentTicketHint": "Один лепесток = сет «Для тебя» бесплатно", "checkout.ticketSetNotAllowed": "Лепестком можно оплатить только сет «Для тебя».",
       "checkout.ticketRemainingTotal": "Итого к оплате",
       "checkout.noTicket": "У вас сейчас нет доступного лепестка.",
       "checkout.ticketSingleSetOnly": "Лепестком можно оплатить только один сет за раз.",
@@ -265,10 +265,10 @@
       "bonuses.ticketUsed": "Использован",
       "bonuses.ticketWonOn": "Выигран {date}",
       "bonuses.ticketUsedOn": "Использован {date}",
-      "bonuses.ticketHint": "Оплатите лепестком любой один сет при следующем заказе — спишем его сами.",
+      "bonuses.ticketHint": "Оплатите лепестком сет «Для тебя» при следующем заказе — спишем его сами.",
       "bonuses.petalsLabel": "Ваши лепестки", "bonuses.noneLeft": "Выиграйте в PAUSE DAY — и новый лепесток появится здесь.", "bonuses.use": "Использовать",
       "checkout.petalApplied": "Лепесток применён — один сет за наш счёт",
-      "notif.new": "новое", "notif.win.title": "Вам достался лепесток", "notif.win.body": "Сегодня в PAUSE DAY выбрали именно вас — спасибо, что вы с нами. Лепесток уже ждёт в разделе «{section}»: им можно оплатить один любой сет.", "notif.win.cta": "Использовать",
+      "notif.new": "новое", "notif.win.title": "Вам достался лепесток", "notif.win.body": "Сегодня в PAUSE DAY выбрали именно вас — спасибо, что вы с нами. Лепесток уже ждёт в разделе «{section}»: им можно оплатить сет «Для тебя».", "notif.win.cta": "Использовать",
       "bonuses.empty": "Пока бонусов нет — победите в «PAUSE DAY», и лепесток появится здесь 🌸",
       "bonuses.loadFailed": "Не удалось загрузить бонусы.",
       "notifications.title": "Уведомления",
@@ -571,7 +571,7 @@
       "checkout.deliveryInfoTitle": "Yetkazib berish qanday hisoblanadi",
       "checkout.deliveryInfoText": "Yetkazib berish narxi sizning Pause Club statusingizga bog'liq — qancha ko'p buyurtma bersangiz, shuncha arzon (yuqori darajalarda — bepul). Status buyurtmalar soniga qarab avtomatik hisoblanadi.",
       "checkout.paymentTicket": "Gulbarg bilan",
-      "checkout.paymentTicketHint": "Bir gulbarg = bir set bepul",
+      "checkout.paymentTicketHint": "Bir gulbarg = «Для тебя» seti bepul", "checkout.ticketSetNotAllowed": "Gulbarg bilan faqat «Для тебя» setini to'lash mumkin.",
       "checkout.ticketRemainingTotal": "To'lash uchun jami",
       "checkout.noTicket": "Hozir sizda mavjud gulbarg yo'q.",
       "checkout.ticketSingleSetOnly": "Gulbarg bilan bir vaqtda faqat bitta set to'lash mumkin.",
@@ -583,7 +583,7 @@
       "bonuses.ticketUsed": "Ishlatilgan",
       "bonuses.ticketWonOn": "{date} da yutilgan",
       "bonuses.ticketUsedOn": "{date} da ishlatilgan",
-      "bonuses.ticketHint": "Keyingi buyurtmada gulbarg bilan istalgan bir setni to'lang — o'zimiz hisoblaymiz.",
+      "bonuses.ticketHint": "Keyingi buyurtmada gulbarg bilan «Для тебя» setini to'lang — o'zimiz hisoblaymiz.",
       "bonuses.petalsLabel": "Gulbarglaringiz", "bonuses.noneLeft": "PAUSE DAYda yuting — yangi gulbarg shu yerda paydo bo'ladi.", "bonuses.use": "Ishlatish",
       "checkout.petalApplied": "Gulbarg qo'llandi — bitta set bizdan",
       "notif.new": "yangi", "notif.win.title": "Sizga gulbarg tegdi", "notif.win.body": "Bugun PAUSE DAYda aynan siz tanlandingiz — biz bilan ekaningiz uchun rahmat. Gulbarg «{section}» bo'limida kutmoqda: u bilan istalgan bitta setni to'lash mumkin.", "notif.win.cta": "Ishlatish",
@@ -889,7 +889,7 @@
       "checkout.deliveryInfoTitle": "How delivery is calculated",
       "checkout.deliveryInfoText": "Delivery cost depends on your Pause Club status — the more orders you've placed, the cheaper it gets (free at the top tiers). Status is calculated automatically from your order count.",
       "checkout.paymentTicket": "With a petal",
-      "checkout.paymentTicketHint": "One petal = one set, free",
+      "checkout.paymentTicketHint": "One petal = the “Для тебя” set, free", "checkout.ticketSetNotAllowed": "A petal can only pay for the “Для тебя” set.",
       "checkout.ticketRemainingTotal": "Total to pay",
       "checkout.noTicket": "You don't have an available petal right now.",
       "checkout.ticketSingleSetOnly": "A petal covers exactly one set at a time.",
@@ -901,10 +901,10 @@
       "bonuses.ticketUsed": "Used",
       "bonuses.ticketWonOn": "Won on {date}",
       "bonuses.ticketUsedOn": "Used on {date}",
-      "bonuses.ticketHint": "Pay with your petal for any one set next time — we'll apply it ourselves.",
+      "bonuses.ticketHint": "Pay for the “Для тебя” set with your petal next time — we'll apply it ourselves.",
       "bonuses.petalsLabel": "Your petals", "bonuses.noneLeft": "Win PAUSE DAY and a new petal will appear here.", "bonuses.use": "Use it",
       "checkout.petalApplied": "Petal applied — one set on us",
-      "notif.new": "new", "notif.win.title": "You've got a petal", "notif.win.body": "Today PAUSE DAY picked you — thank you for being with us. Your petal is waiting in “{section}”: use it to pay for any one set.", "notif.win.cta": "Use it",
+      "notif.new": "new", "notif.win.title": "You've got a petal", "notif.win.body": "Today PAUSE DAY picked you — thank you for being with us. Your petal is waiting in “{section}”: use it to pay for the “Для тебя” set.", "notif.win.cta": "Use it",
       "bonuses.empty": "No bonuses yet — win the “PAUSE DAY” draw and a petal will show up here 🌸",
       "bonuses.loadFailed": "Couldn't load bonuses.",
       "notifications.title": "Notifications",
@@ -3694,10 +3694,15 @@
     // позиция за вычетом 1 шт. + другие позиции) всё равно нужно оплатить
     // наличными/картой как обычно. Только на уже известную точку (не на
     // новую, ждущую модерации) — то же условие, что проверяет сервер.
-    var ticketAvailable = !!(state.profile && state.profile.has_ticket) && !checkout.isNewPoint && state.cart.length > 0;
+    // Лепестком можно оплатить только сет «Для тебя» (PETAL_ALLOWED_SETS).
+    var petalNorm = function (s) { return String(s || "").trim().replace(/^\.+|\.+$/g, "").trim().toLowerCase(); };
+    var petalOk = function (item) { return !!item && (petalNorm(item.display) === "для тебя" || petalNorm(item.set) === "для тебя"); };
+    var petalIdxs = [];
+    state.cart.forEach(function (it, i) { if (petalOk(it)) petalIdxs.push(i); });
+    var ticketAvailable = !!(state.profile && state.profile.has_ticket) && !checkout.isNewPoint && petalIdxs.length > 0;
     if (!ticketAvailable) { checkout.useTicket = false; checkout.ticketItemIndex = null; }
-    if (checkout.useTicket && (checkout.ticketItemIndex == null || checkout.ticketItemIndex < 0 || checkout.ticketItemIndex >= state.cart.length)) {
-      checkout.ticketItemIndex = 0;
+    if (checkout.useTicket && petalIdxs.indexOf(checkout.ticketItemIndex) < 0) {
+      checkout.ticketItemIndex = petalIdxs[0];
     }
     var ticketItemPrice = (checkout.useTicket && checkout.ticketItemIndex != null && state.cart[checkout.ticketItemIndex])
       ? state.cart[checkout.ticketItemIndex].price : 0;
@@ -3791,9 +3796,10 @@
       payField.appendChild(ticketToggle);
     }
 
-    if (checkout.useTicket && state.cart.length > 1) {
+    if (checkout.useTicket && petalIdxs.length > 1) {
       var pickerBox = el("div", "card ticket-set-picker");
       state.cart.forEach(function (item, idx) {
+        if (petalIdxs.indexOf(idx) < 0) return;
         var pickRow = el("div", "option-row ticket-set-option" + (idx === checkout.ticketItemIndex ? " selected" : ""));
         pickRow.innerHTML = '<div class="option-row-label">' + escapeHtml(item.display) + (item.qty > 1 ? " ×" + item.qty : "") + '</div><div class="option-row-sub">' + fmtSum(item.price) + '</div>';
         pickRow.addEventListener("click", function () {
@@ -3955,6 +3961,7 @@
       var TICKET_ERROR_KEYS = {
         no_ticket: "checkout.noTicket",
         ticket_single_set_only: "checkout.ticketSingleSetOnly",
+        ticket_set_not_allowed: "checkout.ticketSetNotAllowed",
         ticket_new_point_not_allowed: "checkout.ticketNewPointNotAllowed",
       };
       toast(err.code === "cutoff_closed" ? t("menu.orderClosedNote") : TICKET_ERROR_KEYS[err.code] ? t(TICKET_ERROR_KEYS[err.code]) : t("checkout.submitFailed"));

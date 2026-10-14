@@ -504,6 +504,16 @@ async def _refresh_giveaway_state(tg_id: int, date_str: str) -> dict:
 _bg_tasks = set()
 
 
+def _petal_norm(name: str) -> str:
+    return (name or "").strip().strip(".").strip().lower()
+
+
+def _petal_allowed_set(set_name: str) -> bool:
+    """Лепестком можно оплатить только сеты из config.PETAL_ALLOWED_SETS."""
+    allowed = {_petal_norm(x) for x in config.PETAL_ALLOWED_SETS}
+    return _petal_norm(set_name) in allowed or _petal_norm(sheets.display_set_name(set_name)) in allowed
+
+
 def _spawn(coro):
     """Фоновая задача, не блокирующая ответ клиенту (уведомления, второстепенные записи)."""
     task = asyncio.ensure_future(coro)
@@ -580,6 +590,8 @@ async def api_order_submit(request: web.Request):
             return web.json_response({"error": "ticket_new_point_not_allowed"}, status=400)
         if not isinstance(ticket_item_index, int) or not 0 <= ticket_item_index < len(cart):
             return web.json_response({"error": "ticket_single_set_only"}, status=400)
+        if not _petal_allowed_set(cart[ticket_item_index]["set"]):
+            return web.json_response({"error": "ticket_set_not_allowed"}, status=400)
         if not await _retry_sheets(sheets.has_available_ticket, tg_id):
             return web.json_response({"error": "no_ticket"}, status=400)
 
