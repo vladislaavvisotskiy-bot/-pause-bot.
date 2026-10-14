@@ -429,6 +429,59 @@ def _row_delivery_fee(row: list) -> int:
         return 0
 
 
+def autofill_manual_delivery() -> int:
+    """Доставка для заказов, внесённых в «Заказы» ВРУЧНУЮ (без метки
+    оформления AC — приложение и бот её всегда пишут). Для каждого клиента и
+    даты (сегодня и позже), у которых нет ни метки, ни доставки, пишет в
+    столбец AD на ПЕРВУЮ строку сумму по уровню клуба, как в приложении.
+    Старые даты не трогаем. Возвращает число заполненных клиентов-дат."""
+    if not config.DELIVERY_FEES_ENABLED:
+        return 0
+    rows = _orders_raw_rows()
+    today = dt.datetime.strptime(today_date_str(), "%d.%m.%Y").date()
+    groups = {}
+    for i, row in enumerate(rows):
+        r = i + 1
+        if r < config.ORDERS_DATA_START_ROW:
+            continue
+        cid = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
+        date_s = row[config.O_DATE - 1].strip() if len(row) >= config.O_DATE else ""
+        if not cid or not date_s:
+            continue
+        try:
+            d = dt.datetime.strptime(date_s, "%d.%m.%Y").date()
+        except ValueError:
+            continue
+        if d < today:
+            continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
+            continue
+        g = groups.setdefault((cid, date_s), {"first": None, "skip": False})
+        batch = row[config.O_ORDER_BATCH - 1].strip() if len(row) >= config.O_ORDER_BATCH else ""
+        if batch or _row_delivery_fee(row):
+            g["skip"] = True
+        try:
+            qty = int(str(row[config.O_QTY - 1]).strip() or 0) if len(row) >= config.O_QTY else 0
+        except ValueError:
+            qty = 0
+        if qty > 0 and g["first"] is None:
+            g["first"] = r
+    clients = _clients_index()
+    cells = []
+    for (cid, _d), g in groups.items():
+        if g["skip"] or not g["first"]:
+            continue
+        fee = get_client_delivery_fee((clients.get(cid) or {}).get("order_count", 0))
+        if fee:
+            cells.append(gspread.Cell(g["first"], config.O_DELIVERY_FEE, str(fee)))
+    if cells:
+        ws = _ws(config.SHEET_ORDERS)
+        _ensure_sheet_columns(ws, config.O_DELIVERY_FEE)
+        ws.update_cells(cells)
+    return len(cells)
+
+
 def _row_amount(row: list, prices: dict) -> int:
     """Сумма по строке заказа — считаем сами по цене сета, а не полагаемся на
     формулу в таблице (она может быть не протянута на новые строки). Плюс

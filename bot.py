@@ -223,6 +223,15 @@ async def main():
     # ежедневная автоматика.
     gh, gm = map(int, config.GIVEAWAY_DRAW_TIME.split(":"))
     scheduler.add_job(pauseapp.run_daily_giveaway_draw, "cron", hour=gh, minute=gm, args=[bot])
+    # Ручные заказы в таблице без доставки — дописываем её по уровню клуба.
+    async def _autofill_delivery():
+        try:
+            n = await asyncio.to_thread(sheets.autofill_manual_delivery)
+            if n:
+                logger.info("Автодоставка для ручных заказов: %s", n)
+        except Exception:
+            logger.exception("Автодоставка для ручных заказов не удалась")
+    scheduler.add_job(_autofill_delivery, "interval", minutes=2)
     scheduler.start()
 
     # PAUSE App (новый клиентский Mini App, пока только для админов) живёт
