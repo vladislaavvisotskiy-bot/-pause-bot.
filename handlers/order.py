@@ -701,12 +701,9 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
                 f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i["garnish"] else "")
                 for i in cart
             )
-            caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
-                name=data.get("client_name", ""),
-                client_id=data.get("client_id", ""),
-                items=items_text,
-                sum=f"{total:,}".replace(",", " "),
-            )
+            client = sheets.get_client_by_id(data.get("client_id")) or {
+                "name": data.get("client_name", ""), "id": data.get("client_id", "")}
+            caption = texts.card_payment_alert(client, items_text, total)
             rows_str = ",".join(str(r) for r in row_nums)
             await notify_admins_photo(
                 bot, screenshot, caption,

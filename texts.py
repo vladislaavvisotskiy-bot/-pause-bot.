@@ -459,10 +459,30 @@ ADMIN_MORNING_HEADER = "☘️ Доброе утро! Отчёты на сего
 
 ADMIN_CARD_PAYMENT_ALERT = (
     "💳 Оплата картой — скрин на проверку\n\n"
-    "Клиент: {name} (ID {client_id})\n"
-    "Заказ: {items}\n"
+    "Клиент: {name} (ID {client_id}){contacts}\n"
+    "Заказ: {items}{delivery}\n"
     "Сумма: {sum} сум"
 )
+
+
+def card_payment_alert(client: dict, items: str, total: int, delivery_fee: int = 0) -> str:
+    """Подпись к скрину оплаты для админа: клиент с @username и телефоном,
+    заказ, доставка (если платная) и итоговая сумма."""
+    client = client or {}
+    tg = (client.get("telegram") or "").strip().lstrip("@")
+    phone = (client.get("contact") or "").strip()
+    contacts = ""
+    if tg:
+        contacts += f"\nUsername: @{tg}"
+    if phone:
+        contacts += f"\nТелефон: {phone}"
+    delivery = f"\nДоставка: {int(delivery_fee):,} сум".replace(",", " ") if delivery_fee else ""
+    return ADMIN_CARD_PAYMENT_ALERT.format(
+        name=client.get("name", ""), client_id=client.get("id", ""), contacts=contacts,
+        items=items, delivery=delivery, sum=f"{int(total):,}".replace(",", " "),
+    )
+
+
 ADMIN_CARD_CONFIRMED_SUFFIX = "\n\n✅ Оплата подтверждена"
 ADMIN_CARD_CONFIRMED_TOAST = "Отмечено ✓"
 

@@ -726,10 +726,7 @@ async def api_order_submit(request: web.Request):
                 f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
                 for i in cart
             )
-            caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
-                name=client.get("name", ""), client_id=client.get("id", ""),
-                items=items_text, sum=f"{total:,}".replace(",", " "),
-            )
+            caption = texts.card_payment_alert(client, items_text, total, delivery_fee)
             rows_str = ",".join(str(r) for i, r in enumerate(row_nums) if not (is_ticket_payment and i == ticket_row_pos))
             await notify_admins_photo(bot, screenshot, caption, reply_markup=kb.card_confirm_admin_kb(rows_str))
         except Exception:
@@ -1131,10 +1128,8 @@ async def api_debt_pay(request: web.Request):
     bot = request.app.get("bot")
     if bot and config.ADMIN_IDS:
         try:
-            caption = texts.ADMIN_CARD_PAYMENT_ALERT.format(
-                name=client.get("name", ""), client_id=client.get("id", ""),
-                items="оплата долга" + (" за " + ", ".join(sorted(dates)) if dates else ""), sum=f"{debt:,}".replace(",", " "),
-            )
+            caption = texts.card_payment_alert(
+                client, "оплата долга" + (" за " + ", ".join(sorted(dates)) if dates else ""), debt)
             await notify_admins_photo(
                 bot, file_id, caption,
                 reply_markup=kb.card_confirm_admin_kb(",".join(str(r) for r in row_nums)),
