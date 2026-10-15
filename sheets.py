@@ -2047,12 +2047,12 @@ def get_tomorrow_date_str() -> str:
 
 def get_recent_order_dates() -> list:
     """Уникальные даты, реально встречающиеся в «Заказы», в окне последних
-    7 дней (включая сегодня) и завтра — источник для кнопок выбора даты в
+    30 дней (включая сегодня) и завтра — источник для кнопок выбора даты в
     отчётах администратора. Хронологический порядок, формат DD.MM.YYYY."""
     ws = _ws(config.SHEET_ORDERS)
     col = ws.col_values(config.O_DATE)
     today = _now().date()
-    window_start = today - dt.timedelta(days=6)
+    window_start = today - dt.timedelta(days=29)
     window_end = today + dt.timedelta(days=1)
 
     seen = set()
