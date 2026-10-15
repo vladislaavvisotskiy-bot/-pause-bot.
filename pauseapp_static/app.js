@@ -5841,9 +5841,46 @@
     if (!items.length) {
       body.appendChild(el("div", "empty-note", "Пока нет ни одного выбранного сета."));
     } else {
-      var grid = el("div", "menu-set-grid");
-      items.forEach(function (item) { grid.appendChild(buildAdminWideCard(item, false)); });
-      body.appendChild(grid);
+      var gridWrap = el("div");
+      body.appendChild(gridWrap);
+      body.appendChild(el("div", "mom-note", "Стрелками меняйте порядок карточек — в таком порядке их увидят клиенты."));
+      var saving = false;
+      var drawGrid = function () {
+        gridWrap.innerHTML = "";
+        var grid = el("div", "menu-set-grid");
+        var keys = menuDraft.selected_keys;
+        buildMenuPreviewItems().forEach(function (item, i) {
+          var cell = el("div", "menu-order-cell");
+          cell.appendChild(buildAdminWideCard(item, false));
+          var ctl = el("div", "menu-order-ctl");
+          var up = el("button", "btn-ghost", "↑ Выше");
+          var down = el("button", "btn-ghost", "↓ Ниже");
+          up.disabled = i === 0;
+          down.disabled = i === keys.length - 1;
+          var move = function (delta) {
+            if (saving) return;
+            var j = i + delta;
+            if (j < 0 || j >= keys.length) return;
+            var next = keys.slice();
+            var t = next[i]; next[i] = next[j]; next[j] = t;
+            saving = true;
+            api("/api/ops/menu/draft/sets", { method: "POST", body: { sets: next } }).then(function () {
+              haptic("select");
+              menuDraft.selected_keys = next;
+              _menuSetsSelected = next.slice();
+              saving = false;
+              drawGrid();
+            }).catch(function (err) { saving = false; toast("Не удалось сохранить порядок: " + err.message); });
+          };
+          up.addEventListener("click", function () { move(-1); });
+          down.addEventListener("click", function () { move(1); });
+          ctl.appendChild(up); ctl.appendChild(down);
+          cell.appendChild(ctl);
+          grid.appendChild(cell);
+        });
+        gridWrap.appendChild(grid);
+      };
+      drawGrid();
     }
   }
 

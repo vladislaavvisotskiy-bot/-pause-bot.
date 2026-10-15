@@ -2306,3 +2306,8 @@ p { margin: 0; color: var(--ink-soft); }
 .mom-reply-btn { border: none; background: none; padding: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
 .mom-reply-chip { align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 8px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); }
 .mom-reply-x { border: none; background: none; font-size: 20px; line-height: 1; color: var(--ink-soft); padding: 0 2px; }
+
+.menu-order-cell { display: flex; flex-direction: column; gap: 6px; }
+.menu-order-ctl { display: flex; gap: 8px; }
+.menu-order-ctl .btn-ghost { flex: 1; padding: 9px 6px; font-size: 14px; }
+.menu-order-ctl .btn-ghost:disabled { opacity: .35; pointer-events: none; }
