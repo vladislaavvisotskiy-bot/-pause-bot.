@@ -797,6 +797,7 @@ async def api_profile(request: web.Request):
         "order_count": order_count,
         "reg_date": client.get("reg_date", ""),
         "has_ticket": has_ticket,
+        "custom_avatar": bool(await _retry_sheets(sheets.get_custom_avatar, tg_id)),
         "delivery_fee": delivery_fee,
         "delivery_enabled": delivery_enabled,
         "club": {
@@ -1445,6 +1446,41 @@ async def run_daily_giveaway_draw(bot):
     ))
 
 
+async def api_avatar_upload(request: web.Request):
+    """Клиент ставит/меняет свою аватарку (фото уже уменьшено на фронте)."""
+    tg_id = request["tg_id"]
+    client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
+    if not client:
+        return web.json_response({"error": "not_registered"}, status=403)
+    if not config.MEDIA_CHAT_ID:
+        return web.json_response({"error": "media_chat_not_configured"}, status=503)
+    bot = request.app.get("bot")
+    if not bot:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "photo":
+        return web.json_response({"error": "photo_required"}, status=400)
+    data = await field.read(decode=False)
+    if not data:
+        return web.json_response({"error": "photo_required"}, status=400)
+    if len(data) > MAX_SCREENSHOT_BYTES:
+        return web.json_response({"error": "too_large"}, status=400)
+    try:
+        msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename="avatar.jpg"))
+    except Exception:
+        logger.exception("PAUSE App: не удалось загрузить аватарку (tg_id=%s)", tg_id)
+        return web.json_response({"error": "upload_failed"}, status=502)
+    await _retry_sheets(sheets.set_custom_avatar, tg_id, msg.photo[-1].file_id)
+    return web.json_response({"ok": True})
+
+
+async def api_avatar_reset(request: web.Request):
+    """Вернуть фото из Telegram (убрать свою аватарку)."""
+    await _retry_sheets(sheets.set_custom_avatar, request["tg_id"], "")
+    return web.json_response({"ok": True})
+
+
 async def api_avatar_image(request: web.Request):
     """Аватар клиента из Telegram (его собственное фото профиля) — и для
     таблицы лидеров (чужие аватарки), и для своего же профиля (см. app.js:
@@ -1470,6 +1506,18 @@ async def api_avatar_image(request: web.Request):
         tg_id_int = int(tg_id)
     except ValueError:
         return web.Response(status=404)
+    # Своя аватарка, загруженная в приложении, важнее фото из Telegram.
+    try:
+        custom = await _retry_sheets(sheets.get_custom_avatar, tg_id_int)
+    except Exception:
+        custom = ""
+    if custom:
+        try:
+            buf = await bot.download(custom)
+            if buf is not None:
+                return web.Response(body=buf.read(), content_type="image/jpeg", headers={"Cache-Control": "no-store"})
+        except Exception:
+            logger.exception("PAUSE App: не удалось скачать свою аватарку (tg_id=%s)", tg_id)
     try:
         photos = await bot.get_user_profile_photos(tg_id_int, limit=1)
     except Exception:
@@ -3015,6 +3063,8 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/menu/archive/{card_id}/use", api_ops_menu_archive_use)
     app.router.add_post("/api/ops/menu/archive/{card_id}/delete", api_ops_menu_archive_delete)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
+    app.router.add_post("/api/profile/avatar", api_avatar_upload)
+    app.router.add_post("/api/profile/avatar/delete", api_avatar_reset)
     app.router.add_get("/api/feed", api_feed_list)
     app.router.add_post("/api/feed", api_feed_publish)
     app.router.add_post("/api/feed/delete", api_feed_delete)

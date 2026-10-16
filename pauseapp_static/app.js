@@ -283,7 +283,7 @@
 
       "profile.title": "Профиль", "profile.settings": "Настройки",
       "profile.loadFailed": "Не удалось загрузить профиль: {msg}",
-      "profile.notRegistered": "Вы ещё не зарегистрированы. Наберите /start в чате с ботом, чтобы завести профиль.",
+      "profile.notRegistered": "Вы ещё не зарегистрированы. Наберите /start в чате с ботом, чтобы завести профиль.", "profile.avatarChange": "Сменить фото", "profile.avatarReset": "Вернуть фото из Telegram", "profile.avatarDone": "Фото обновлено", "profile.avatarFailed": "Не удалось загрузить фото", "profile.avatarUploading": "Загружаю…",
       "profile.noName": "Без имени",
       "profile.toNextLevel": "До статуса «{emoji} {label}» осталось заказов: {left}",
       "profile.topLevel": "Вы уже на высшем уровне PAUSE Club 🎉",
@@ -601,7 +601,7 @@
 
       "profile.title": "Profil", "profile.settings": "Sozlamalar",
       "profile.loadFailed": "Profilni yuklab bo'lmadi: {msg}",
-      "profile.notRegistered": "Siz hali ro'yxatdan o'tmagansiz. Profil ochish uchun botga /start yozing.",
+      "profile.notRegistered": "Siz hali ro'yxatdan o'tmagansiz. Profil ochish uchun botga /start yozing.", "profile.avatarChange": "Rasmni almashtirish", "profile.avatarReset": "Telegramdagi rasmni qaytarish", "profile.avatarDone": "Rasm yangilandi", "profile.avatarFailed": "Rasmni yuklab bo'lmadi", "profile.avatarUploading": "Yuklanmoqda…",
       "profile.noName": "Ismsiz",
       "profile.toNextLevel": "«{emoji} {label}» darajasigacha qolgan buyurtmalar: {left}",
       "profile.topLevel": "Siz allaqachon PAUSE Club eng yuqori darajasidasiz 🎉",
@@ -919,7 +919,7 @@
 
       "profile.title": "Profile", "profile.settings": "Settings",
       "profile.loadFailed": "Couldn't load profile: {msg}",
-      "profile.notRegistered": "You're not registered yet. Send /start in the bot chat to create a profile.",
+      "profile.notRegistered": "You're not registered yet. Send /start in the bot chat to create a profile.", "profile.avatarChange": "Change photo", "profile.avatarReset": "Use my Telegram photo", "profile.avatarDone": "Photo updated", "profile.avatarFailed": "Couldn't upload the photo", "profile.avatarUploading": "Uploading…",
       "profile.noName": "No name",
       "profile.toNextLevel": "{left} orders left to «{emoji} {label}»",
       "club.level.guest": "PAUSE Guest.", "club.level.regular": "PAUSE Member.",
@@ -4453,6 +4453,31 @@
     });
   }
 
+  // Кеш картинок-аватарок в памяти держим по URL — после смены фото сбрасываем.
+  function avatarCacheDrop() {
+    Object.keys(_authedImageCache).forEach(function (k) {
+      if (k.indexOf("/api/avatar/") !== -1) delete _authedImageCache[k];
+    });
+  }
+  // Центр-кроп в квадрат 512x512, JPEG.
+  function avatarSquare(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var side = Math.min(img.naturalWidth, img.naturalHeight);
+        var sx = (img.naturalWidth - side) / 2, sy = (img.naturalHeight - side) / 2;
+        var cv = document.createElement("canvas");
+        cv.width = cv.height = 512;
+        cv.getContext("2d").drawImage(img, sx, sy, side, side, 0, 0, 512, 512);
+        URL.revokeObjectURL(url);
+        cv.toBlob(function (blob) { blob ? resolve(blob) : reject(new Error("blob")); }, "image/jpeg", 0.86);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("img")); };
+      img.src = url;
+    });
+  }
+
   function renderProfileScreen() {
     screenHeader("profile-header", {
       back: function () { showScreen("home"); },
@@ -4495,6 +4520,42 @@
         })
         .catch(function () { /* нет фото в Telegram — инициалы и остаются */ });
     }
+    // Своя аватарка: выбор фото -> квадрат 512px -> сервер (Telegram-хранилище).
+    var avFile = el("input");
+    avFile.type = "file"; avFile.accept = "image/*"; avFile.style.display = "none";
+    head.appendChild(avFile);
+    var avRow = el("div", "profile-avatar-actions");
+    var avChange = el("button", "profile-avatar-link", escapeHtml(t("profile.avatarChange")));
+    avChange.addEventListener("click", function () { haptic("select"); avFile.click(); });
+    avRow.appendChild(avChange);
+    if (p.custom_avatar) {
+      var avReset = el("button", "profile-avatar-link", escapeHtml(t("profile.avatarReset")));
+      avReset.addEventListener("click", function () {
+        api("/api/profile/avatar/delete", { method: "POST", body: {} }).then(function () {
+          p.custom_avatar = false;
+          avatarCacheDrop(); haptic("success"); renderProfileScreen();
+        }).catch(function () { toast(t("profile.avatarFailed")); });
+      });
+      avRow.appendChild(avReset);
+    }
+    avFile.addEventListener("change", function () {
+      var f = avFile.files && avFile.files[0];
+      avFile.value = "";
+      if (!f) return;
+      avChange.disabled = true;
+      avChange.textContent = t("profile.avatarUploading");
+      avatarSquare(f).then(function (blob) {
+        return apiUpload("/api/profile/avatar", blob, "avatar.jpg");
+      }).then(function () {
+        p.custom_avatar = true;
+        avatarCacheDrop(); haptic("success"); toast(t("profile.avatarDone")); renderProfileScreen();
+      }).catch(function () {
+        avChange.disabled = false;
+        avChange.textContent = t("profile.avatarChange");
+        toast(t("profile.avatarFailed"));
+      });
+    });
+    head.appendChild(avRow);
     head.appendChild(el("div", "profile-name", p.name || t("profile.noName")));
     head.appendChild(el("div", "profile-contact", formatPhone(p.phone)));
 

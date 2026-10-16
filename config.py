@@ -179,6 +179,7 @@ SHEET_SET_STORIES = "Истории блюд"  # текст "истории бл
 SHEET_MOMENTS = "Моменты"
 SHEET_MOMENT_COMMENTS = "Моменты комментарии"
 SHEET_MOMENT_LIKES = "Моменты лайки"
+SHEET_AVATARS = "Аватарки"  # tg_id, file_id, дата — свои аватарки клиентов (вместо фото из Telegram)
 SHEET_MOMENT_VIEWS = "Моменты просмотры"  # post_id, tg_id, views, last_ts — счётчик просмотров (видит только главный админ)
 MOMENT_MAX_PHOTOS = 4
 MOMENT_MAX_TEXT = 2000

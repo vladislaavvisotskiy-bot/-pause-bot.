@@ -689,6 +689,51 @@ def fix_client_id_types() -> dict:
     return {"total": len(clients), "fixed": len(cells)}
 
 
+_AV_HEADER = ["tg_id", "file_id", "date"]
+_avatars_cache = {"ts": 0.0, "map": {}}
+
+
+def _load_avatars() -> dict:
+    now = time.time()
+    if _avatars_cache["map"] and now - _avatars_cache["ts"] < 30:
+        return _avatars_cache["map"]
+    ws = _ws_or_create(config.SHEET_AVATARS, _AV_HEADER)
+    out = {}
+    for i, row in enumerate(ws.get_all_values()):
+        if i and len(row) > 1 and row[0].strip() and row[1].strip():
+            out[row[0].strip()] = row[1].strip()
+    _avatars_cache["map"] = out
+    _avatars_cache["ts"] = now
+    return out
+
+
+def get_custom_avatar(tg_id) -> str:
+    """file_id своей аватарки клиента (загружена в приложении) либо ""."""
+    return _load_avatars().get(str(tg_id), "")
+
+
+def set_custom_avatar(tg_id, file_id: str):
+    """Ставит/меняет (file_id) либо убирает (file_id="") свою аватарку."""
+    tg = str(tg_id)
+    ws = _ws_or_create(config.SHEET_AVATARS, _AV_HEADER)
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows):
+        if i and row and row[0].strip() == tg:
+            ws.update_cell(i + 1, 2, file_id)
+            ws.update_cell(i + 1, 3, today_date_str())
+            break
+    else:
+        if file_id:
+            ws.append_row([tg, file_id, today_date_str()], value_input_option="RAW")
+    m = dict(_avatars_cache["map"] or _load_avatars())
+    if file_id:
+        m[tg] = file_id
+    else:
+        m.pop(tg, None)
+    _avatars_cache["map"] = m
+    _avatars_cache["ts"] = time.time()
+
+
 def get_zones() -> list:
     seen, out = set(), []
     for c in _load_clients():

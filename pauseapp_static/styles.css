@@ -2311,3 +2311,7 @@ p { margin: 0; color: var(--ink-soft); }
 .menu-order-ctl { display: flex; gap: 8px; }
 .menu-order-ctl .btn-ghost { flex: 1; padding: 9px 6px; font-size: 14px; }
 .menu-order-ctl .btn-ghost:disabled { opacity: .35; pointer-events: none; }
+
+.profile-avatar-actions { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 8px; }
+.profile-avatar-link { border: none; background: none; padding: 4px 8px; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px; }
+.profile-avatar-link:disabled { opacity: .5; }
