@@ -4478,6 +4478,64 @@
     });
   }
 
+  // Полноэкранная аватарка: фото крупно + «Сменить фото» / «Вернуть из Telegram».
+  function openAvatarViewer(p) {
+    var ov = el("div", "avatar-viewer");
+    var close = el("button", "avatar-viewer-close", "×");
+    close.setAttribute("aria-label", "Close");
+    var stage = el("div", "avatar-viewer-stage");
+    var big = el("div", "avatar-viewer-img", escapeHtml(initials(p.name)));
+    stage.appendChild(big);
+    var actions = el("div", "avatar-viewer-actions");
+    var file = el("input");
+    file.type = "file"; file.accept = "image/*"; file.style.display = "none";
+    var change = el("button", "btn-primary", escapeHtml(t("profile.avatarChange")));
+    change.addEventListener("click", function () { haptic("select"); file.click(); });
+    actions.appendChild(file); actions.appendChild(change);
+    if (p.custom_avatar) {
+      var reset = el("button", "btn-ghost avatar-viewer-reset", escapeHtml(t("profile.avatarReset")));
+      reset.addEventListener("click", function () {
+        reset.disabled = true;
+        api("/api/profile/avatar/delete", { method: "POST", body: {} }).then(function () {
+          p.custom_avatar = false;
+          avatarCacheDrop(); haptic("success"); closeViewer(); renderProfileScreen();
+        }).catch(function () { reset.disabled = false; toast(t("profile.avatarFailed")); });
+      });
+      actions.appendChild(reset);
+    }
+    file.addEventListener("change", function () {
+      var f = file.files && file.files[0];
+      file.value = "";
+      if (!f) return;
+      change.disabled = true;
+      change.textContent = t("profile.avatarUploading");
+      avatarSquare(f).then(function (blob) {
+        return apiUpload("/api/profile/avatar", blob, "avatar.jpg");
+      }).then(function () {
+        p.custom_avatar = true;
+        avatarCacheDrop(); haptic("success"); toast(t("profile.avatarDone")); closeViewer(); renderProfileScreen();
+      }).catch(function () {
+        change.disabled = false;
+        change.textContent = t("profile.avatarChange");
+        toast(t("profile.avatarFailed"));
+      });
+    });
+    function closeViewer() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    close.addEventListener("click", closeViewer);
+    ov.addEventListener("click", function (e) { if (e.target === ov || e.target === stage) closeViewer(); });
+    ov.appendChild(close); ov.appendChild(stage); ov.appendChild(actions);
+    document.body.appendChild(ov);
+    var myId = tgUserId();
+    if (myId) {
+      fetchAuthedImageBlobUrl("/pauseapp/api/avatar/" + encodeURIComponent(myId) + "?t=" + Date.now())
+        .then(function (blobUrl) {
+          big.textContent = "";
+          big.style.backgroundImage = "url(" + blobUrl + ")";
+          big.classList.add("has-photo");
+        }).catch(function () { /* остаются инициалы */ });
+    }
+  }
+
   function renderProfileScreen() {
     screenHeader("profile-header", {
       back: function () { showScreen("home"); },
@@ -4520,42 +4578,11 @@
         })
         .catch(function () { /* нет фото в Telegram — инициалы и остаются */ });
     }
-    // Своя аватарка: выбор фото -> квадрат 512px -> сервер (Telegram-хранилище).
-    var avFile = el("input");
-    avFile.type = "file"; avFile.accept = "image/*"; avFile.style.display = "none";
-    head.appendChild(avFile);
-    var avRow = el("div", "profile-avatar-actions");
-    var avChange = el("button", "profile-avatar-link", escapeHtml(t("profile.avatarChange")));
-    avChange.addEventListener("click", function () { haptic("select"); avFile.click(); });
-    avRow.appendChild(avChange);
-    if (p.custom_avatar) {
-      var avReset = el("button", "profile-avatar-link", escapeHtml(t("profile.avatarReset")));
-      avReset.addEventListener("click", function () {
-        api("/api/profile/avatar/delete", { method: "POST", body: {} }).then(function () {
-          p.custom_avatar = false;
-          avatarCacheDrop(); haptic("success"); renderProfileScreen();
-        }).catch(function () { toast(t("profile.avatarFailed")); });
-      });
-      avRow.appendChild(avReset);
-    }
-    avFile.addEventListener("change", function () {
-      var f = avFile.files && avFile.files[0];
-      avFile.value = "";
-      if (!f) return;
-      avChange.disabled = true;
-      avChange.textContent = t("profile.avatarUploading");
-      avatarSquare(f).then(function (blob) {
-        return apiUpload("/api/profile/avatar", blob, "avatar.jpg");
-      }).then(function () {
-        p.custom_avatar = true;
-        avatarCacheDrop(); haptic("success"); toast(t("profile.avatarDone")); renderProfileScreen();
-      }).catch(function () {
-        avChange.disabled = false;
-        avChange.textContent = t("profile.avatarChange");
-        toast(t("profile.avatarFailed"));
-      });
+    // Тап по аватарке — полноэкранный просмотр, там «Сменить фото».
+    avatarSlot.classList.add("is-tappable");
+    head.addEventListener("click", function (e) {
+      if (e.target && e.target.closest && e.target.closest(".avatar")) { haptic("select"); openAvatarViewer(p); }
     });
-    head.appendChild(avRow);
     head.appendChild(el("div", "profile-name", p.name || t("profile.noName")));
     head.appendChild(el("div", "profile-contact", formatPhone(p.phone)));
 
