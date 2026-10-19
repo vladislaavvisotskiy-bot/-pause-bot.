@@ -6952,12 +6952,72 @@
       totalRow.appendChild(totalTile);
       root.appendChild(totalRow);
 
+      // Выбор долгим нажатием — только у тех, у кого долг 0 (их историю можно удалить пачкой).
+      var selected = {};
+      var selMode = false;
+      var bar = el("div", "ops-debtor-selbar");
+      bar.hidden = true;
+      var barText = el("span", "ops-debtor-selcount", "");
+      var barDel = el("button", "ops-delete-history-btn", "Удалить историю");
+      var barCancel = el("button", "btn-text", "Отмена");
+      bar.appendChild(barText); bar.appendChild(barDel); bar.appendChild(barCancel);
+      root.appendChild(bar);
+      var cards = [];
+
+      function refreshSel() {
+        var n = Object.keys(selected).length;
+        selMode = n > 0;
+        bar.hidden = !selMode;
+        barText.textContent = "Выбрано: " + n;
+        cards.forEach(function (c) { c.el.classList.toggle("ops-debtor-selected", !!selected[c.d.id]); });
+      }
+      function toggle(d) {
+        if (d.sum > 0) { toast("Выбрать можно только тех, у кого долг 0"); return; }
+        if (selected[d.id]) delete selected[d.id]; else selected[d.id] = true;
+        haptic("select");
+        refreshSel();
+      }
+      barCancel.addEventListener("click", function () { selected = {}; refreshSel(); });
+      barDel.addEventListener("click", function () {
+        var ids = Object.keys(selected);
+        if (!ids.length) return;
+        showConfirm(
+          "Удалить историю долгов у выбранных (" + ids.length + ")? Комментарии и напоминания пропадут, люди исчезнут из списка должников.",
+          "Удалить",
+          function () {
+            hideConfirm();
+            barDel.disabled = true;
+            api("/api/ops/debtors/delete-history-batch", { method: "POST", body: { ids: ids } })
+              .then(function (r) { haptic("success"); toast("Удалено: " + r.deleted); loadOpsDebtorsList(root); })
+              .catch(function (err) { barDel.disabled = false; toast("Не удалось удалить: " + err.message); });
+          }
+        );
+      });
+
       data.debtors.forEach(function (d) {
         var card = el("div", "card ops-debtor-row");
         card.innerHTML =
           '<div class="ops-debtor-name">' + escapeHtml(d.name) + '</div>' +
           '<div class="ops-debtor-sum">' + fmtSum(d.sum) + '</div>';
+        cards.push({ el: card, d: d });
+        var timer = null, longFired = false;
+        function startHold() {
+          longFired = false;
+          clearTimeout(timer);
+          timer = setTimeout(function () { longFired = true; toggle(d); }, 500);
+        }
+        function endHold() { clearTimeout(timer); }
+        card.addEventListener("touchstart", startHold, { passive: true });
+        card.addEventListener("touchend", endHold);
+        card.addEventListener("touchmove", endHold, { passive: true });
+        card.addEventListener("touchcancel", endHold);
+        card.addEventListener("mousedown", startHold);
+        card.addEventListener("mouseup", endHold);
+        card.addEventListener("mouseleave", endHold);
+        card.addEventListener("contextmenu", function (e) { e.preventDefault(); });
         card.addEventListener("click", function () {
+          if (longFired) { longFired = false; return; }
+          if (selMode) { toggle(d); return; }
           haptic("select");
           wizardStep(function (body) {
             opsStepHeader(body, d.name);

@@ -2212,6 +2212,18 @@ async def api_ops_debtor_delete_history(request: web.Request):
     return web.json_response({"ok": True})
 
 
+async def api_ops_debtors_delete_history_batch(request: web.Request):
+    """Пакетное удаление истории — только у клиентов с долгом 0."""
+    if not request["pa_debtors"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    ids = [str(x) for x in (body.get("ids") or [])][:200]
+    if not ids:
+        return web.json_response({"error": "bad_request"}, status=400)
+    done = await _retry_sheets(sheets.delete_debtors_history, ids)
+    return web.json_response({"ok": True, "deleted": len(done), "skipped": len(ids) - len(done)})
+
+
 # ---------------------------------------------------------------------------
 # Операционный центр → Розыгрыш "Пауза в подарок" (доступ как у "Финансы" —
 # pa_finance: начисление бесплатных сетов — это расходы бренда, тот же
@@ -3098,6 +3110,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/ops/debtors/{client_id}/lines/pay", api_ops_debtor_lines_pay)
     app.router.add_post("/api/ops/debtors/{client_id}/line/unpay", api_ops_debtor_line_unpay)
     app.router.add_post("/api/ops/debtors/{client_id}/delete-history", api_ops_debtor_delete_history)
+    app.router.add_post("/api/ops/debtors/delete-history-batch", api_ops_debtors_delete_history_batch)
     app.router.add_get("/api/pause-admins", api_pause_admins_list)
     app.router.add_post("/api/pause-admins", api_pause_admins_add)
     app.router.add_post("/api/pause-admins/{tg_id}/feature", api_pause_admins_feature)

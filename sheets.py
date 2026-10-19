@@ -1016,16 +1016,21 @@ def delete_debtor_history(client_id):
     погашен (см. get_all_debtors — до этой кнопки он так и остаётся там
     виден, с суммой 0, в самом низу списка, по прямой просьбе). Только
     когда у клиента не осталось НЕпогашенных долгов (проверяем тут же, а
-    не полагаемся на фронт).
+    не полагаемся на фронт). См. delete_debtors_history."""
+    return bool(delete_debtors_history([client_id]))
 
-    Снимает маркер "долг погашен" (config.DEBT_PAID_MARKER) с его строк в
-    "Заказы" — без этого get_all_debtors продолжал бы находить эти
-    строки и клиент остался бы в списке с суммой 0 навсегда, даже после
-    удаления. Сами строки не удаляются и остальной текст комментария (если
-    был) не трогаем — снимаем только сам маркер, той же механикой, что и
-    unmark_debt_line_paid. Плюс комментарии/напоминания с карточки."""
-    if get_client_debt(client_id) > 0:
-        return False
+
+def delete_debtors_history(client_ids) -> list:
+    """Пакетное удаление истории долгов (одним проходом по листам).
+    Снимает маркер "долг погашен" (config.DEBT_PAID_MARKER) со строк
+    клиентов в "Заказы" (сами строки и остальной текст комментария не
+    трогаем) и удаляет их комментарии/напоминания. Клиенты с живым долгом
+    пропускаются. Возвращает список id, у которых история удалена."""
+    ids = [str(c) for c in client_ids if str(c).strip()]
+    ids = [c for c in dict.fromkeys(ids) if get_client_debt(c) <= 0]
+    if not ids:
+        return []
+    idset = set(ids)
 
     ws = _ws(config.SHEET_ORDERS)
     cells = []
@@ -1035,7 +1040,7 @@ def delete_debtor_history(client_id):
             continue
         if len(row) < config.O_COMMENT:
             continue
-        if row[config.O_CLIENT_ID - 1].strip() != str(client_id):
+        if row[config.O_CLIENT_ID - 1].strip() not in idset:
             continue
         comment = row[config.O_COMMENT - 1].strip()
         if not is_debt_paid_marked(comment):
@@ -1055,11 +1060,11 @@ def delete_debtor_history(client_id):
         rows2 = ws2.get_all_values()
         stale_rows = [
             i + 1 for i, row in enumerate(rows2)
-            if i + 1 != 1 and len(row) >= client_col and row[client_col - 1].strip() == str(client_id)
+            if i + 1 != 1 and len(row) >= client_col and row[client_col - 1].strip() in idset
         ]
         for r in sorted(stale_rows, reverse=True):
             ws2.delete_rows(r)
-    return True
+    return ids
 
 
 def _is_valid_date(s: str) -> bool:
