@@ -722,6 +722,15 @@
         openCourierPicker(point);
       });
       body.appendChild(courierBtn);
+
+      var adminCashBtn = document.createElement("button");
+      adminCashBtn.className = "route-courier-btn";
+      adminCashBtn.textContent = "💵 Наличные: кто дал" + (cashAtPoint > 0 ? " · " + fmtSum(cashAtPoint) : "");
+      adminCashBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openAdminCashModal(point);
+      });
+      body.appendChild(adminCashBtn);
     }
 
     // "Закрепить" — только админ. Закрепление касается ТОЛЬКО позиции
@@ -1518,6 +1527,140 @@
   // человека на точке (кнопка на карточке, см. buildCard). Модалка в два
   // шага: список людей на точке -> сумма для выбранного.
   // -------------------------------------------------------------------
+
+  // Админ: кто именно дал наличные на точке, правка/удаление и добавление
+  // задним числом (если курьер забыл отметить).
+  function openAdminCashModal(point) {
+    document.getElementById("cash-modal").hidden = false;
+    renderAdminCashList(point);
+  }
+
+  function renderAdminCashList(point) {
+    document.getElementById("cash-modal-title").textContent = "Наличные — " + point.point;
+    var body = document.getElementById("cash-modal-body");
+    body.innerHTML = '<div class="modal-list-empty">Загрузка…</div>';
+    api("/api/cash/point-entries?date=" + encodeURIComponent(state.date) + "&point=" + encodeURIComponent(point.point))
+      .then(function (data) {
+        body.innerHTML = "";
+        var entries = data.entries || [];
+        var total = entries.reduce(function (a, e) { return a + e.amount; }, 0);
+        if (!entries.length) {
+          body.appendChild(el("div", "modal-list-empty", "Пока никто не отмечен."));
+        } else {
+          body.appendChild(el("div", "cash-day-sub", "Итого: " + fmtSum(total)));
+          var list = document.createElement("div");
+          list.className = "modal-list";
+          entries.forEach(function (e) {
+            var item = document.createElement("div");
+            item.className = "modal-list-item";
+            item.innerHTML = escapeHtml([e.client_id, e.name].filter(Boolean).join(" · ")) +
+              '<div class="modal-list-item-sub">' + fmtSum(e.amount) + " · " +
+              escapeHtml(e.courier || "") + " " + escapeHtml(e.time || "") + "</div>";
+            item.addEventListener("click", function () { renderAdminCashEdit(point, e); });
+            list.appendChild(item);
+          });
+          body.appendChild(list);
+        }
+        var addBtn = el("button", "btn-primary wizard-footer-btn", "+ Добавить наличные");
+        addBtn.addEventListener("click", function () { renderAdminCashAdd(point); });
+        body.appendChild(addBtn);
+      })
+      .catch(function (err) {
+        body.innerHTML = "";
+        body.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      });
+  }
+
+  function adminCashDone(point, msg) {
+    toast(msg);
+    loadRoute(state.date);
+    renderAdminCashList(point);
+  }
+
+  function renderAdminCashEdit(point, entry) {
+    document.getElementById("cash-modal-title").textContent = entry.name || entry.client_id;
+    var body = document.getElementById("cash-modal-body");
+    body.innerHTML = "";
+    var back = el("button", "btn-text", "← Назад к списку");
+    back.addEventListener("click", function () { renderAdminCashList(point); });
+    body.appendChild(back);
+    var field = el("div", "field");
+    field.innerHTML = "<label>Сумма</label>";
+    var input = document.createElement("input");
+    input.type = "number"; input.inputMode = "numeric"; input.min = "0";
+    input.value = entry.amount;
+    field.appendChild(input);
+    body.appendChild(field);
+    var ref = { row: entry.row, date: state.date, client_id: entry.client_id };
+    var save = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    save.addEventListener("click", function () {
+      var amount = parseInt(input.value, 10);
+      if (!amount || amount <= 0) { toast("Введите сумму"); return; }
+      save.disabled = true;
+      api("/api/cash/admin-edit", { method: "POST", body: Object.assign({ amount: amount }, ref) })
+        .then(function () { adminCashDone(point, "Сохранено"); })
+        .catch(function (err) { save.disabled = false; toast("Не удалось: " + (err.message === "changed" ? "запись изменилась, обновите" : err.message)); });
+    });
+    body.appendChild(save);
+    var del = el("button", "btn-ghost", "Удалить запись");
+    del.addEventListener("click", function () {
+      showConfirm("Удалить «" + (entry.name || entry.client_id) + " — " + fmtSum(entry.amount) + "»?", "Да, удалить", function () {
+        api("/api/cash/admin-delete", { method: "POST", body: ref })
+          .then(function () { adminCashDone(point, "Удалено"); })
+          .catch(function (err) { toast("Не удалось: " + err.message); });
+      });
+    });
+    body.appendChild(del);
+  }
+
+  function renderAdminCashAdd(point) {
+    document.getElementById("cash-modal-title").textContent = "Добавить наличные";
+    var body = document.getElementById("cash-modal-body");
+    body.innerHTML = "";
+    var back = el("button", "btn-text", "← Назад к списку");
+    back.addEventListener("click", function () { renderAdminCashList(point); });
+    body.appendChild(back);
+    if (!point.people.length) {
+      body.appendChild(el("div", "modal-list-empty", "На точке нет заказов"));
+      return;
+    }
+    var list = document.createElement("div");
+    list.className = "modal-list";
+    point.people.forEach(function (p) {
+      var item = document.createElement("div");
+      item.className = "modal-list-item";
+      item.innerHTML = escapeHtml(p.name) + '<div class="modal-list-item-sub">' + fmtSum(p.sum) + "</div>";
+      item.addEventListener("click", function () { renderAdminCashAddAmount(point, p); });
+      list.appendChild(item);
+    });
+    body.appendChild(list);
+  }
+
+  function renderAdminCashAddAmount(point, person) {
+    document.getElementById("cash-modal-title").textContent = "Наличные — " + person.name;
+    var body = document.getElementById("cash-modal-body");
+    body.innerHTML = "";
+    var back = el("button", "btn-text", "← Назад");
+    back.addEventListener("click", function () { renderAdminCashAdd(point); });
+    body.appendChild(back);
+    var field = el("div", "field");
+    field.innerHTML = "<label>Сумма, которую дал клиент</label>";
+    var input = document.createElement("input");
+    input.type = "number"; input.inputMode = "numeric"; input.min = "0";
+    input.value = person.sum ? person.sum : "";
+    field.appendChild(input);
+    body.appendChild(field);
+    var ok = el("button", "btn-primary wizard-footer-btn", "Добавить");
+    ok.addEventListener("click", function () {
+      var amount = parseInt(input.value, 10);
+      if (!amount || amount <= 0) { toast("Введите сумму"); return; }
+      ok.disabled = true;
+      api("/api/cash/admin-add", { method: "POST", body: { date: state.date, point: point.point, client_id: person.client_id, amount: amount } })
+        .then(function () { adminCashDone(point, "Добавлено: " + fmtSum(amount) + " от " + person.name); })
+        .catch(function (err) { ok.disabled = false; toast("Не удалось: " + err.message); });
+    });
+    body.appendChild(ok);
+  }
 
   function openCashModal(point) {
     renderCashPersonList(point);

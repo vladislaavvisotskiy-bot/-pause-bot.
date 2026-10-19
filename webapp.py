@@ -1107,6 +1107,84 @@ async def api_cash_record(request: web.Request):
     return web.json_response({"ok": True})
 
 
+async def api_cash_point_entries(request: web.Request):
+    """Админ: кто именно дал наличные на точке за дату."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    date_str = request.query.get("date") or await _today()
+    point = (request.query.get("point") or "").strip()
+    entries = await _retry_sheets(sheets.get_point_cash_entries, date_str, point)
+    return web.json_response({"entries": entries})
+
+
+async def api_cash_admin_add(request: web.Request):
+    """Админ добавляет наличные задним числом (курьер забыл отметить)."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    date_str = body.get("date") or await _today()
+    point = (body.get("point") or "").strip()
+    client_id = str(body.get("client_id") or "").strip()
+    try:
+        amount = int(body.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if not point or not client_id or amount <= 0:
+        return web.json_response({"error": "bad_request"}, status=400)
+    async with _route_lock:
+        route = await _retry_sheets(sheets.get_route_for_date, date_str)
+        point_data = next((p for p in route if p["point"] == point), None)
+        if not point_data:
+            return web.json_response({"error": "point_not_found"}, status=404)
+        person = next((p for p in point_data["people"] if p["client_id"] == client_id), None)
+        if not person:
+            return web.json_response({"error": "person_not_found"}, status=404)
+        ids = point_data.get("courier_tg_ids") or []
+        cid = str(body.get("courier_tg_id") or (ids[0] if ids else request["tg_id"]))
+        cname = next((c["name"] for c in await _retry_sheets(sheets.get_couriers) if c["tg_id"] == cid),
+                     request["tg_name"])
+        await _retry_sheets(
+            sheets.record_cash_collection, date_str, cid, cname, point,
+            client_id, person["name"], person["contact"], person.get("telegram", ""), amount,
+            retries=2,
+        )
+    return web.json_response({"ok": True})
+
+
+async def api_cash_admin_edit(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    try:
+        row, amount = int(body.get("row")), int(body.get("amount") or 0)
+    except (TypeError, ValueError):
+        return web.json_response({"error": "bad_request"}, status=400)
+    if amount <= 0:
+        return web.json_response({"error": "bad_request"}, status=400)
+    async with _route_lock:
+        ok = await _retry_sheets(sheets.edit_cash_collection, row, body.get("date") or "",
+                                 str(body.get("client_id") or ""), amount, retries=2)
+    if not ok:
+        return web.json_response({"error": "changed"}, status=409)
+    return web.json_response({"ok": True})
+
+
+async def api_cash_admin_delete(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    try:
+        row = int(body.get("row"))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "bad_request"}, status=400)
+    async with _route_lock:
+        ok = await _retry_sheets(sheets.delete_cash_collection, row, body.get("date") or "",
+                                 str(body.get("client_id") or ""), retries=2)
+    if not ok:
+        return web.json_response({"error": "changed"}, status=409)
+    return web.json_response({"ok": True})
+
+
 async def api_earnings(request: web.Request):
     if request["role"] != "courier":
         return web.json_response({"error": "forbidden"}, status=403)
@@ -1197,6 +1275,10 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/courier/cash-day-entries", api_courier_cash_day_entries)
     app.router.add_get("/api/courier/earnings-by-day", api_courier_earnings_by_day)
     app.router.add_post("/api/cash", api_cash_record)
+    app.router.add_get("/api/cash/point-entries", api_cash_point_entries)
+    app.router.add_post("/api/cash/admin-add", api_cash_admin_add)
+    app.router.add_post("/api/cash/admin-edit", api_cash_admin_edit)
+    app.router.add_post("/api/cash/admin-delete", api_cash_admin_delete)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_post("/api/route/reorder", api_route_reorder)
     app.router.add_post("/api/route/pin", api_route_pin)

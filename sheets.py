@@ -6047,6 +6047,67 @@ def record_cash_collection(date_str: str, courier_tg_id, courier_name: str, poin
     _invalidate_cash_raw_cache()
 
 
+def get_point_cash_entries(date_str: str, point: str) -> list:
+    """Кто именно дал наличные на точке за дату (для админа в «Маршруте»):
+    строки листа «Наличные» с номером строки — по нему правка/удаление."""
+    out = []
+    for i, row in enumerate(_cash_raw_rows()):
+        r = i + 1
+        if r < config.CASH_DATA_START_ROW or len(row) < config.CASH_TIME:
+            continue
+        if row[config.CASH_DATE - 1].strip() != date_str:
+            continue
+        if row[config.CASH_POINT - 1].strip() != point:
+            continue
+        try:
+            amount = int(row[config.CASH_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        out.append({
+            "row": r,
+            "client_id": row[config.CASH_CLIENT_ID - 1].strip(),
+            "name": row[config.CASH_NAME - 1].strip(),
+            "contact": row[config.CASH_CONTACT - 1].strip(),
+            "telegram": row[config.CASH_TELEGRAM - 1].strip(),
+            "courier": row[config.CASH_COURIER_NAME - 1].strip(),
+            "time": row[config.CASH_TIME - 1].strip(),
+            "amount": amount,
+        })
+    return out
+
+
+def _cash_row_checked(ws, row_num: int, date_str: str, client_id: str):
+    """Свежая проверка, что в строке row_num всё ещё та запись (строки
+    могли сдвинуться после удаления). Возвращает True/False."""
+    if row_num < config.CASH_DATA_START_ROW:
+        return False
+    vals = ws.row_values(row_num)
+    if len(vals) < config.CASH_AMOUNT:
+        return False
+    return (vals[config.CASH_DATE - 1].strip() == date_str
+            and vals[config.CASH_CLIENT_ID - 1].strip() == str(client_id))
+
+
+def edit_cash_collection(row_num: int, date_str: str, client_id: str, amount: int) -> bool:
+    """Админ правит сумму записи о наличных. False — запись уже другая."""
+    ws = _ws_or_create(config.SHEET_CASH_COLLECTIONS, _CASH_HEADER)
+    if not _cash_row_checked(ws, row_num, date_str, client_id):
+        return False
+    ws.update_cell(row_num, config.CASH_AMOUNT, int(amount))
+    _invalidate_cash_raw_cache()
+    return True
+
+
+def delete_cash_collection(row_num: int, date_str: str, client_id: str) -> bool:
+    """Админ удаляет запись о наличных (статус оплаты заказов не меняется)."""
+    ws = _ws_or_create(config.SHEET_CASH_COLLECTIONS, _CASH_HEADER)
+    if not _cash_row_checked(ws, row_num, date_str, client_id):
+        return False
+    ws.delete_rows(row_num)
+    _invalidate_cash_raw_cache()
+    return True
+
+
 def _courier_cash_from(courier_tg_id):
     """Дата начала расчётов кассы курьера (см. reset_courier_history) или None."""
     if courier_tg_id is None:
