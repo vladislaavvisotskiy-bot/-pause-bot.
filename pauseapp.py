@@ -2752,8 +2752,16 @@ async def api_ops_broadcast_menu(request: web.Request):
     photo_ids, caption = [], ""
     if date_str == await _retry_sheets(sheets.get_active_menu_date):
         photo_ids, caption = await _retry_sheets(sheets.get_today_menu_photos)
+    # Свежий текст/фото, заданные в «Текст и фото рассылки» ПОСЛЕ публикации, важнее.
+    d_photos, d_caption = await _retry_sheets(sheets.get_draft_menu)
+    used_draft = bool(d_photos or (d_caption or "").strip())
+    if used_draft:
+        photo_ids, caption = d_photos, d_caption
     res = await menu_broadcast.start(bot, date_str, request["tg_id"], force=bool(body.get("force")),
                                      caption=caption, photo_ids=photo_ids)
+    if res == "started" and used_draft:
+        # Использован — очищаем, чтобы не «прилип» к рассылке следующего меню.
+        await _retry_sheets(sheets.set_draft_menu, [], "")
     if res == "running":
         return web.json_response({"error": "already_running"}, status=409)
     if res == "disabled":
