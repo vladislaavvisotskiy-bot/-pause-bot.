@@ -2347,3 +2347,6 @@ p { margin: 0; color: var(--ink-soft); }
 .ops-debtor-selected { outline: 2px solid var(--accent-warm); background: var(--ink-soft-bg); }
 .ops-debtor-selbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 8px 0; background: var(--bg, #f1ebe0); }
 .ops-debtor-selcount { flex: 1; font-weight: 600; }
+
+.menu-draft-photo-cell { position: relative; display: inline-block; }
+.menu-draft-photo-x { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 15px; line-height: 22px; padding: 0; cursor: pointer; }

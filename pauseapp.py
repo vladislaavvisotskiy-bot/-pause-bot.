@@ -2650,9 +2650,13 @@ async def api_ops_menu_draft_photo(request: web.Request):
     photos = []
     caption = None
     clear_photos = False
+    keep = None  # индексы прежних фото, которые остаются (новые дописываются после них)
     reader = await request.multipart()
     async for field in reader:
-        if field.name == "photo":
+        if field.name == "keep":
+            raw = (await field.text()).strip()
+            keep = [int(x) for x in raw.split(",") if x.strip().isdigit()]
+        elif field.name == "photo":
             data = await field.read(decode=False)
             if data:
                 if len(data) > MAX_SCREENSHOT_BYTES:
@@ -2668,6 +2672,8 @@ async def api_ops_menu_draft_photo(request: web.Request):
         caption = existing_caption
 
     photo_ids = existing_ids
+    if keep is not None:
+        photo_ids = [existing_ids[i] for i in keep if i < len(existing_ids)]
     if clear_photos:
         photo_ids = []
     if photos:
@@ -2684,7 +2690,9 @@ async def api_ops_menu_draft_photo(request: web.Request):
         except Exception:
             logger.exception("PAUSE App: не удалось загрузить фото черновика меню в канал")
             return web.json_response({"error": "upload_failed"}, status=502)
-        photo_ids = new_ids
+        photo_ids = (photo_ids if keep is not None else []) + new_ids
+        if len(photo_ids) > 10:
+            return web.json_response({"error": "too_many_photos"}, status=400)
 
     await _retry_sheets(sheets.set_draft_menu, photo_ids, caption)
     return web.json_response({

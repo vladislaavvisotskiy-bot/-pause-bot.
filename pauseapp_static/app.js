@@ -5807,38 +5807,50 @@
     wizardPhaseEl.innerHTML = "";
     body.appendChild(el("h2", "wizard-title", "Текст и фото рассылки"));
 
-    var photoUrls = menuDraft.photo_urls.slice();
+    // Прежние фото (по индексам) + новые файлы; фото добавляются по одному или пачкой, у каждого есть ×.
+    var existing = menuDraft.photo_urls.map(function (u, i) { return { idx: i, url: u }; });
     var pendingFiles = [];
 
     var thumbsWrap = el("div", "menu-draft-photo-row");
+    function thumb(src, onRemove, isUrl) {
+      var cell = el("div", "menu-draft-photo-cell");
+      var img = el("img", "menu-draft-photo-thumb");
+      img.alt = "";
+      if (isUrl) setPhotoSrc(img, src); else img.src = src;
+      var x = el("button", "menu-draft-photo-x", "×");
+      x.addEventListener("click", function () { onRemove(); renderThumbs(); });
+      cell.appendChild(img); cell.appendChild(x);
+      thumbsWrap.appendChild(cell);
+    }
     function renderThumbs() {
       thumbsWrap.innerHTML = "";
-      photoUrls.forEach(function (u) {
-        var img = el("img", "menu-draft-photo-thumb");
-        img.alt = "";
-        setPhotoSrc(img, u);
-        thumbsWrap.appendChild(img);
+      existing.forEach(function (p) {
+        thumb(p.url, function () { existing = existing.filter(function (q) { return q !== p; }); }, true);
       });
       pendingFiles.forEach(function (f) {
-        var img = el("img", "menu-draft-photo-thumb");
-        img.src = URL.createObjectURL(f);
-        thumbsWrap.appendChild(img);
+        thumb(URL.createObjectURL(f), function () { pendingFiles = pendingFiles.filter(function (q) { return q !== f; }); }, false);
       });
+      countEl.textContent = (existing.length + pendingFiles.length) + " / 10 фото";
     }
-    renderThumbs();
+    var countEl = el("div", "cash-day-sub", "");
     body.appendChild(thumbsWrap);
+    body.appendChild(countEl);
+    renderThumbs();
 
     var fileInput = el("input");
     fileInput.type = "file";
     fileInput.accept = "image/*";
     fileInput.multiple = true;
     fileInput.style.display = "none";
-    var attachBtn = el("button", "btn-ghost", "Выбрать фото (можно несколько)");
+    var attachBtn = el("button", "btn-ghost", "+ Добавить фото (до 10)");
     attachBtn.addEventListener("click", function () { fileInput.click(); });
     fileInput.addEventListener("change", function () {
-      if (!fileInput.files || !fileInput.files.length) return;
-      pendingFiles = Array.prototype.slice.call(fileInput.files);
-      photoUrls = [];
+      var added = Array.prototype.slice.call(fileInput.files || []);
+      fileInput.value = "";
+      if (!added.length) return;
+      var room = 10 - existing.length - pendingFiles.length;
+      if (added.length > room) toast("Максимум 10 фото");
+      pendingFiles = pendingFiles.concat(added.slice(0, Math.max(room, 0)));
       renderThumbs();
     });
     body.appendChild(fileInput);
@@ -5856,6 +5868,7 @@
       saveBtn.textContent = "Сохраняю…";
       var fd = new FormData();
       fd.append("caption", captionInput.value);
+      fd.append("keep", existing.map(function (p) { return p.idx; }).join(","));
       pendingFiles.forEach(function (f) { fd.append("photo", f, f.name); });
       fetch(API_BASE + "/api/ops/menu/draft/photo", {
         method: "POST", headers: { "X-Telegram-Init-Data": initData() }, body: fd,
@@ -5875,8 +5888,8 @@
     });
     body.appendChild(saveBtn);
 
-    if (photoUrls.length || pendingFiles.length) {
-      var clearBtn = el("button", "btn-text", "Удалить фото");
+    if (existing.length || pendingFiles.length) {
+      var clearBtn = el("button", "btn-text", "Удалить все фото");
       clearBtn.addEventListener("click", function () {
         var fd2 = new FormData();
         fd2.append("clear_photos", "1");
@@ -5887,7 +5900,7 @@
           haptic("success");
           menuDraft.photo_urls = [];
           menuDraft.caption = data.caption;
-          photoUrls = [];
+          existing = [];
           pendingFiles = [];
           renderThumbs();
         });
