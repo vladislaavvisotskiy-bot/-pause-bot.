@@ -2352,10 +2352,25 @@
         haptic("select");
         openCashDayHistory(courier.tg_id, true, "Общая сумма у курьера");
       });
-      var bd = data.breakdown;
-      if (bd) {
-        totalBox.appendChild(el("div", "cash-day-sub",
-          "Собрано всего " + fmtSum(bd.collected) + " − забрали " + fmtSum(bd.received) + " − оплачено из наличных " + fmtSum(bd.paid_from_cash)));
+      var lg = data.ledger;
+      if (lg && lg.days && lg.days.length) {
+        var ledger = el("div", "cash-ledger");
+        if (lg.opening) ledger.appendChild(el("div", "cash-day-sub", "Остаток на начало: " + fmtSum(lg.opening)));
+        lg.days.forEach(function (d) {
+          var row = el("div", "cash-ledger-row");
+          var head = el("div", "cash-day-head");
+          head.appendChild(el("div", "cash-day-date", d.date.slice(0, 5)));
+          head.appendChild(el("strong", "cash-day-remaining", "Остаток " + fmtSum(d.balance)));
+          row.appendChild(head);
+          var idle = !d.collected && !d.received && !d.paid_from_cash && !d.paid_separate;
+          row.appendChild(el("div", "cash-day-sub", idle ? "Движений нет" :
+            "Собрал " + fmtSum(d.collected) +
+            (d.received ? " · забрали " + fmtSum(d.received) : "") +
+            (d.paid_from_cash ? " · оплачено из наличных " + fmtSum(d.paid_from_cash) : "") +
+            (d.paid_separate ? " · оплачено отдельно " + fmtSum(d.paid_separate) : "")));
+          ledger.appendChild(row);
+        });
+        totalBox.appendChild(ledger);
       }
       boxesHolder.appendChild(totalBox);
 

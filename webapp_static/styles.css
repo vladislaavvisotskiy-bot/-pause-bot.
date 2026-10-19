@@ -1012,3 +1012,7 @@ p { margin: 0; color: var(--ink-soft); }
 .card-actions-secondary { display: flex; gap: 10px; }
 .card-actions-secondary > button { flex: 1; }
 .btn-ghost:disabled { opacity: .4; pointer-events: none; }
+
+.cash-ledger { margin-top: 10px; border-top: 1px solid rgba(0,0,0,.08); padding-top: 6px; }
+.cash-ledger-row { padding: 6px 0; }
+.cash-ledger-row + .cash-ledger-row { border-top: 1px solid rgba(0,0,0,.05); }

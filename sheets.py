@@ -6370,6 +6370,64 @@ def get_courier_cash_breakdown(courier_tg_id, date_str: str = None) -> dict:
             "balance": collected - received - paid}
 
 
+def get_courier_cash_ledger(courier_tg_id, date_str: str = None, max_days: int = 31) -> dict:
+    """Журнал «Общая сумма у курьера» по дням до date_str включительно: по
+    каждому дню собрано, забрали у курьера, оплачено из наличных, оплачено
+    отдельно (не из наличных, остаток не меняет) и остаток на конец дня
+    нарастающим итогом. Дни без движений тоже есть (нули). Если дней
+    больше max_days — ранние сворачиваются в «остаток на начало» (opening)."""
+    date_str = date_str or today_date_str()
+    end = _parse_ru_date_safe(date_str)
+    base = _courier_cash_from(courier_tg_id)
+    days = {}
+
+    def day(d):
+        return days.setdefault(d, {"collected": 0, "received": 0, "paid_from_cash": 0, "paid_separate": 0})
+
+    for row in _iter_cash_rows(courier_tg_id, None, date_str):
+        d = row[config.CASH_DATE - 1].strip()
+        if base and _parse_ru_date_safe(d) < base:
+            continue
+        try:
+            day(d)["collected"] += int(row[config.CASH_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            pass
+    for row in _iter_settlement_rows(courier_tg_id, None, date_str):
+        t = row[config.SETL_TYPE - 1].strip()
+        if t not in _SETL_WITHDRAW_TYPES:
+            continue
+        d = row[config.SETL_DATE - 1].strip()
+        try:
+            amount = int(row[config.SETL_AMOUNT - 1].strip() or 0)
+        except ValueError:
+            amount = 0
+        day(d)["received" if t == config.SETTLEMENT_TYPE_CASH_RECEIVED else "paid_from_cash"] += amount
+    for e in get_courier_earnings_by_day(courier_tg_id):
+        d = _parse_ru_date_safe(e["date"])
+        if d > end or (base and d < base) or e["from_cash"] or not e["amount"]:
+            continue
+        day(e["date"])["paid_separate"] += e["amount"]
+
+    dates = sorted((d for d in days if _parse_ru_date_safe(d) != dt.datetime.min), key=_parse_ru_date_safe)
+    if not dates:
+        return {"days": [], "opening": 0, "balance": 0}
+    cur = _parse_ru_date_safe(dates[0])
+    full = []
+    while cur <= end:
+        key = cur.strftime("%d.%m.%Y")
+        full.append((key, days.get(key) or {"collected": 0, "received": 0, "paid_from_cash": 0, "paid_separate": 0}))
+        cur += dt.timedelta(days=1)
+    out, bal = [], 0
+    for key, v in full:
+        bal += v["collected"] - v["received"] - v["paid_from_cash"]
+        out.append({"date": key, **v, "balance": bal})
+    opening = 0
+    if len(out) > max_days:
+        opening = out[-max_days - 1]["balance"]
+        out = out[-max_days:]
+    return {"days": out, "opening": opening, "balance": bal}
+
+
 def get_courier_cash_by_day(courier_tg_id) -> list:
     """[{"date","collected","withdrawn","remaining"}, ...] — по всем
     дням, где у курьера было хоть какое-то движение (сбор или списание),

@@ -668,6 +668,7 @@ async def api_courier_cash_summary(request: web.Request):
     return web.json_response({
         "date": date_str, "cash_day": cash_day, "earned_day": earned_day, "balance_as_of": balance_as_of,
         "breakdown": await _retry_sheets(sheets.get_courier_cash_breakdown, tg_id, date_str),
+        "ledger": await _retry_sheets(sheets.get_courier_cash_ledger, tg_id, date_str),
     })
 
 
