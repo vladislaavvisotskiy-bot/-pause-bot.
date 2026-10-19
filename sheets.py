@@ -4574,6 +4574,44 @@ def get_delivery_points() -> list:
     return out
 
 
+def get_crm_points_map() -> dict:
+    """Для карты в CRM: точки доставки с координатами и люди на каждой.
+    {"points": [{"name","lat","lon","clients":[{"id","name","phone","telegram","tg_link","order_count"}]}],
+     "no_coords": [{"name","count"}]} — точки клиентов, которые на карте
+    показать нельзя (нет координат или точки нет в «Точки доставки»)."""
+    by_name = {}
+    for c in _load_clients():
+        name = (c.get("point") or "").strip()
+        if not name:
+            continue
+        username = (c.get("telegram") or "").strip().lstrip("@")
+        tg_id = (c.get("tg_id") or "").strip()
+        link = f"https://t.me/{username}" if username else (f"tg://user?id={tg_id}" if tg_id else "")
+        by_name.setdefault(name.lower(), {"name": name, "clients": []})["clients"].append({
+            "id": c["id"], "name": c.get("name", ""), "phone": c.get("contact", ""),
+            "telegram": f"@{username}" if username else "", "tg_link": link,
+            "order_count": c.get("order_count", 0),
+        })
+    points, used = [], set()
+    for p in get_delivery_points():
+        key = p["name"].strip().lower()
+        grp = by_name.get(key)
+        if not grp or key in used:
+            continue
+        try:
+            lat, lon = float(str(p["lat"]).replace(",", ".")), float(str(p["lon"]).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        used.add(key)
+        grp["clients"].sort(key=lambda x: (x["name"] or "").lower())
+        points.append({"name": p["name"], "lat": lat, "lon": lon, "clients": grp["clients"]})
+    no_coords = sorted(
+        ({"name": g["name"], "count": len(g["clients"])} for k, g in by_name.items() if k not in used),
+        key=lambda x: -x["count"])
+    points.sort(key=lambda x: -len(x["clients"]))
+    return {"points": points, "no_coords": no_coords}
+
+
 def _delivery_points_index() -> dict:
     return {p["name"]: p for p in get_delivery_points()}
 

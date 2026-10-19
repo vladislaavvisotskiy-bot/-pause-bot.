@@ -2320,3 +2320,25 @@ p { margin: 0; color: var(--ink-soft); }
 .avatar-viewer-actions { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 10px; }
 .avatar-viewer-actions .btn-primary { background: #F2EBDD; color: #2B2823; }
 .avatar-viewer-reset { color: #F2EBDD; border-color: rgba(242,235,221,.35); background: transparent; }
+
+/* CRM → Карта */
+.crm-map-wrap { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #e8dfca; }
+.crm-map { position: absolute; inset: 0; z-index: 0; }
+.crm-pin-wrap { background: none; border: none; }
+.crm-pin { width: 34px; height: 34px; border-radius: 50%; background: var(--ink, #2B2823); color: #F2EBDD; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; border: 2px solid #F2EBDD; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.crm-map-popup .leaflet-popup-content-wrapper { border-radius: 14px; padding: 0; }
+.crm-map-popup .leaflet-popup-content { margin: 0; }
+.crm-map-label { border: none; background: #fffdf5; color: var(--ink, #2B2823); font-weight: 700; font-size: 14px; padding: 10px 14px; border-radius: 14px; text-decoration: underline; text-underline-offset: 3px; }
+.crm-map-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 500; max-height: 58%; display: flex; flex-direction: column; background: #fffdf5; border-radius: 20px 20px 0 0; box-shadow: 0 -6px 24px rgba(0,0,0,.2); transform: translateY(105%); transition: transform .22s ease; }
+.crm-map-sheet.show { transform: translateY(0); }
+.crm-map-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; }
+.crm-map-sheet-title { font-weight: 700; font-size: 16px; }
+.crm-map-sheet-count { margin-left: 6px; background: var(--ink, #2B2823); color: #F2EBDD; border-radius: 999px; font-size: 12px; padding: 1px 8px; }
+.crm-map-sheet-x { border: none; background: none; font-size: 26px; line-height: 1; color: var(--ink-soft); padding: 0 4px; }
+.crm-map-sheet-list { overflow-y: auto; padding: 0 16px 14px; }
+.crm-map-person { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.crm-map-person-main { flex: 1; min-width: 0; }
+.crm-map-person-name { font-weight: 600; font-size: 15px; }
+.crm-map-person-sub { color: var(--ink-soft); font-size: 13px; margin-top: 2px; word-break: break-word; }
+.crm-map-mail { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--card, #fff); color: var(--ink); display: flex; align-items: center; justify-content: center; padding: 0; }
+.crm-map-mail:disabled { opacity: .35; }

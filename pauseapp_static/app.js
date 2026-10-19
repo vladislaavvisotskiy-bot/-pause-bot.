@@ -5258,6 +5258,9 @@
               loadCrmClientsList(sub);
             });
           }));
+          crmRows.appendChild(buildProfileRow(ICON_CRM_MAP, "Карта", function () {
+            wizardStep(function (b) { renderCrmMap(b); });
+          }));
           crmRows.appendChild(buildProfileRow(ICON_OPS_LEADS, "Лиды", function () {
             wizardStep(function (b) {
               opsStepHeader(b, "Лиды");
@@ -7231,6 +7234,84 @@
     }
 
     load();
+  }
+
+  // --- CRM → Карта: точки клиентов; тап по метке → название → список людей ---
+  var ICON_CRM_MAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 1 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>';
+
+  function renderCrmMap(body) {
+    opsStepHeader(body, "Карта");
+    if (typeof L === "undefined") { body.appendChild(el("div", "empty-note", "Карта недоступна.")); return; }
+    var wrap = el("div", "crm-map-wrap");
+    wrap.style.height = Math.max(380, window.innerHeight - 200) + "px";
+    var mapEl = el("div", "crm-map");
+    wrap.appendChild(mapEl);
+    var sheet = el("div", "crm-map-sheet");
+    wrap.appendChild(sheet);
+    body.appendChild(wrap);
+    var noteBox = el("div");
+    body.appendChild(noteBox);
+
+    var map = L.map(mapEl, { zoomControl: false, attributionControl: true }).setView([41.311081, 69.240562], 12);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, maxNativeZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
+    map.attributionControl.setPrefix(false);
+    setTimeout(function () { map.invalidateSize(); }, 0);
+    map.on("click", function () { sheet.classList.remove("show"); });
+
+    function showPeople(pt) {
+      sheet.innerHTML = "";
+      var head = el("div", "crm-map-sheet-head");
+      head.appendChild(el("div", "crm-map-sheet-title", escapeHtml(pt.name) + ' <span class="crm-map-sheet-count">' + pt.clients.length + '</span>'));
+      var x = el("button", "crm-map-sheet-x", "×");
+      x.addEventListener("click", function () { sheet.classList.remove("show"); });
+      head.appendChild(x);
+      sheet.appendChild(head);
+      var list = el("div", "crm-map-sheet-list");
+      pt.clients.forEach(function (c) {
+        var row = el("div", "crm-map-person");
+        var sub = [formatPhone(c.phone), c.telegram].filter(Boolean).join(" · ");
+        row.innerHTML = '<div class="crm-map-person-main"><div class="crm-map-person-name">' + escapeHtml(c.name || "—") + '</div>' +
+          '<div class="crm-map-person-sub">' + escapeHtml(sub) + '</div></div>';
+        var mail = el("button", "crm-map-mail", ICON_OPS_MESSAGE);
+        mail.setAttribute("aria-label", "Написать");
+        if (!c.tg_link) mail.disabled = true;
+        mail.addEventListener("click", function () { haptic("select"); openTelegramChat(c.tg_link); });
+        row.appendChild(mail);
+        list.appendChild(row);
+      });
+      sheet.appendChild(list);
+      sheet.classList.add("show");
+    }
+
+    api("/api/crm/map").then(function (data) {
+      var pts = data.points || [];
+      var bounds = [];
+      pts.forEach(function (pt) {
+        var icon = L.divIcon({
+          className: "crm-pin-wrap",
+          html: '<div class="crm-pin">' + pt.clients.length + '</div>',
+          iconSize: [34, 34], iconAnchor: [17, 17],
+        });
+        var marker = L.marker([pt.lat, pt.lon], { icon: icon }).addTo(map);
+        marker.on("click", function (e) {
+          if (e.originalEvent && e.originalEvent.stopPropagation) e.originalEvent.stopPropagation();
+          var label = el("button", "crm-map-label", escapeHtml(pt.name));
+          label.addEventListener("click", function () { map.closePopup(); showPeople(pt); });
+          L.popup({ closeButton: false, offset: [0, -14], className: "crm-map-popup" })
+            .setLatLng([pt.lat, pt.lon]).setContent(label).openOn(map);
+        });
+        bounds.push([pt.lat, pt.lon]);
+      });
+      if (bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      var nc = data.no_coords || [];
+      if (nc.length) {
+        var note = el("div", "card");
+        note.innerHTML = '<div class="order-card-items"><b>Не на карте</b></div><div class="center-note" style="margin-top:6px">Нет координат точки: ' +
+          nc.map(function (x) { return escapeHtml(x.name) + " (" + x.count + ")"; }).join(", ") + '</div>';
+        noteBox.appendChild(note);
+      }
+      if (!pts.length) noteBox.appendChild(el("div", "empty-note", "Пока нет точек с координатами."));
+    }).catch(function (err) { noteBox.appendChild(el("div", "empty-note", "Не удалось загрузить: " + escapeHtml(err.message))); });
   }
 
   // --- Операционный центр → CRM (только главный админ) --------------------

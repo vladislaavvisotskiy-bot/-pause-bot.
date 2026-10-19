@@ -2836,6 +2836,12 @@ async def api_crm_clients(request: web.Request):
     return web.json_response({"clients": clients})
 
 
+async def api_crm_map(request: web.Request):
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    return web.json_response(await _retry_sheets(sheets.get_crm_points_map))
+
+
 async def api_crm_client_detail(request: web.Request):
     if not request["is_main_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -3097,6 +3103,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/pause-admins/{tg_id}/feature", api_pause_admins_feature)
     app.router.add_post("/api/pause-admins/{tg_id}/remove", api_pause_admins_remove)
     app.router.add_get("/api/crm/clients", api_crm_clients)
+    app.router.add_get("/api/crm/map", api_crm_map)
     app.router.add_get("/api/crm/clients/{client_id}", api_crm_client_detail)
     app.router.add_get("/api/crm/leads", api_crm_leads)
     app.router.add_post("/api/crm/clients/{client_id}/stage", api_crm_stage_set)
