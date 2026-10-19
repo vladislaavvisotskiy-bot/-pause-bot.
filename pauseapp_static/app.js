@@ -5872,7 +5872,13 @@
         toast("Не удалось сохранить: " + err.message);
       };
       // Фото уменьшаем перед отправкой (оригиналы по 5-10 МБ грузились бесконечно).
-      Promise.all(pendingFiles.map(momDownscale)).then(function (blobs) {
+      saveBtn.textContent = pendingFiles.length ? "Сжимаю фото…" : "Сохраняю…";
+      // Если сжатие вдруг зависло (бывает на тяжёлых снимках) — через 12 с берём оригинал.
+      var shrink = function (f) {
+        return Promise.race([momDownscale(f), new Promise(function (r) { setTimeout(function () { r(f); }, 12000); })]);
+      };
+      Promise.all(pendingFiles.map(shrink)).then(function (blobs) {
+        saveBtn.textContent = "Отправляю…";
         var fd = new FormData();
         fd.append("caption", captionInput.value);
         fd.append("keep", existing.map(function (p) { return p.idx; }).join(","));
