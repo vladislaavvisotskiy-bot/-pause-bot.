@@ -5866,24 +5866,34 @@
     saveBtn.addEventListener("click", function () {
       saveBtn.disabled = true;
       saveBtn.textContent = "Сохраняю…";
-      var fd = new FormData();
-      fd.append("caption", captionInput.value);
-      fd.append("keep", existing.map(function (p) { return p.idx; }).join(","));
-      pendingFiles.forEach(function (f) { fd.append("photo", f, f.name); });
-      fetch(API_BASE + "/api/ops/menu/draft/photo", {
-        method: "POST", headers: { "X-Telegram-Init-Data": initData() }, body: fd,
-      }).then(function (resp) {
-        if (!resp.ok) throw new Error("HTTP " + resp.status);
-        return resp.json();
+      var fail = function (err) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Сохранить";
+        toast("Не удалось сохранить: " + err.message);
+      };
+      // Фото уменьшаем перед отправкой (оригиналы по 5-10 МБ грузились бесконечно).
+      Promise.all(pendingFiles.map(momDownscale)).then(function (blobs) {
+        var fd = new FormData();
+        fd.append("caption", captionInput.value);
+        fd.append("keep", existing.map(function (p) { return p.idx; }).join(","));
+        blobs.forEach(function (b, i) { fd.append("photo", b, (pendingFiles[i].name || "photo") .replace(/\.[^.]+$/, "") + ".jpg"); });
+        var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+        var tm = ctrl ? setTimeout(function () { ctrl.abort(); }, 90000) : null;
+        return fetch(API_BASE + "/api/ops/menu/draft/photo", {
+          method: "POST", headers: { "X-Telegram-Init-Data": initData() }, body: fd,
+          signal: ctrl ? ctrl.signal : undefined,
+        }).then(function (resp) {
+          if (tm) clearTimeout(tm);
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          return resp.json();
+        });
       }).then(function (data) {
         haptic("success");
         menuDraft.photo_urls = data.photo_urls;
         menuDraft.caption = data.caption;
         wizardBack();
       }).catch(function (err) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = "Сохранить";
-        toast("Не удалось сохранить: " + err.message);
+        fail(err && err.name === "AbortError" ? new Error("долго грузится, проверьте сеть") : err);
       });
     });
     body.appendChild(saveBtn);

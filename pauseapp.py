@@ -2682,11 +2682,12 @@ async def api_ops_menu_draft_photo(request: web.Request):
         bot = request.app.get("bot")
         if not bot:
             return web.json_response({"error": "bot_unavailable"}, status=503)
-        new_ids = []
         try:
-            for data, filename in photos:
-                msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=filename))
-                new_ids.append(msg.photo[-1].file_id)
+            msgs = await asyncio.gather(*[
+                bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=filename))
+                for data, filename in photos
+            ])
+            new_ids = [m.photo[-1].file_id for m in msgs]
         except Exception:
             logger.exception("PAUSE App: не удалось загрузить фото черновика меню в канал")
             return web.json_response({"error": "upload_failed"}, status=502)
