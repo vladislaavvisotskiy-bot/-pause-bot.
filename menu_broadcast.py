@@ -61,7 +61,9 @@ async def _send_one(bot, tg_id: int, nm: str, when: str, caption: str, photo_ids
         media = [InputMediaPhoto(media=f, caption=(text[:1024] if i == 0 and text else None)) for i, f in enumerate(photo_ids[:10])]
         await bot.send_media_group(tg_id, media)
         if len(text) > 1024:
-            await bot.send_message(tg_id, text, reply_markup=kb.menu_broadcast_kb())
+            await bot.send_message(tg_id, text)
+        # Под альбомом кнопок не бывает — отдельным сообщением идёт кнопка.
+        await bot.send_message(tg_id, "🌿", reply_markup=kb.menu_broadcast_kb("Посмотреть меню 🌿"))
 
 
 async def run(bot, date_str: str, admin_id, caption: str = "", photo_ids: list = None):

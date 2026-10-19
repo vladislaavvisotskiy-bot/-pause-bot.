@@ -210,12 +210,12 @@ def confirm_order_kb(has_comment: bool = False) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def menu_broadcast_kb() -> InlineKeyboardMarkup:
+def menu_broadcast_kb(label: str = "") -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     if config.MINIAPP_ONLY:
-        b.button(text=texts.APP_MENU_BROADCAST_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
+        b.button(text=label or texts.APP_MENU_BROADCAST_BTN, web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/pauseapp/"))
     else:
-        b.button(text=texts.MENU_BROADCAST_BTN, callback_data="menu_section")
+        b.button(text=label or texts.MENU_BROADCAST_BTN, callback_data="menu_section")
     b.adjust(1)
     return b.as_markup()
 
