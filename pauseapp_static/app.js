@@ -134,6 +134,7 @@
       "checkout.commentTitle": "Комментарий к заказу",
       "checkout.commentPlaceholder": "Например: можно мне заменить салат, пожалуйста",
       "checkout.noCutlery": "Без приборов", "checkout.noCutlerySub": "Отметим для кухни, и приборы не положим",
+      "checkout.wishesTitle": "Пожелания", "checkout.commentRowSub": "Для нашей команды поваров", "checkout.deliveryCommentRowSub": "Подъезд, этаж, позвонить",
       "checkout.commentInfo": "Это комментарии для нашей команды поваров. По возможности будем их учитывать и сделаем всё возможное, чтобы вас порадовать.",
       "checkout.deliveryCommentTitle": "Комментарий к доставке",
       "checkout.deliveryCommentPlaceholder": "Например: позвоните за 5 минут, 3 этаж, офис 12",
@@ -453,6 +454,7 @@
       "checkout.commentTitle": "Buyurtmaga izoh",
       "checkout.commentPlaceholder": "Masalan: salatni almashtirib bersangiz",
       "checkout.noCutlery": "Asbob-uskunasiz", "checkout.noCutlerySub": "Oshxonaga belgilaymiz, qoshiq-vilka solmaymiz",
+      "checkout.wishesTitle": "Istaklar", "checkout.commentRowSub": "Oshpazlar jamoasi uchun", "checkout.deliveryCommentRowSub": "Kirish, qavat, qo'ng'iroq qilish",
       "checkout.commentInfo": "Bu bizning oshpazlar jamoasi uchun izohlar. Imkon qadar e'tiborga olamiz va sizni xursand qilish uchun hamma narsani qilamiz.",
       "checkout.deliveryCommentTitle": "Yetkazib berishga izoh",
       "checkout.deliveryCommentPlaceholder": "Masalan: 5 daqiqa oldin qo'ng'iroq qiling, 3-qavat, 12-ofis",
@@ -772,6 +774,7 @@
       "checkout.commentTitle": "Order comment",
       "checkout.commentPlaceholder": "E.g. could I swap the salad, please",
       "checkout.noCutlery": "No cutlery", "checkout.noCutlerySub": "We'll note it for the kitchen and skip the cutlery",
+      "checkout.wishesTitle": "Preferences", "checkout.commentRowSub": "For our team of cooks", "checkout.deliveryCommentRowSub": "Entrance, floor, call ahead",
       "checkout.commentInfo": "These notes are for our team of cooks. We'll take them into account where we can and do our best to please you.",
       "checkout.deliveryCommentTitle": "Delivery comment",
       "checkout.deliveryCommentPlaceholder": "E.g. call 5 minutes ahead, 3rd floor, office 12",
@@ -3644,21 +3647,24 @@
     if (!checkout.zone && !checkout.point && profile && profile.zone && profile.point) {
       checkout.zone = profile.zone; checkout.point = profile.point; checkout.isNewPoint = false;
     }
-    var deliveryField = el("div", "field");
+    var deliveryField = el("div", "field co-sec-wrap");
     deliveryField.innerHTML = '<label>' + escapeHtml(t("checkout.deliveryTitle")) + '</label>';
+    var ICON_CO_PIN = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 1 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>';
+    var openPicker = function () { wizardStep(function (b) { renderDeliveryMapPicker(b, applyCheckoutPoint); }); };
+    var addrCard = el("div", "co-card co-addr");
     if (checkout.zone && checkout.point) {
-      var ptCard = el("div", "card option-row selected");
-      ptCard.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(checkout.zone) + '</div><div class="option-row-sub">' + escapeHtml(checkout.point) + '</div></div>';
-      deliveryField.appendChild(ptCard);
-      var change = el("button", "btn-text", t("checkout.change"));
-      change.addEventListener("click", function () { wizardStep(function (b) { renderDeliveryMapPicker(b, applyCheckoutPoint); }); });
-      deliveryField.appendChild(change);
+      addrCard.innerHTML = '<div class="co-icon">' + ICON_CO_PIN + '</div>' +
+        '<div class="co-addr-text"><b>' + escapeHtml(checkout.zone) + '</b><span>' + escapeHtml(checkout.point) + '</span></div>' +
+        '<button type="button" class="co-chip">' + escapeHtml(t("checkout.change")) + '</button>';
+      addrCard.querySelector(".co-chip").addEventListener("click", openPicker);
     } else {
-      var setBtn = el("div", "card option-row");
-      setBtn.innerHTML = '<div><div class="option-row-label" style="font-weight:600">' + escapeHtml(t("address.notChosen")) + '</div><div class="option-row-sub">' + escapeHtml(t("address.setPoint")) + ' ›</div></div>';
-      setBtn.addEventListener("click", function () { wizardStep(function (b) { renderDeliveryMapPicker(b, applyCheckoutPoint); }); });
-      deliveryField.appendChild(setBtn);
+      addrCard.classList.add("co-addr-empty");
+      addrCard.innerHTML = '<div class="co-icon">' + ICON_CO_PIN + '</div>' +
+        '<div class="co-addr-text"><b>' + escapeHtml(t("address.notChosen")) + '</b><span>' + escapeHtml(t("address.setPoint")) + '</span></div>' +
+        '<span class="co-chip">›</span>';
+      addrCard.addEventListener("click", openPicker);
     }
+    deliveryField.appendChild(addrCard);
     body.appendChild(deliveryField);
     if (checkout.isNewPoint) body.appendChild(el("p", "center-note", t("checkout.newPointNote")));
 
@@ -3678,11 +3684,40 @@
       ta.addEventListener("input", function (e) { onInput(e.target.value); });
       return f;
     }
-    body.appendChild(buildNoCutleryRow());
-    body.appendChild(commentFieldWithInfo("checkout.commentTitle", "checkout.commentInfo", "checkout.commentPlaceholder",
-      checkout.comment, function (v) { checkout.comment = v; }));
-    body.appendChild(commentFieldWithInfo("checkout.deliveryCommentTitle", "checkout.deliveryCommentInfo", "checkout.deliveryCommentPlaceholder",
-      checkout.deliveryComment, function (v) { checkout.deliveryComment = v; }));
+    var wishesField = el("div", "field co-sec-wrap");
+    wishesField.innerHTML = '<label>' + escapeHtml(t("checkout.wishesTitle")) + '</label>';
+    var wishesCard = el("div", "co-card co-list");
+    wishesCard.appendChild(buildNoCutleryRow());
+    function collapsibleComment(titleKey, subKey, infoKey, placeholderKey, flag, getVal, setVal) {
+      var wrap = el("div", "co-item");
+      var head = el("div", "co-row co-row-tap");
+      var open = !!(getVal() || checkout[flag]);
+      head.innerHTML = '<div class="co-row-text"><b>' + escapeHtml(t(titleKey)) + '</b><span>' + escapeHtml(t(subKey)) + '</span></div><span class="co-plus' + (open ? " open" : "") + '">+</span>';
+      var box = el("div", "co-comment-box");
+      box.hidden = !open;
+      var ta = el("textarea");
+      ta.rows = 2; ta.placeholder = t(placeholderKey); ta.value = getVal() || "";
+      ta.addEventListener("input", function (e) { setVal(e.target.value); });
+      box.appendChild(ta);
+      box.appendChild(el("div", "co-hint", escapeHtml(t(infoKey))));
+      head.addEventListener("click", function () {
+        var plus = head.querySelector(".co-plus");
+        var nowOpen = box.hidden;
+        box.hidden = !nowOpen;
+        checkout[flag] = nowOpen;
+        plus.classList.toggle("open", nowOpen);
+        haptic("select");
+        if (nowOpen) ta.focus();
+      });
+      wrap.appendChild(head); wrap.appendChild(box);
+      return wrap;
+    }
+    wishesCard.appendChild(collapsibleComment("checkout.commentTitle", "checkout.commentRowSub", "checkout.commentInfo", "checkout.commentPlaceholder",
+      "commentOpen", function () { return checkout.comment; }, function (v) { checkout.comment = v; }));
+    wishesCard.appendChild(collapsibleComment("checkout.deliveryCommentTitle", "checkout.deliveryCommentRowSub", "checkout.deliveryCommentInfo", "checkout.deliveryCommentPlaceholder",
+      "deliveryCommentOpen", function () { return checkout.deliveryComment; }, function (v) { checkout.deliveryComment = v; }));
+    wishesField.appendChild(wishesCard);
+    body.appendChild(wishesField);
 
     var cashValue = (state.menu.payment_options || []).filter(function (p) { return !/карт/i.test(p); })[0] || t("checkout.cash");
     var cardValue = (state.menu.payment_options || []).filter(function (p) { return /карт/i.test(p); })[0] || t("checkout.card");
@@ -3726,9 +3761,9 @@
     // оплаты (а не только когда включён билет, как раньше), по прямой
     // просьбе: раньше это было видно только на экране "Корзина" на шаг
     // раньше, тут же, перед самой оплатой, не повторялось вовсе.
-    var summaryField = el("div", "field");
+    var summaryField = el("div", "field co-sec-wrap");
     summaryField.innerHTML = '<label>' + escapeHtml(t("checkout.summaryTitle")) + '</label>';
-    var summaryBox = el("div", "card checkout-ticket-summary");
+    var summaryBox = el("div", "co-card co-summary");
     state.cart.forEach(function (item, idx) {
       var isTicketItem = checkout.useTicket && idx === checkout.ticketItemIndex;
       if (isTicketItem) {
@@ -3768,13 +3803,10 @@
       });
       summaryBox.appendChild(deliveryLine);
     }
-    var summaryTotalRow = el("div", "summary-total");
-    summaryTotalRow.innerHTML = '<span class="summary-total-label">' + escapeHtml(t("checkout.ticketRemainingTotal")) + '</span><span class="summary-total-value">' + fmtSum(remainingTotal) + '</span>';
-    summaryBox.appendChild(summaryTotalRow);
     summaryField.appendChild(summaryBox);
     body.appendChild(summaryField);
 
-    var payField = el("div", "field");
+    var payField = el("div", "field co-sec-wrap");
     payField.innerHTML = '<label>' + escapeHtml(t("checkout.paymentTitle")) + '</label>';
 
     if (ticketAvailable) {
@@ -3820,11 +3852,13 @@
     // билетом — если билет целиком закрывает всю корзину (один сет,
     // remainingTotal === 0), способ оплаты вообще не нужен, как и раньше.
     if (remainingTotal > 0) {
-      var tileOptions = [{ value: cashValue, label: t("checkout.cash") }, { value: cardValue, label: t("checkout.card") }];
+      var ICON_PAY_CASH = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.4"/></svg>';
+      var ICON_PAY_CARD = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h3"/></svg>';
+      var tileOptions = [{ value: cashValue, label: t("checkout.cash"), icon: ICON_PAY_CASH }, { value: cardValue, label: t("checkout.card"), icon: ICON_PAY_CARD }];
       var tilesRow = el("div", "payment-tiles-row");
       tileOptions.forEach(function (opt) {
         var tileClass = "payment-tile" + (checkout.payment === opt.value ? " active" : "");
-        var tile = el("button", tileClass, escapeHtml(opt.label));
+        var tile = el("button", tileClass + " co-pay-tile", opt.icon + "<span>" + escapeHtml(opt.label) + "</span>");
         tile.addEventListener("click", function () {
           haptic("select");
           checkout.payment = opt.value;
@@ -3880,9 +3914,12 @@
     }
     body.appendChild(payField);
 
-    var confirmBtn = el("button", "btn-primary wizard-footer-btn", t("checkout.confirmBtn"));
+    var confirmBtn = el("button", "btn-primary co-cta");
+    confirmBtn.innerHTML = '<span>' + escapeHtml(t("checkout.confirmBtn")) + '</span>' + (remainingTotal > 0 ? '<span class="co-cta-sum">' + fmtSum(remainingTotal) + '</span>' : "");
     confirmBtn.addEventListener("click", function () { submitCheckoutOrder(confirmBtn); });
-    body.appendChild(confirmBtn);
+    var coBar = el("div", "co-bar");
+    coBar.appendChild(confirmBtn);
+    body.appendChild(coBar);
   }
 
   // Точка доставки при оформлении выбирается на карте (см.
@@ -4359,11 +4396,11 @@
   var ICON_NO_CUTLERY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v7a2 2 0 0 0 2 2v9M7 3v5M11 3v5M9 3v5"/><path d="M17 3c-1.7 1.4-2.5 3.7-2.5 6.5 0 1.3.9 2.1 2.5 2.5V21"/><path d="M4 4l16 16"/></svg>';
 
   function buildNoCutleryRow() {
-    var row = el("div", "nocut-row" + (checkout.noCutlery ? " on" : ""));
-    var ic = el("div", "nocut-icon");
+    var row = el("div", "co-row co-row-tap co-nocut" + (checkout.noCutlery ? " on" : ""));
+    var ic = el("div", "co-icon");
     ic.innerHTML = ICON_NO_CUTLERY;
-    var text = el("div", "nocut-text");
-    text.innerHTML = '<div class="nocut-title">' + escapeHtml(t("checkout.noCutlery")) + '</div><div class="nocut-sub">' + escapeHtml(t("checkout.noCutlerySub")) + '</div>';
+    var text = el("div", "co-row-text");
+    text.innerHTML = '<b>' + escapeHtml(t("checkout.noCutlery")) + '</b><span>' + escapeHtml(t("checkout.noCutlerySub")) + '</span>';
     var sw = el("span", "toggle-switch" + (checkout.noCutlery ? " on" : ""));
     row.appendChild(ic); row.appendChild(text); row.appendChild(sw);
     row.addEventListener("click", function () {
