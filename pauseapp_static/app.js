@@ -133,6 +133,7 @@
       "checkout.change": "Изменить",
       "checkout.commentTitle": "Комментарий к заказу",
       "checkout.commentPlaceholder": "Например: можно мне заменить салат, пожалуйста",
+      "checkout.noCutlery": "Без приборов", "checkout.noCutlerySub": "Отметим для кухни, и приборы не положим",
       "checkout.commentInfo": "Это комментарии для нашей команды поваров. По возможности будем их учитывать и сделаем всё возможное, чтобы вас порадовать.",
       "checkout.deliveryCommentTitle": "Комментарий к доставке",
       "checkout.deliveryCommentPlaceholder": "Например: позвоните за 5 минут, 3 этаж, офис 12",
@@ -451,6 +452,7 @@
       "checkout.change": "O'zgartirish",
       "checkout.commentTitle": "Buyurtmaga izoh",
       "checkout.commentPlaceholder": "Masalan: salatni almashtirib bersangiz",
+      "checkout.noCutlery": "Asbob-uskunasiz", "checkout.noCutlerySub": "Oshxonaga belgilaymiz, qoshiq-vilka solmaymiz",
       "checkout.commentInfo": "Bu bizning oshpazlar jamoasi uchun izohlar. Imkon qadar e'tiborga olamiz va sizni xursand qilish uchun hamma narsani qilamiz.",
       "checkout.deliveryCommentTitle": "Yetkazib berishga izoh",
       "checkout.deliveryCommentPlaceholder": "Masalan: 5 daqiqa oldin qo'ng'iroq qiling, 3-qavat, 12-ofis",
@@ -769,6 +771,7 @@
       "checkout.change": "Change",
       "checkout.commentTitle": "Order comment",
       "checkout.commentPlaceholder": "E.g. could I swap the salad, please",
+      "checkout.noCutlery": "No cutlery", "checkout.noCutlerySub": "We'll note it for the kitchen and skip the cutlery",
       "checkout.commentInfo": "These notes are for our team of cooks. We'll take them into account where we can and do our best to please you.",
       "checkout.deliveryCommentTitle": "Delivery comment",
       "checkout.deliveryCommentPlaceholder": "E.g. call 5 minutes ahead, 3rd floor, office 12",
@@ -3511,7 +3514,7 @@
 
   var checkout = {};
   function resetCheckout() {
-    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", deliveryComment: "", payment: "", screenshotFileId: null, screenshotDeferred: false, useTicket: false, ticketItemIndex: null };
+    checkout = { zone: "", point: "", isNewPoint: false, lat: null, lon: null, comment: "", deliveryComment: "", payment: "", screenshotFileId: null, screenshotDeferred: false, useTicket: false, ticketItemIndex: null, noCutlery: loadNoCutlery() };
   }
   resetCheckout();
 
@@ -3675,6 +3678,7 @@
       ta.addEventListener("input", function (e) { onInput(e.target.value); });
       return f;
     }
+    body.appendChild(buildNoCutleryRow());
     body.appendChild(commentFieldWithInfo("checkout.commentTitle", "checkout.commentInfo", "checkout.commentPlaceholder",
       checkout.comment, function (v) { checkout.comment = v; }));
     body.appendChild(commentFieldWithInfo("checkout.deliveryCommentTitle", "checkout.deliveryCommentInfo", "checkout.deliveryCommentPlaceholder",
@@ -3919,7 +3923,7 @@
         cart: state.cart.map(function (i) { return { set: i.set, garnish: i.garnish, qty: i.qty }; }),
         zone: checkout.zone, point: checkout.point, is_new_point: checkout.isNewPoint,
         lat: checkout.lat, lon: checkout.lon,
-        comment: checkout.comment, delivery_comment: checkout.deliveryComment, payment: checkout.payment, screenshot_file_id: checkout.screenshotFileId,
+        comment: checkoutCommentForKitchen(), delivery_comment: checkout.deliveryComment, payment: checkout.payment, screenshot_file_id: checkout.screenshotFileId,
         ticket_item_index: checkout.useTicket ? checkout.ticketItemIndex : null,
       },
     }).then(function (data) {
@@ -4342,6 +4346,41 @@
       '<span class="profile-nav-row-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg></span>';
     row.addEventListener("click", function () { haptic("select"); });
     return row;
+  }
+
+  // «Без приборов»: один тап в оформлении, выбор запоминается на устройстве.
+  var NO_CUTLERY_KEY = "pause_no_cutlery_v1";
+  function loadNoCutlery() {
+    try { return localStorage.getItem(NO_CUTLERY_KEY) === "1"; } catch (e) { return false; }
+  }
+  function saveNoCutlery(v) {
+    try { localStorage.setItem(NO_CUTLERY_KEY, v ? "1" : "0"); } catch (e) {}
+  }
+  var ICON_NO_CUTLERY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v7a2 2 0 0 0 2 2v9M7 3v5M11 3v5M9 3v5"/><path d="M17 3c-1.7 1.4-2.5 3.7-2.5 6.5 0 1.3.9 2.1 2.5 2.5V21"/><path d="M4 4l16 16"/></svg>';
+
+  function buildNoCutleryRow() {
+    var row = el("div", "nocut-row" + (checkout.noCutlery ? " on" : ""));
+    var ic = el("div", "nocut-icon");
+    ic.innerHTML = ICON_NO_CUTLERY;
+    var text = el("div", "nocut-text");
+    text.innerHTML = '<div class="nocut-title">' + escapeHtml(t("checkout.noCutlery")) + '</div><div class="nocut-sub">' + escapeHtml(t("checkout.noCutlerySub")) + '</div>';
+    var sw = el("span", "toggle-switch" + (checkout.noCutlery ? " on" : ""));
+    row.appendChild(ic); row.appendChild(text); row.appendChild(sw);
+    row.addEventListener("click", function () {
+      checkout.noCutlery = !checkout.noCutlery;
+      saveNoCutlery(checkout.noCutlery);
+      row.classList.toggle("on", checkout.noCutlery);
+      sw.classList.toggle("on", checkout.noCutlery);
+      haptic("select");
+    });
+    return row;
+  }
+
+  // Комментарий для кухни: текст клиента + «Без приборов» (кухня читает по-русски).
+  function checkoutCommentForKitchen() {
+    var c = (checkout.comment || "").trim();
+    if (!checkout.noCutlery || /без приборов/i.test(c)) return c;
+    return c ? c.replace(/[.\s]+$/, "") + ". Без приборов" : "Без приборов";
   }
 
   function buildToggleRow(title, subtitle, initialOn, onChange) {
