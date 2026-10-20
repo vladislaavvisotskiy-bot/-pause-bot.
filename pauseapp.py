@@ -159,7 +159,8 @@ async def index_page(request: web.Request):
     v = _static_version()
     html = html.replace('href="/pauseapp/static/styles.css"', f'href="/pauseapp/static/styles.css?v={v}"')
     html = html.replace('src="/pauseapp/static/app.js"', f'src="/pauseapp/static/app.js?v={v}"')
-    return web.Response(text=html, content_type="text/html")
+    # Саму страницу не кэшируем: иначе WebView держит старый index.html со старым ?v= и новый app.js не подтягивается.
+    return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
 
 
 async def api_me(request: web.Request):

@@ -1234,7 +1234,7 @@ async def index_page(request: web.Request):
     with open(path, "r", encoding="utf-8") as f:
         html = f.read()
     html = html.replace("__STATIC_VERSION__", _static_version())
-    return web.Response(text=html, content_type="text/html")
+    return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
 
 
 def create_app(bot=None) -> web.Application:
