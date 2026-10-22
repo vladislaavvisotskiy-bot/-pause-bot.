@@ -2320,6 +2320,40 @@
         );
       });
       wrap.appendChild(resetBtn);
+
+      // Смена Telegram ID (аккаунт угнали/сменили): история и касса остаются у этого курьера.
+      var swapBtn = el("button", "btn-text", "Сменить Telegram ID");
+      var swapBox = el("div", "field");
+      swapBox.hidden = true;
+      swapBox.innerHTML = "<label>Новый Telegram ID</label>";
+      var swapInput = el("input");
+      swapInput.type = "text"; swapInput.inputMode = "numeric"; swapInput.placeholder = "Например: 123456789";
+      swapBox.appendChild(swapInput);
+      var swapGo = el("button", "btn-primary", "Заменить");
+      swapBox.appendChild(swapGo);
+      swapBtn.addEventListener("click", function () { swapBox.hidden = !swapBox.hidden; });
+      swapGo.addEventListener("click", function () {
+        var nid = swapInput.value.trim();
+        if (!/^\d+$/.test(nid)) { toast("Введите Telegram ID числом"); return; }
+        confirmSheet(
+          "Заменить Telegram ID курьера?",
+          "ID " + courier.tg_id + " → " + nid + ". Маршруты, наличные, оплаты и расчёты этого курьера перейдут на новый ID, старый аккаунт потеряет доступ.",
+          [
+            { label: "Да, заменить", className: "btn-primary", onClick: function () {
+              swapGo.disabled = true;
+              api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/replace-id", { method: "POST", body: { new_tg_id: nid } })
+                .then(function () { haptic("success"); toast("ID заменён"); wizardBack(); })
+                .catch(function (err) {
+                  swapGo.disabled = false;
+                  toast(err.message === "new_exists" ? "Курьер с таким ID уже есть" : "Не удалось заменить: " + err.message);
+                });
+            } },
+            { label: "Отмена", className: "btn-ghost" },
+          ]
+        );
+      });
+      wrap.appendChild(swapBtn);
+      wrap.appendChild(swapBox);
     }
     root.appendChild(wrap);
 

@@ -802,6 +802,25 @@ async def api_courier_reset_history(request: web.Request):
     return web.json_response({"ok": True, **res})
 
 
+async def api_courier_replace_id(request: web.Request):
+    """Смена Telegram ID курьера (аккаунт угнали/сменили) — только владелец/главный админ."""
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    try:
+        me = int(request["tg_id"])
+    except (TypeError, ValueError):
+        me = None
+    if me != config.OWNER_TG_ID and me not in config.ADMIN_IDS:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    new_id = str(body.get("new_tg_id") or "").strip()
+    res = await _retry_sheets(sheets.replace_courier_tg_id, tg_id, new_id)
+    if res.get("error"):
+        return web.json_response(res, status=409 if res["error"] == "new_exists" else 400)
+    return web.json_response(res)
+
+
 async def api_courier_shift_delete(request: web.Request):
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -1269,6 +1288,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/couriers/manage/{tg_id}/withdraw-cash", api_courier_withdraw_cash)
     app.router.add_post("/api/couriers/manage/{tg_id}/pay-shift", api_courier_pay_shift)
     app.router.add_post("/api/couriers/manage/{tg_id}/reset-history", api_courier_reset_history)
+    app.router.add_post("/api/couriers/manage/{tg_id}/replace-id", api_courier_replace_id)
     app.router.add_post("/api/couriers/manage/{tg_id}/shift-edit", api_courier_shift_edit)
     app.router.add_post("/api/couriers/manage/{tg_id}/shift-delete", api_courier_shift_delete)
     app.router.add_get("/api/courier/cash-summary", api_courier_cash_summary)

@@ -4921,6 +4921,61 @@ def add_courier(tg_id: str, name: str, phone: str = ""):
     _backfill_courier_into_active_route(target)
 
 
+def replace_courier_tg_id(old_id: str, new_id: str) -> dict:
+    """Меняет Telegram ID курьера везде (угнали/сменили аккаунт): «Курьеры»,
+    «Маршрут» (столбец C — список ID через запятую), «Старт маршрута»,
+    «Наличные», «Расходы на логистику», «Расчёты с курьерами». История и
+    касса остаются непрерывными, курьер тот же, ID новый. Возвращает
+    {"error": ...} либо {"ok": True, "changed": {лист: число ячеек}}."""
+    old_id, new_id = str(old_id).strip(), str(new_id).strip()
+    if not new_id.isdigit() or not old_id or old_id == new_id:
+        return {"error": "bad_id"}
+    existing = {c["tg_id"] for c in get_couriers() if not c.get("archived")}
+    if new_id in existing:
+        return {"error": "new_exists"}
+    changed = {}
+    plain = (
+        (config.SHEET_COURIERS, config.COURIER_TG_ID, config.COURIER_DATA_START_ROW),
+        (config.SHEET_ROUTE_START, config.RS_COURIER_TG_ID, config.RS_DATA_START_ROW),
+        (config.SHEET_CASH_COLLECTIONS, config.CASH_COURIER_TG_ID, config.CASH_DATA_START_ROW),
+        (config.SHEET_LOGISTICS_EXPENSES, config.LOG_COURIER_TG_ID, config.LOG_DATA_START_ROW),
+        (config.SHEET_COURIER_SETTLEMENTS, config.SETL_COURIER_TG_ID, config.SETL_DATA_START_ROW),
+    )
+    for sheet_name, col, start in plain:
+        ws = _ws(sheet_name)
+        cells = []
+        for i, row in enumerate(ws.get_all_values()):
+            if i + 1 < start or len(row) < col:
+                continue
+            if row[col - 1].strip() == old_id:
+                cells.append(gspread.Cell(i + 1, col, new_id))
+        if cells:
+            ws.update_cells(cells, value_input_option="RAW")
+        changed[sheet_name] = len(cells)
+    ws = _ws(config.SHEET_ROUTE)
+    cells = []
+    for i, row in enumerate(ws.get_all_values()):
+        if i + 1 < config.ROUTE_DATA_START_ROW or len(row) < config.ROUTE_COURIER_TG_ID:
+            continue
+        ids = _parse_courier_ids(row[config.ROUTE_COURIER_TG_ID - 1])
+        if old_id in ids:
+            out = []
+            for x in ids:
+                x = new_id if x == old_id else x
+                if x not in out:
+                    out.append(x)
+            cells.append(gspread.Cell(i + 1, config.ROUTE_COURIER_TG_ID, ",".join(out)))
+    if cells:
+        ws.update_cells(cells, value_input_option="RAW")
+    changed[config.SHEET_ROUTE] = len(cells)
+    _cache["couriers"] = None
+    _former_cache["found"] = None
+    _invalidate_cash_raw_cache()
+    _invalidate_logistics_raw_cache()
+    _invalidate_settlement_raw_cache()
+    return {"ok": True, "changed": changed}
+
+
 def _backfill_courier_into_active_route(tg_id: str):
     """Добавляет tg_id в столбец "Курьер" (C) каждой ещё НЕ сданной и НЕ
     убранной точки сегодняшнего маршрута, где его ещё нет — see
