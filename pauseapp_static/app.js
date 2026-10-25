@@ -6251,14 +6251,6 @@
     wizardPhaseEl.innerHTML = "";
     body.appendChild(el("h2", "wizard-title", escapeHtml(g.name)));
     var first = g.items[0];
-    var addNew = el("button", "btn-ghost", "+ Добавить карточку");
-    addNew.addEventListener("click", function () {
-      haptic("select");
-      var fresh = { id: "", key: first.key, display_name: first.display_name, photo_url: "", description: "", garnishes: [], date: "", prices: first.prices, has_garnish: first.has_garnish, _group: g.items };
-      wizardStep(function (b) { renderMenuArchiveEditor(b, fresh, true); });
-    });
-    body.appendChild(addNew);
-    if (!g.items.length) { body.appendChild(el("div", "empty-note", "В этом сете пока нет карточек.")); return; }
     var grid = el("div", "home-mini-row");
     g.items.forEach(function (it) {
       var card = el("button", "home-mini-card");
@@ -6272,6 +6264,17 @@
       });
       grid.appendChild(card);
     });
+    var plus = el("button", "home-mini-card");
+    var plusPhoto = el("div", "home-mini-photo empty");
+    plusPhoto.innerHTML = '<span style="font-size:44px;line-height:1;font-weight:300">+</span>';
+    plus.appendChild(plusPhoto);
+    plus.appendChild(el("div", "home-mini-name", "Добавить"));
+    plus.addEventListener("click", function () {
+      haptic("select");
+      var fresh = { id: "", key: first.key, display_name: first.display_name, photo_url: "", description: "", garnishes: [], date: "", prices: first.prices, has_garnish: first.has_garnish, _group: g.items };
+      wizardStep(function (b) { renderMenuArchiveEditor(b, fresh, true); });
+    });
+    grid.appendChild(plus);
     body.appendChild(grid);
   }
 
@@ -6280,12 +6283,6 @@
     root.appendChild(el("div", "skeleton-block"));
     api("/api/ops/menu/archive").then(function (data) {
       root.innerHTML = "";
-      var addNew = el("button", "btn-ghost", "+ Добавить карточку");
-      addNew.addEventListener("click", function () {
-        haptic("select");
-        wizardStep(function (b) { renderMenuArchiveAddPick(b); });
-      });
-      root.appendChild(addNew);
       if (!data.items.length) {
         root.appendChild(el("div", "empty-note", "Каталог пока пуст. Карточки появятся здесь после публикации меню."));
         return;
