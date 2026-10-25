@@ -198,6 +198,7 @@ def _care_menu_kb():
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     b = InlineKeyboardBuilder()
     b.button(text="➕ Пополнить", callback_data="care_add")
+    b.button(text="🔍 Проверить повторы", callback_data="care_dups")
     b.button(text=texts.BACK_BTN, callback_data="admin_back:panel")
     b.adjust(1)
     return b.as_markup()
@@ -232,6 +233,31 @@ async def admin_care_add(callback: CallbackQuery, state: FSMContext):
         reply_markup=_care_done_kb(),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == "care_dups")
+async def admin_care_dups(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await callback.answer("Проверяю…")
+    try:
+        dups = await asyncio.to_thread(sheets.find_duplicate_care_numbers)
+    except Exception as e:
+        logger.exception("Послания: проверка повторов не удалась")
+        await callback.message.answer(f"Не удалось проверить: {e}")
+        return
+    if not dups:
+        await callback.message.answer("✅ Повторов нет: каждый номер выдан только один раз.",
+                                      reply_markup=_care_menu_kb())
+        return
+    lines = [f"⚠️ Повторяющихся номеров: {len(dups)}\n"]
+    for d in dups[:15]:
+        who = "; ".join(f"{r['name'] or r['tg_id']} ({r['date']}, строка {r['row']})" for r in d["rows"])
+        lines.append(f"№ {d['number']}: {who}")
+    if len(dups) > 15:
+        lines.append(f"…и ещё {len(dups) - 15}")
+    await callback.message.answer("\n".join(lines)[:4000], reply_markup=_care_menu_kb())
 
 
 @router.callback_query(F.data == "care_done")

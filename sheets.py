@@ -3547,19 +3547,52 @@ def set_broadcasts_disabled(disabled: bool):
 # Цифровые "послания дня" — замена бумажным карточкам с номерами
 # ---------------------------------------------------------------------------
 
+_msg_number_lock = threading.Lock()
+_msg_number_last = 0  # последний номер, выданный этим процессом
+
+
 def get_next_message_number() -> int:
-    """Следующий номер послания — строго последовательно, без пропусков и
-    повторов, начиная с CARE_MESSAGE_START_NUMBER. Последний выданный номер
-    хранится в ячейке "Справочники" — переживает перезапуск/деплой бота."""
-    ws = _ws(config.SHEET_REFERENCE)
-    raw = (ws.acell(config.REF_LAST_MESSAGE_NUMBER_CELL).value or "").strip()
-    try:
-        last = int(raw)
-    except ValueError:
-        last = config.CARE_MESSAGE_START_NUMBER - 1
-    next_number = last + 1
-    ws.update_acell(config.REF_LAST_MESSAGE_NUMBER_CELL, str(next_number))
-    return next_number
+    """Следующий номер послания. Номер НИКОГДА не повторяется: выдача под
+    блокировкой, читаем СВЕЖИЕ данные (в обход кэша) и берём максимум из
+    ячейки «Справочники», самого большого номера в листе «Послания» и
+    последнего номера, выданного этим процессом — поэтому два заказа
+    одновременно, устаревший кэш или сброшенная ячейка дубль не дадут
+    (худший случай — пропуск номера, но не повтор)."""
+    global _msg_number_last
+    with _msg_number_lock:
+        ref = _ws(config.SHEET_REFERENCE)
+        raw = (ref._raw.acell(config.REF_LAST_MESSAGE_NUMBER_CELL).value or "").strip()
+        try:
+            last = int(raw)
+        except ValueError:
+            last = config.CARE_MESSAGE_START_NUMBER - 1
+        try:
+            col = _ws(config.SHEET_MESSAGES)._raw.col_values(1)
+            for v in col:
+                v = str(v).strip()
+                if v.isdigit():
+                    last = max(last, int(v))
+        except Exception:
+            logger.exception("Не удалось сверить номера в листе «Послания»")
+        last = max(last, _msg_number_last)
+        next_number = last + 1
+        ref.update_acell(config.REF_LAST_MESSAGE_NUMBER_CELL, str(next_number))
+        _msg_number_last = next_number
+        return next_number
+
+
+def find_duplicate_care_numbers() -> list:
+    """Повторяющиеся номера в листе «Послания»: [{"number", "rows": [{"row","tg_id","name","date"}]}]."""
+    rows = _ws(config.SHEET_MESSAGES)._raw.get_all_values()
+    seen = {}
+    for i, r in enumerate(rows):
+        if not r or not str(r[0]).strip().isdigit():
+            continue
+        seen.setdefault(int(r[0]), []).append({
+            "row": i + 1, "tg_id": r[1].strip() if len(r) > 1 else "",
+            "name": r[2].strip() if len(r) > 2 else "", "date": r[3].strip() if len(r) > 3 else "",
+        })
+    return [{"number": n, "rows": v} for n, v in sorted(seen.items()) if len(v) > 1]
 
 
 _CP_HEADER = ["Фраза", "Добавлено"]
