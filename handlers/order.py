@@ -554,10 +554,10 @@ async def _send_care_message(message: Message, tg_id: int, name: str):
     """Одно "послание дня" на один заказ — номер строго последовательный
     (1019, 1020, ...), не зависит от количества сетов в заказе."""
     number = sheets.get_next_message_number()
-    phrase = random.choice(CARE_PHRASES)
+    phrase = sheets.random_care_phrase()
     date_str = sheets.today_date_str()
     sheets.save_care_message(number, tg_id, name, date_str, phrase)
-    text = texts.CARE_MESSAGE_FORMAT.format(number=number, total=config.CARE_MESSAGE_TOTAL, phrase=phrase)
+    text = texts.CARE_MESSAGE_FORMAT.format(number=number, total=sheets.get_care_total(number), phrase=phrase)
     await message.answer(text, parse_mode="HTML")
 
 

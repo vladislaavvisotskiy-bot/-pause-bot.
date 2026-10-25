@@ -59,3 +59,7 @@ class AdminSetPhoto(StatesGroup):
 
 class AdminSetDescription(StatesGroup):
     waiting_text = State()
+
+
+class AdminCare(StatesGroup):
+    waiting_text = State()

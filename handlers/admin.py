@@ -16,7 +16,7 @@ import keyboards as kb
 import config
 import pdf_report
 import menu_broadcast
-from states import AdminClub, AdminMenu, AdminSetPhoto, AdminSetDescription
+from states import AdminClub, AdminMenu, AdminSetPhoto, AdminSetDescription, AdminCare
 
 router = Router()
 logger = logging.getLogger("pause_bot")
@@ -171,6 +171,110 @@ async def admin_set_description_wrong_type(message: Message):
     await message.answer(
         texts.ADMIN_SET_DESCRIPTION_NOT_TEXT, reply_markup=kb.admin_set_input_cancel_kb("setdesc_cancel")
     )
+
+
+# ---------------------------------------------------------------------------
+# «✉️ Послания» — статистика и пополнение фраз (по одной на строку: текстом
+# или файлом .txt; можно несколькими сообщениями, «Готово» завершает).
+# ---------------------------------------------------------------------------
+
+def _care_stats_text(extra_line: str = "") -> str:
+    st = sheets.get_care_stats()
+    text = (
+        "✉️ Послания\n\n"
+        f"Выдано: {st['last']}\n"
+        f"Всего: {st['total']}\n"
+        f"Осталось номеров: {st['remaining']}\n"
+        f"Фраз в запасе: {st['phrases']} (добавлено вами: {st['added']})"
+    )
+    if st["remaining"] <= 100:
+        text += "\n\n⚠️ Номера скоро закончатся — пополните."
+    if extra_line:
+        text = extra_line + "\n\n" + text
+    return text
+
+
+def _care_menu_kb():
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    b = InlineKeyboardBuilder()
+    b.button(text="➕ Пополнить", callback_data="care_add")
+    b.button(text=texts.BACK_BTN, callback_data="admin_back:panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def _care_done_kb():
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ Готово", callback_data="care_done")
+    return b.as_markup()
+
+
+@router.callback_query(F.data == "admin_care")
+async def admin_care_open(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await callback.message.answer(_care_stats_text(), reply_markup=_care_menu_kb())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "care_add")
+async def admin_care_add(callback: CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await state.set_state(AdminCare.waiting_text)
+    await callback.message.answer(
+        "Пришлите новые фразы — каждая с новой строки (можно файлом .txt). "
+        "Текст длиннее 4096 символов можно прислать несколькими сообщениями. "
+        "Когда закончите, нажмите «Готово».",
+        reply_markup=_care_done_kb(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "care_done")
+async def admin_care_done(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    if _is_admin(callback.from_user.id):
+        await callback.message.answer(_care_stats_text(), reply_markup=_care_menu_kb())
+    await callback.answer()
+
+
+@router.message(AdminCare.waiting_text, F.text | F.document)
+async def admin_care_receive(message: Message, bot: Bot):
+    if not _is_admin(message.from_user.id):
+        return
+    raw = message.text or ""
+    if message.document:
+        if (message.document.file_size or 0) > 1_000_000:
+            await message.answer("Файл слишком большой (до 1 МБ).")
+            return
+        try:
+            buf = await bot.download(message.document)
+            raw = buf.read().decode("utf-8-sig", errors="replace")
+        except Exception as e:
+            logger.exception("Послания: не удалось прочитать файл")
+            await message.answer(f"Не удалось прочитать файл: {e}")
+            return
+    phrases = sheets.parse_care_phrases(raw)
+    if not phrases:
+        await message.answer("Не нашёл ни одной фразы — пришлите текст, каждая фраза с новой строки.",
+                             reply_markup=_care_done_kb())
+        return
+    try:
+        res = await asyncio.to_thread(sheets.add_care_phrases, phrases)
+    except Exception as e:
+        logger.exception("Послания: не удалось сохранить фразы")
+        await message.answer(f"Не удалось сохранить: {e}", reply_markup=_care_done_kb())
+        return
+    note = f"Добавлено: {res['added']}"
+    if res["duplicates"]:
+        note += f" · повторов пропущено: {res['duplicates']}"
+    if res["too_long"]:
+        note += f" · слишком длинных (>{sheets.CARE_PHRASE_MAX_LEN} зн.) пропущено: {res['too_long']}"
+    await message.answer(_care_stats_text(note), reply_markup=_care_done_kb())
 
 
 @router.message(Command("webapp_debug"))
@@ -814,11 +918,9 @@ async def pending_point_approved(callback: CallbackQuery, bot: Bot):
     # открытии приложения (при заказе на новую точку сразу оно не выдаётся).
     if client and client.get("tg_id"):
         try:
-            from care_phrases import CARE_PHRASES
-            import random
             number = sheets.get_next_message_number()
             sheets.save_care_message(number, client["tg_id"], client.get("name", ""),
-                                     sheets.today_date_str(), random.choice(CARE_PHRASES), popup=True)
+                                     sheets.today_date_str(), sheets.random_care_phrase(), popup=True)
         except Exception:
             pass
         try:

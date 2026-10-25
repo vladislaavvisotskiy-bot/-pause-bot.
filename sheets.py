@@ -3562,6 +3562,99 @@ def get_next_message_number() -> int:
     return next_number
 
 
+_CP_HEADER = ["Фраза", "Добавлено"]
+_care_lock = threading.Lock()
+_care_cache = {"ts": 0.0, "extra": []}
+CARE_PHRASE_MAX_LEN = 400
+
+
+def _care_key(p: str) -> str:
+    return " ".join((p or "").lower().split())
+
+
+def _care_extra(force: bool = False) -> list:
+    """Добавленные админом фразы (лист «Послания фразы»), кэш на 2 минуты."""
+    now = time.time()
+    if not force and now - _care_cache["ts"] < 120:
+        return _care_cache["extra"]
+    ws = _ws_or_create(config.SHEET_CARE_PHRASES, _CP_HEADER)
+    extra = [r[0].strip() for r in ws.get_all_values()[1:] if r and r[0].strip()]
+    _care_cache.update(ts=now, extra=extra)
+    return extra
+
+
+def random_care_phrase() -> str:
+    """Случайная фраза из встроенных + добавленных админом."""
+    from care_phrases import CARE_PHRASES
+    try:
+        extra = _care_extra()
+    except Exception:
+        logger.exception("Не удалось прочитать добавленные фразы посланий")
+        extra = []
+    return random.choice(list(CARE_PHRASES) + extra)
+
+
+def get_care_total(min_number: int = 0) -> int:
+    """«Всего посланий» для карточки: базовое число + добавленные фразы
+    (не меньше уже выданного номера)."""
+    try:
+        extra = len(_care_extra())
+    except Exception:
+        extra = 0
+    return max(config.CARE_MESSAGE_TOTAL + extra, int(min_number or 0))
+
+
+def get_care_stats() -> dict:
+    """{last, total, remaining, phrases, added} — для кнопки «Послания» в боте."""
+    from care_phrases import CARE_PHRASES
+    ws = _ws(config.SHEET_REFERENCE)
+    raw = (ws.acell(config.REF_LAST_MESSAGE_NUMBER_CELL).value or "").strip()
+    try:
+        last = int(raw)
+    except ValueError:
+        last = config.CARE_MESSAGE_START_NUMBER - 1
+    extra = _care_extra(force=True)
+    total = get_care_total(last)
+    return {"last": last, "total": total, "remaining": max(0, total - last),
+            "phrases": len(CARE_PHRASES) + len(extra), "added": len(extra)}
+
+
+def parse_care_phrases(text: str) -> list:
+    """Фразы по одной на строку; убирает нумерацию «1.» / «2)» и пустые строки."""
+    out = []
+    for line in (text or "").splitlines():
+        p = re.sub(r"^\s*\d+\s*[.)]\s*", "", line).strip()
+        if p and not p.isdigit():
+            out.append(p)
+    return out
+
+
+def add_care_phrases(phrases: list) -> dict:
+    """Добавляет новые фразы (повторы и слишком длинные пропускаются).
+    Возвращает {added, duplicates, too_long}; «всего» растёт на added."""
+    from care_phrases import CARE_PHRASES
+    with _care_lock:
+        known = {_care_key(p) for p in CARE_PHRASES} | {_care_key(p) for p in _care_extra(force=True)}
+        new_rows, duplicates, too_long = [], 0, 0
+        today = today_date_str()
+        for p in phrases:
+            p = p.strip()
+            if len(p) > CARE_PHRASE_MAX_LEN:
+                too_long += 1
+                continue
+            k = _care_key(p)
+            if k in known:
+                duplicates += 1
+                continue
+            known.add(k)
+            new_rows.append([p, today])
+        if new_rows:
+            ws = _ws_or_create(config.SHEET_CARE_PHRASES, _CP_HEADER)
+            ws.append_rows(new_rows, value_input_option="RAW")
+        _care_extra(force=True)
+    return {"added": len(new_rows), "duplicates": duplicates, "too_long": too_long}
+
+
 def save_care_message(number: int, tg_id, name: str, date_str: str, phrase: str, popup: bool = False):
     """popup=True — послание ещё НЕ показано клиенту (первый заказ на новую
     точку: карточка выдаётся только после подтверждения адреса админом) —

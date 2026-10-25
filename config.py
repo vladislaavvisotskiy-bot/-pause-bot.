@@ -403,6 +403,7 @@ SET_VARIANT_GROUP = {
 }
 
 # --- Цифровые "послания дня" (замена бумажным карточкам с номерами) ---
+SHEET_CARE_PHRASES = "Послания фразы"  # добавленные админом фразы «посланий» (к встроенным из care_phrases.py)
 SHEET_MESSAGES = "Послания"
 MSG_HEADER_ROW = 1
 MSG_DATA_START_ROW = 2

@@ -720,7 +720,7 @@ async def api_order_submit(request: web.Request):
 
     async def _care():
         number = await _retry_sheets(sheets.get_next_message_number)
-        phrase = random.choice(CARE_PHRASES)
+        phrase = await _retry_sheets(sheets.random_care_phrase)
         await _retry_sheets(sheets.save_care_message, number, tg_id, client.get("name", ""), sheets.today_date_str(), phrase)
         return number, phrase
 
@@ -782,7 +782,7 @@ async def api_order_submit(request: web.Request):
     return web.json_response({
         "status": "ok",
         "row_nums": row_nums,
-        "care": {"number": number, "total": config.CARE_MESSAGE_TOTAL, "phrase": phrase},
+        "care": {"number": number, "total": await _retry_sheets(sheets.get_care_total, number), "phrase": phrase},
         "giveaway": giveaway,
     })
 
@@ -1356,7 +1356,7 @@ async def api_care_pending(request: web.Request):
     m = await _retry_sheets(sheets.get_unseen_care_message, request["tg_id"])
     if not m:
         return web.json_response({"care": None})
-    return web.json_response({"care": {"number": m["number"], "total": config.CARE_MESSAGE_TOTAL, "phrase": m["text"]}})
+    return web.json_response({"care": {"number": m["number"], "total": await _retry_sheets(sheets.get_care_total, m["number"]), "phrase": m["text"]}})
 
 
 async def api_care_seen(request: web.Request):
@@ -1378,7 +1378,7 @@ async def api_messages(request: web.Request):
     messages = await _retry_sheets(sheets.get_client_messages, tg_id)
     return web.json_response({
         "messages": list(reversed(messages)),
-        "total": config.CARE_MESSAGE_TOTAL,
+        "total": await _retry_sheets(sheets.get_care_total, max([int(m.get("number") or 0) for m in messages] or [0])),
     })
 
 
