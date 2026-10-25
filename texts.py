@@ -483,6 +483,53 @@ def card_payment_alert(client: dict, items: str, total: int, delivery_fee: int =
     )
 
 
+ADMIN_NEW_ORDER_ALERT = (
+    "🛒 Новый заказ\n\n"
+    "Клиент: {name} (ID {client_id}){contacts}\n"
+    "Точка: {point}\n"
+    "Заказ: {items}{delivery}\n"
+    "Сумма: {sum} сум\n"
+    "Оплата: {payment}"
+)
+
+
+def _fmt_sum(n) -> str:
+    return f"{int(n):,}".replace(",", " ")
+
+
+def _contacts_lines(username: str, phone: str) -> str:
+    out = ""
+    username = (username or "").strip().lstrip("@")
+    phone = (phone or "").strip()
+    if username:
+        out += f"\nUsername: @{username}"
+    if phone:
+        out += f"\nТелефон: {phone}"
+    return out
+
+
+def new_order_alert(client: dict, point: str, items: str, total: int, payment: str, delivery_fee: int = 0) -> str:
+    """Уведомление админам о КАЖДОМ заказе из PAUSE App (кроме заказов со
+    скрином — для них уходит скрин с подписью card_payment_alert)."""
+    client = client or {}
+    delivery = f"\nДоставка: {_fmt_sum(delivery_fee)} сум" if delivery_fee else ""
+    return ADMIN_NEW_ORDER_ALERT.format(
+        name=client.get("name", ""), client_id=client.get("id", ""),
+        contacts=_contacts_lines(client.get("telegram"), client.get("contact")),
+        point=point or "—", items=items, delivery=delivery, sum=_fmt_sum(total), payment=payment or "—",
+    )
+
+
+ADMIN_ORDERS_BTN = "🧾 Заказы"
+ADMIN_ORDERS_HEADER = "🧾 Заказы на {date} — {count} шт., на сумму {sum} сум:"
+ADMIN_NO_ORDERS_LIST = "Заказов на {date} нет."
+ADMIN_ORDERS_ITEM = (
+    "• {name} (ID {client_id}){contacts}\n"
+    "Точка: {point}\n"
+    "Заказ: {items}\n"
+    "Сумма: {sum} сум · Оплата: {payment}"
+)
+
 ADMIN_CARD_CONFIRMED_SUFFIX = "\n\n✅ Оплата подтверждена"
 ADMIN_CARD_CONFIRMED_TOAST = "Отмечено ✓"
 

@@ -745,6 +745,32 @@ async def api_order_submit(request: web.Request):
         except Exception:
             logger.exception("PAUSE App: не удалось уведомить админов о скрине оплаты")
 
+    async def _notify_new_order():
+        # Уведомление о КАЖДОМ заказе. Со скрином админу уходит скрин с
+        # подписью (_notify_screenshot) — второй раз не дублируем.
+        if screenshot or not (bot and config.ADMIN_IDS):
+            return
+        try:
+            prices = await _retry_sheets(sheets.get_set_prices)
+            total = sum(prices.get(i["set"], 0) * int(i.get("qty", 0)) for i in cart)
+            if is_ticket_payment:
+                total -= prices.get(cart[ticket_item_index]["set"], 0)
+            total += delivery_fee
+            items_text = ", ".join(
+                f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
+                for i in cart
+            )
+            if _pay_method(payment) == "Карта":
+                pay_text = "Картой (скрин пришлёт позже)"
+            else:
+                pay_text = payment or ""
+            if is_ticket_payment:
+                pay_text = "Лепесток (1 шт.)" + (f" + {pay_text}" if pay_text else "")
+            await notify_admins(bot, texts.new_order_alert(client, point, items_text, total, pay_text, delivery_fee))
+        except Exception:
+            logger.exception("PAUSE App: не удалось уведомить админов о новом заказе")
+
+    _spawn(_notify_new_order())
     _spawn(_notify_screenshot())
     async def _ticket_then_giveaway():
         await _use_ticket()  # состояние билета в розыгрыше — уже после списания

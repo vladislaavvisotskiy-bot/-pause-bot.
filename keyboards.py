@@ -348,6 +348,7 @@ def admin_panel_kb() -> InlineKeyboardMarkup:
     b.button(text=texts.ADMIN_KITCHEN_REPORT_BTN, callback_data="admin_kitchen_report")
     b.button(text=texts.ADMIN_COURIER_REPORT_BTN, callback_data="admin_courier_report")
     b.button(text=texts.ADMIN_COURIER_DISTRIBUTION_BTN, callback_data="admin_courier_distribution")
+    b.button(text=texts.ADMIN_ORDERS_BTN, callback_data="admin_orders_report")
     b.button(text=texts.ADMIN_PAYMENTS_BTN, callback_data="admin_payments_report")
     b.button(text=texts.ADMIN_BROADCAST_BTN, callback_data="admin_broadcast_panel")
     b.button(text="💰 Должники", callback_data="admin_debtors")

@@ -301,6 +301,8 @@ async def admin_back(callback: CallbackQuery):
         await _ask_report_date(callback.message, "courier")
     elif target == "payments_dates":
         await _ask_report_date(callback.message, "payments")
+    elif target == "orders_dates":
+        await _ask_report_date(callback.message, "orders")
     else:
         await _show_admin_panel(callback.message.answer)
     await callback.answer()
@@ -929,6 +931,8 @@ async def _send_report_by_type(bot: Bot, chat_id: int, report_type: str, date_st
         await send_kitchen_pdf(bot, chat_id, date_str)
     elif report_type == "payments":
         await _send_payments_for_date(bot, chat_id, date_str)
+    elif report_type == "orders":
+        await _send_orders_for_date(bot, chat_id, date_str)
     elif report_type == "kitchen_pick":
         # Панель /admin: после даты сначала спрашиваем формат (PDF или
         # текст), а не шлём отчёт сразу — сами PDF/текст используют ту же
@@ -1127,6 +1131,73 @@ async def cmd_kitchen_pdf(message: Message, bot: Bot, command: CommandObject):
         await _send_report_by_type(bot, message.chat.id, "kitchen_pdf", date_str)
         return
     await _ask_report_date(message, "kitchen_pdf")
+
+
+@router.callback_query(F.data == "admin_orders_report")
+async def admin_panel_orders(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer(texts.ADMIN_ONLY, show_alert=True)
+        return
+    await _ask_report_date(callback.message, "orders")
+    await callback.answer()
+
+
+@router.message(Command("orders"))
+async def cmd_orders(message: Message, bot: Bot, command: CommandObject):
+    if not _is_admin(message.from_user.id):
+        await message.answer(texts.ADMIN_ONLY)
+        return
+    if command.args:
+        date_str = _parse_date_arg(command.args)
+        if not date_str:
+            await message.answer(texts.ADMIN_BAD_DATE_FORMAT)
+            return
+        await _send_orders_for_date(bot, message.chat.id, date_str)
+        return
+    await _ask_report_date(message, "orders")
+
+
+async def _send_orders_for_date(bot: Bot, chat_id: int, date_str: str):
+    """Все заказы за дату — каждый клиент одним блоком (контакты, точка,
+    состав, сумма, способ оплаты). Заказы со скрином тоже здесь — сам
+    скрин и подтверждение остаются в "Подтверждение оплаты"."""
+    entries = sheets.get_orders_for_date(date_str)
+    if not entries:
+        await bot.send_message(
+            chat_id, texts.ADMIN_NO_ORDERS_LIST.format(date=date_str), reply_markup=kb.admin_back_kb(),
+        )
+        return
+    total = sum(e["sum"] for e in entries)
+    await bot.send_message(
+        chat_id, texts.ADMIN_ORDERS_HEADER.format(date=date_str, count=len(entries), sum=texts._fmt_sum(total)),
+    )
+    blocks = []
+    for e in entries:
+        items = ", ".join(
+            f"{i['qty']}× {sheets.display_set_name(i['set'])}" + (f" ({i['garnish']})" if i.get("garnish") else "")
+            for i in e["items"]
+        ) or "—"
+        blocks.append(texts.ADMIN_ORDERS_ITEM.format(
+            name=e["name"], client_id=e["client_id"],
+            contacts=texts._contacts_lines(e["username"], e["phone"]),
+            point=e["point"] or "—", items=items, sum=texts._fmt_sum(e["sum"]),
+            payment=e["payment"] or "—",
+        ))
+    chunk, size = [], 0
+    chunks = []
+    for b in blocks:
+        if chunk and size + len(b) > 3500:
+            chunks.append(chunk)
+            chunk, size = [], 0
+        chunk.append(b)
+        size += len(b) + 2
+    if chunk:
+        chunks.append(chunk)
+    for n, part in enumerate(chunks):
+        await bot.send_message(
+            chat_id, "\n\n".join(part),
+            reply_markup=kb.admin_back_kb() if n == len(chunks) - 1 else None,
+        )
 
 
 @router.message(Command("payments"))

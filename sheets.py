@@ -2031,6 +2031,80 @@ def get_payments_for_date(date_str: str) -> list:
     return out
 
 
+def _row_pay_label(row: list) -> str:
+    """Способ оплаты строки заказа для админа ("Наличными", "Картой"...),
+    с пометкой ✓, если оплата уже подтверждена."""
+    payment = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
+    method = _row_pay_method(row)
+    has_shot = bool(_row_screenshot(row))
+    if payment == config.PAYMENT_TICKET:
+        return "Лепесток"
+    if payment == "Наличными":
+        return "Наличными ✓"
+    if payment == "Картой":
+        return "Картой ✓"
+    if payment == "На проверке":
+        return "Картой (скрин на проверке)" if has_shot else "На проверке"
+    if payment == "В долг":
+        if method == "Наличные":
+            return "Наличными"
+        if method == "Карта":
+            return "Картой (скрин на проверке)" if has_shot else "Картой (скрин позже)"
+        return "В долг"
+    return payment or "Оплата позже"
+
+
+def get_orders_for_date(date_str: str) -> list:
+    """Все неотменённые заказы за дату, по одному элементу на клиента
+    (несколько строк одного клиента объединены): контакты, состав, общая
+    сумма (с доставкой), способ(ы) оплаты. Источник кнопки "Заказы" в
+    текстовом боте. Каждый элемент — {"client_id", "name", "username",
+    "phone", "point", "items" ([{"set","qty","garnish"}]), "sum", "payment",
+    "has_screenshot"}."""
+    ws = _ws(config.SHEET_ORDERS)
+    rows = ws.get_all_values()
+    prices = get_set_prices()
+    clients = _clients_index()
+    groups, order = {}, []
+    for i, row in enumerate(rows):
+        if i + 1 < config.ORDERS_DATA_START_ROW:
+            continue
+        if len(row) < config.O_DATE or row[config.O_DATE - 1].strip() != date_str:
+            continue
+        comment = row[config.O_COMMENT - 1].strip() if len(row) >= config.O_COMMENT else ""
+        if is_canceled(comment):
+            continue
+        cid = row[config.O_CLIENT_ID - 1].strip() if len(row) >= config.O_CLIENT_ID else ""
+        key = cid or f"row{i + 1}"
+        if key not in groups:
+            c = clients.get(cid) or {}
+            groups[key] = {
+                "client_id": cid,
+                "name": c.get("name") or (row[config.O_NAME - 1].strip() if len(row) >= config.O_NAME else "") or cid or "—",
+                "username": (c.get("telegram") or "").strip().lstrip("@"),
+                "phone": (c.get("contact") or "").strip(),
+                "point": row[config.O_POINT - 1].strip() if len(row) >= config.O_POINT else "",
+                "items": [], "sum": 0, "labels": [], "has_screenshot": False,
+            }
+            order.append(key)
+        g = groups[key]
+        set_name = row[config.O_SET - 1].strip() if len(row) >= config.O_SET else ""
+        qty = row[config.O_QTY - 1].strip() if len(row) >= config.O_QTY else ""
+        garnish = row[config.O_GARNISH - 1].strip() if len(row) >= config.O_GARNISH else ""
+        if set_name and qty not in ("", "0"):
+            g["items"].append({"set": set_name, "qty": qty, "garnish": garnish})
+        pay = row[config.O_PAYMENT - 1].strip() if len(row) >= config.O_PAYMENT else ""
+        if pay != config.PAYMENT_TICKET:
+            g["sum"] += _row_amount(row, prices)
+        elif _row_delivery_fee(row):
+            g["sum"] += _row_delivery_fee(row)
+        label = _row_pay_label(row)
+        if label not in g["labels"]:
+            g["labels"].append(label)
+        g["has_screenshot"] = g["has_screenshot"] or bool(_row_screenshot(row))
+    return [dict(g, payment=" + ".join(g["labels"])) for g in (groups[k] for k in order)]
+
+
 def _active_menu_day() -> dt.date:
     active_date = get_active_menu_date()
     try:
