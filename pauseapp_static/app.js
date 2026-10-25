@@ -6234,6 +6234,47 @@
   // --- "Каталог" — карточки всех ранее опубликованных меню. Тап открывает
   // карточку как у клиента и даёт добавить её в меню дня (без публикации). ---
 
+  function buildArchivePhoto(url) {
+    var photo = el("div", "home-mini-photo");
+    if (url) {
+      var img = el("img");
+      img.alt = ""; img.loading = "lazy";
+      img.addEventListener("error", function () { img.remove(); photo.innerHTML = ICON_LEAF; photo.classList.add("empty"); });
+      setPhotoSrc(img, url);
+      photo.appendChild(img);
+    } else { photo.classList.add("empty"); photo.innerHTML = ICON_LEAF; }
+    return photo;
+  }
+
+  // Все карточки одного сета в каталоге.
+  function renderMenuArchiveGroup(body, g) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", escapeHtml(g.name)));
+    var first = g.items[0];
+    var addNew = el("button", "btn-ghost", "+ Добавить карточку");
+    addNew.addEventListener("click", function () {
+      haptic("select");
+      var fresh = { id: "", key: first.key, display_name: first.display_name, photo_url: "", description: "", garnishes: [], date: "", prices: first.prices, has_garnish: first.has_garnish, _group: g.items };
+      wizardStep(function (b) { renderMenuArchiveEditor(b, fresh, true); });
+    });
+    body.appendChild(addNew);
+    if (!g.items.length) { body.appendChild(el("div", "empty-note", "В этом сете пока нет карточек.")); return; }
+    var grid = el("div", "home-mini-row");
+    g.items.forEach(function (it) {
+      var card = el("button", "home-mini-card");
+      card.appendChild(buildArchivePhoto(it.photo_url));
+      var line = adminDescLines(it.description)[0] || "";
+      card.appendChild(el("div", "home-mini-name", escapeHtml(line || it.date || g.name)));
+      card.appendChild(el("div", "catalog-mini-sub", escapeHtml(it.date || "")));
+      card.addEventListener("click", function () {
+        haptic("select");
+        wizardStep(function (b) { renderMenuArchiveDetail(b, it); });
+      });
+      grid.appendChild(card);
+    });
+    body.appendChild(grid);
+  }
+
   function loadMenuArchive(root) {
     root.innerHTML = "";
     root.appendChild(el("div", "skeleton-block"));
@@ -6249,24 +6290,25 @@
         root.appendChild(el("div", "empty-note", "Каталог пока пуст. Карточки появятся здесь после публикации меню."));
         return;
       }
-      var grid = el("div", "home-mini-row");
+      // Сначала — плитки по сетам («Пауза дня», «Для тебя»…), по тапу —
+      // все карточки этого сета.
+      var groups = [];
+      var byKey = {};
       data.items.forEach(function (it) {
+        if (!byKey[it.key]) { byKey[it.key] = { key: it.key, name: it.display_name, items: [] }; groups.push(byKey[it.key]); }
+        byKey[it.key].items.push(it);
+        it._group = byKey[it.key].items;
+      });
+      var grid = el("div", "home-mini-row");
+      groups.forEach(function (g) {
+        var withPhoto = g.items.filter(function (x) { return x.photo_url; })[0];
         var card = el("button", "home-mini-card");
-        var photo = el("div", "home-mini-photo");
-        if (it.photo_url) {
-          var img = el("img");
-          img.alt = ""; img.loading = "lazy";
-          img.addEventListener("error", function () { img.remove(); photo.innerHTML = ICON_LEAF; photo.classList.add("empty"); });
-          setPhotoSrc(img, it.photo_url);
-          photo.appendChild(img);
-        } else { photo.classList.add("empty"); photo.innerHTML = ICON_LEAF; }
-        card.appendChild(photo);
-        card.appendChild(el("div", "home-mini-name", escapeHtml(it.display_name)));
-        var first = adminDescLines(it.description)[0] || "";
-        card.appendChild(el("div", "catalog-mini-sub", escapeHtml(first || it.date)));
+        card.appendChild(buildArchivePhoto(withPhoto ? withPhoto.photo_url : ""));
+        card.appendChild(el("div", "home-mini-name", escapeHtml(g.name)));
+        card.appendChild(el("div", "catalog-mini-sub", g.items.length + " " + (g.items.length === 1 ? "карточка" : "карточек")));
         card.addEventListener("click", function () {
           haptic("select");
-          wizardStep(function (b) { renderMenuArchiveDetail(b, it); });
+          wizardStep(function (b) { renderMenuArchiveGroup(b, g); });
         });
         grid.appendChild(card);
       });
@@ -6377,7 +6419,10 @@
         haptic("success");
         toast("Сохранено");
         wizardBack();
-        if (isNew) wizardBack();
+        if (isNew) {
+          if (it._group) it._group.unshift(it);  // добавляли из экрана сета — один шаг назад
+          else wizardBack();                     // из общего каталога — ещё и мимо выбора блюда
+        }
       }).catch(function (err) {
         saveBtn.disabled = false;
         saveBtn.textContent = "Сохранить";
@@ -6424,6 +6469,7 @@
       showConfirm("Удалить карточку из каталога? В уже опубликованном меню она останется.", "Удалить", function () {
         api("/api/ops/menu/archive/" + encodeURIComponent(it.id) + "/delete", { method: "POST", body: {} }).then(function () {
           haptic("success");
+          if (it._group) { var gi = it._group.indexOf(it); if (gi >= 0) it._group.splice(gi, 1); }
           wizardBack();
         }).catch(function (err) { toast("Не удалось удалить: " + err.message); });
       });
