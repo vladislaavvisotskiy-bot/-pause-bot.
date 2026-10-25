@@ -133,6 +133,7 @@
       "checkout.change": "Изменить",
       "checkout.commentTitle": "Комментарий к заказу",
       "checkout.commentPlaceholder": "Например: можно мне заменить салат, пожалуйста",
+      "checkout.reqLabel": "Номер карты", "checkout.reqCopy": "Скопировать", "checkout.reqCopied": "Скопировано ✓", "checkout.reqCopyFail": "Не удалось скопировать",
       "checkout.noCutlery": "Без приборов", "checkout.noCutlerySub": "Отметим для кухни, и приборы не положим",
       "checkout.wishesTitle": "Пожелания", "checkout.commentRowSub": "Для нашей команды поваров", "checkout.deliveryCommentRowSub": "Подъезд, этаж, позвонить",
       "checkout.commentInfo": "Это комментарии для нашей команды поваров. По возможности будем их учитывать и сделаем всё возможное, чтобы вас порадовать.",
@@ -453,6 +454,7 @@
       "checkout.change": "O'zgartirish",
       "checkout.commentTitle": "Buyurtmaga izoh",
       "checkout.commentPlaceholder": "Masalan: salatni almashtirib bersangiz",
+      "checkout.reqLabel": "Karta raqami", "checkout.reqCopy": "Nusxalash", "checkout.reqCopied": "Nusxalandi ✓", "checkout.reqCopyFail": "Nusxalab bo'lmadi",
       "checkout.noCutlery": "Asbob-uskunasiz", "checkout.noCutlerySub": "Oshxonaga belgilaymiz, qoshiq-vilka solmaymiz",
       "checkout.wishesTitle": "Istaklar", "checkout.commentRowSub": "Oshpazlar jamoasi uchun", "checkout.deliveryCommentRowSub": "Kirish, qavat, qo'ng'iroq qilish",
       "checkout.commentInfo": "Bu bizning oshpazlar jamoasi uchun izohlar. Imkon qadar e'tiborga olamiz va sizni xursand qilish uchun hamma narsani qilamiz.",
@@ -773,6 +775,7 @@
       "checkout.change": "Change",
       "checkout.commentTitle": "Order comment",
       "checkout.commentPlaceholder": "E.g. could I swap the salad, please",
+      "checkout.reqLabel": "Card number", "checkout.reqCopy": "Copy", "checkout.reqCopied": "Copied ✓", "checkout.reqCopyFail": "Couldn't copy",
       "checkout.noCutlery": "No cutlery", "checkout.noCutlerySub": "We'll note it for the kitchen and skip the cutlery",
       "checkout.wishesTitle": "Preferences", "checkout.commentRowSub": "For our team of cooks", "checkout.deliveryCommentRowSub": "Entrance, floor, call ahead",
       "checkout.commentInfo": "These notes are for our team of cooks. We'll take them into account where we can and do our best to please you.",
@@ -1278,6 +1281,54 @@
       else if (kind === "error") tg.HapticFeedback.notificationOccurred("error");
       else tg.HapticFeedback.impactOccurred("light");
     } catch (e) {}
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        ok ? resolve() : reject();
+      } catch (e) { reject(e); }
+    });
+  }
+
+  // Реквизиты: номер карты крупно + имя, «Скопировать» кладёт в буфер ТОЛЬКО номер (без имени и пробелов).
+  function buildRequisitesCard(raw) {
+    var lines = String(raw || "").split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+    var numLine = "";
+    var rest = [];
+    lines.forEach(function (l) {
+      if (!numLine && /^[\d\s]{13,23}$/.test(l)) numLine = l; else rest.push(l);
+    });
+    var card = el("div", "req-card");
+    if (!numLine) {
+      card.appendChild(el("div", "req-name", escapeHtml(String(raw || ""))));
+      return card;
+    }
+    var info = el("div", "req-info");
+    info.appendChild(el("div", "req-label", escapeHtml(t("checkout.reqLabel"))));
+    info.appendChild(el("div", "req-number", escapeHtml(numLine)));
+    if (rest.length) info.appendChild(el("div", "req-name", escapeHtml(rest.join(" · "))));
+    card.appendChild(info);
+    var btn = el("button", "req-copy", escapeHtml(t("checkout.reqCopy")));
+    btn.type = "button";
+    btn.addEventListener("click", function () {
+      copyToClipboard(numLine.replace(/\D/g, "")).then(function () {
+        btn.classList.add("done");
+        btn.textContent = t("checkout.reqCopied");
+        setTimeout(function () { btn.classList.remove("done"); btn.textContent = t("checkout.reqCopy"); }, 2000);
+        try { if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success"); } catch (e) {}
+      }).catch(function () { toast(t("checkout.reqCopyFail")); });
+    });
+    card.appendChild(btn);
+    return card;
   }
 
   function el(tag, className, html) {
@@ -3873,7 +3924,7 @@
     }
 
     if (checkout.payment && checkout.payment === cardValue) {
-      payField.appendChild(el("div", "requisites-box", escapeHtml(state.menu.card_requisites || "")));
+      payField.appendChild(buildRequisitesCard(state.menu.card_requisites || ""));
       if (checkout.screenshotFileId) {
         payField.appendChild(el("div", "checkout-screenshot-ok", escapeHtml(t("checkout.screenshotAttached"))));
       } else if (checkout.screenshotDeferred) {
