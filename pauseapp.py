@@ -721,7 +721,7 @@ async def api_order_submit(request: web.Request):
     async def _care():
         number = await _retry_sheets(sheets.get_next_message_number)
         phrase = await _retry_sheets(sheets.random_care_phrase)
-        await _retry_sheets(sheets.save_care_message, number, tg_id, client.get("name", ""), sheets.today_date_str(), phrase)
+        await _retry_sheets(sheets.save_care_message, number, tg_id, client.get("name", ""), sheets.today_date_str(), phrase, False, batch_id)
         return number, phrase
 
     async def _notify_screenshot():

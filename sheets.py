@@ -3547,6 +3547,7 @@ def set_broadcasts_disabled(disabled: bool):
 # Цифровые "послания дня" — замена бумажным карточкам с номерами
 # ---------------------------------------------------------------------------
 
+_CF_HEADER = ["Номер", "Освобождён"]
 _msg_number_lock = threading.Lock()
 _msg_number_last = 0  # последний номер, выданный этим процессом
 
@@ -3566,6 +3567,7 @@ def get_next_message_number() -> int:
             last = int(raw)
         except ValueError:
             last = config.CARE_MESSAGE_START_NUMBER - 1
+        col = []
         try:
             col = _ws(config.SHEET_MESSAGES)._raw.col_values(1)
             for v in col:
@@ -3575,6 +3577,24 @@ def get_next_message_number() -> int:
         except Exception:
             logger.exception("Не удалось сверить номера в листе «Послания»")
         last = max(last, _msg_number_last)
+        # Сначала — номера, вернувшиеся в пул (заказ отменён/удалён); номер
+        # берём, только если его правда нет в листе «Послания».
+        try:
+            used = {int(str(v).strip()) for v in col if str(v).strip().isdigit()}
+            fws = _ws_or_create(config.SHEET_CARE_FREE, _CF_HEADER)
+            frows = fws._raw.get_all_values()
+            cands = sorted(
+                (int(r[0]), i + 1) for i, r in enumerate(frows)
+                if i and r and str(r[0]).strip().isdigit()
+            )
+            for num, rown in cands:
+                if num in used:
+                    fws.delete_rows(rown)  # уже занят — из пула убираем
+                    break
+                fws.delete_rows(rown)
+                return num
+        except Exception:
+            logger.exception("Не удалось взять номер из пула свободных посланий")
         next_number = last + 1
         ref.update_acell(config.REF_LAST_MESSAGE_NUMBER_CELL, str(next_number))
         _msg_number_last = next_number
@@ -3593,6 +3613,60 @@ def find_duplicate_care_numbers() -> list:
             "name": r[2].strip() if len(r) > 2 else "", "date": r[3].strip() if len(r) > 3 else "",
         })
     return [{"number": n, "rows": v} for n, v in sorted(seen.items()) if len(v) > 1]
+
+
+def release_orphan_care_messages(min_age_sec: int = 300) -> int:
+    """Послания, выданные за заказ (есть метка оформления), которого больше
+    нет — отменён целиком или удалён из «Заказы»: послание исчезает у
+    клиента, номер возвращается в пул (лист «Послания свободные») и
+    выдаётся следующему заказу. Недавно выданные (младше min_age_sec) не
+    трогаем. Послания без метки (старые) не затрагиваются. Возвращает
+    число освобождённых номеров."""
+    with _msg_number_lock:
+        orders = _ws(config.SHEET_ORDERS)._raw.get_all_values()
+        live = set()
+        for i, row in enumerate(orders):
+            if i + 1 < config.ORDERS_DATA_START_ROW or len(row) < config.O_ORDER_BATCH:
+                continue
+            b = str(row[config.O_ORDER_BATCH - 1]).strip()
+            if not b:
+                continue
+            if len(row) >= config.O_COMMENT and is_canceled(row[config.O_COMMENT - 1]):
+                continue
+            try:
+                qty = int(float(str(row[config.O_QTY - 1]).replace(" ", "").replace(",", ".").strip() or 0)) if len(row) >= config.O_QTY else 0
+            except ValueError:
+                qty = 1
+            if qty > 0:
+                live.add(b)
+        mws = _ws(config.SHEET_MESSAGES)
+        rows = mws._raw.get_all_values()
+        now = time.time()
+        drop = []
+        for i, r in enumerate(rows):
+            if i + 1 < config.MSG_DATA_START_ROW or len(r) < config.MSG_BATCH:
+                continue
+            b = str(r[config.MSG_BATCH - 1]).strip()
+            num = str(r[config.MSG_NUMBER - 1]).strip()
+            if not b or not num.isdigit() or b in live:
+                continue
+            try:
+                created = float(r[config.MSG_CREATED - 1]) if len(r) >= config.MSG_CREATED and str(r[config.MSG_CREATED - 1]).strip() else 0
+            except ValueError:
+                created = 0
+            if created and now - created < min_age_sec:
+                continue
+            drop.append((i + 1, int(num)))
+        if not drop:
+            return 0
+        fws = _ws_or_create(config.SHEET_CARE_FREE, _CF_HEADER)
+        today = today_date_str()
+        # сначала записываем номера в пул, потом удаляем строки (снизу вверх) —
+        # при сбое номер лучше окажется и там и там, чем потеряется
+        fws.append_rows([[n, today] for _, n in drop], value_input_option="RAW")
+        for row_num, _n in sorted(drop, reverse=True):
+            mws.delete_rows(row_num)
+        return len(drop)
 
 
 _CP_HEADER = ["Фраза", "Добавлено"]
@@ -3688,14 +3762,14 @@ def add_care_phrases(phrases: list) -> dict:
     return {"added": len(new_rows), "duplicates": duplicates, "too_long": too_long}
 
 
-def save_care_message(number: int, tg_id, name: str, date_str: str, phrase: str, popup: bool = False):
+def save_care_message(number: int, tg_id, name: str, date_str: str, phrase: str, popup: bool = False, batch_id: str = ""):
     """popup=True — послание ещё НЕ показано клиенту (первый заказ на новую
     точку: карточка выдаётся только после подтверждения адреса админом) —
-    приложение покажет его окном при следующем открытии."""
+    приложение покажет его окном при следующем открытии. batch_id — метка
+    оформления заказа: если заказ отменят/удалят, послание вернётся в пул
+    (см. release_orphan_care_messages)."""
     ws = _ws(config.SHEET_MESSAGES)
-    row = [number, str(tg_id), name, date_str, phrase]
-    if popup:
-        row.append("нет")
+    row = [number, str(tg_id), name, date_str, phrase, "нет" if popup else "", batch_id or "", int(time.time())]
     ws.append_row(row, value_input_option="RAW")
 
 

@@ -270,6 +270,14 @@ async def main():
         except Exception:
             logger.exception("Исправление счётчика заказов не удалось")
     scheduler.add_job(_sync_counts, "interval", minutes=10, next_run_time=dt.datetime.now() + dt.timedelta(seconds=30))
+    async def _release_care():
+        try:
+            n = await asyncio.to_thread(sheets.release_orphan_care_messages)
+            if n:
+                logger.info("Послания вернулись в пул (заказ отменён/удалён): %s", n)
+        except Exception:
+            logger.exception("Возврат посланий в пул не удался")
+    scheduler.add_job(_release_care, "interval", minutes=5, next_run_time=dt.datetime.now() + dt.timedelta(seconds=90))
     scheduler.start()
 
     # PAUSE App (новый клиентский Mini App, пока только для админов) живёт

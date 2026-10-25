@@ -550,13 +550,13 @@ async def add_comment_save(message: Message, state: FSMContext):
     await state.set_state(Order.confirming)
 
 
-async def _send_care_message(message: Message, tg_id: int, name: str):
+async def _send_care_message(message: Message, tg_id: int, name: str, batch_id: str = ""):
     """Одно "послание дня" на один заказ — номер строго последовательный
     (1019, 1020, ...), не зависит от количества сетов в заказе."""
     number = sheets.get_next_message_number()
     phrase = sheets.random_care_phrase()
     date_str = sheets.today_date_str()
-    sheets.save_care_message(number, tg_id, name, date_str, phrase)
+    sheets.save_care_message(number, tg_id, name, date_str, phrase, batch_id=batch_id)
     text = texts.CARE_MESSAGE_FORMAT.format(number=number, total=sheets.get_care_total(number), phrase=phrase)
     await message.answer(text, parse_mode="HTML")
 
@@ -593,6 +593,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
     cart = data.get("cart", [])
     full_comment = _order_comment(data)
     payment_value = _order_payment_value(data)
+    batch_id = ""  # заполняется ниже при записи заказа; нужен для послания
 
     # Сама запись в Google Таблицы (несколько запросов подряд: дата,
     # возможно create_pending_order/append_order на каждую позицию
@@ -715,7 +716,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
     _cancel_confirm_reminder(callback.message.chat.id)
     await state.clear()
     await callback.message.answer(texts.ORDER_SENT)
-    await _send_care_message(callback.message, callback.from_user.id, data.get("client_name", ""))
+    await _send_care_message(callback.message, callback.from_user.id, data.get("client_name", ""), batch_id)
     await callback.message.answer(texts.MAIN_MENU, reply_markup=kb.main_menu_kb(callback.from_user.id))
     await callback.answer()
 

@@ -946,7 +946,7 @@ async def pending_point_approved(callback: CallbackQuery, bot: Bot):
         try:
             number = sheets.get_next_message_number()
             sheets.save_care_message(number, client["tg_id"], client.get("name", ""),
-                                     sheets.today_date_str(), sheets.random_care_phrase(), popup=True)
+                                     sheets.today_date_str(), sheets.random_care_phrase(), popup=True, batch_id=batch_id)
         except Exception:
             pass
         try:
