@@ -19,9 +19,9 @@ async def club_section(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    level = sheets.get_club_level(client.get("order_count", 0))
+    level = sheets.get_club_level(sheets.club_count_of(client))
     text = texts.CLUB_STATUS_TEMPLATE.format(
-        emoji=level["emoji"], label=level["label"], order_count=level["order_count"]
+        emoji=level["emoji"], label=level["label"], order_count=client.get("order_count", 0)
     )
     if level["next_label"]:
         text += texts.CLUB_NEXT_LEVEL_LINE.format(

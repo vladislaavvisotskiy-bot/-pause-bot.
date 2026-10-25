@@ -569,7 +569,7 @@ async def api_order_submit(request: web.Request):
     # ещё не тронутый этой логикой путь (create_pending_order), доставку
     # туда пока не добавляем.
     delivery_fee = (
-        sheets.get_client_delivery_fee(client.get("order_count", 0))
+        sheets.get_client_delivery_fee(sheets.club_count_of(client))
         if _delivery_enabled(tg_id) else 0
     )
 
@@ -797,8 +797,9 @@ async def api_profile(request: web.Request):
     client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
     if not client:
         return web.json_response({"registered": False})
-    order_count = client.get("order_count", 0)
-    level = sheets.get_club_level(order_count)  # чистая функция, таблицу не трогает
+    order_count = client.get("order_count", 0)  # порции — для показа в профиле
+    club_count = sheets.club_count_of(client)   # дни с заказами — счёт статуса
+    level = sheets.get_club_level(club_count)  # чистая функция, таблицу не трогает
     # has_ticket — нужен на экране оформления заказа (3-я плитка оплаты
     # "Билетом", см. app.js: stepCheckout), чтобы не делать отдельный
     # запрос только для этого; state.profile и так уже грузится первым
@@ -814,7 +815,7 @@ async def api_profile(request: web.Request):
     # просто сейчас бесплатно" от "доставка для этого клиента не
     # включена вовсе" (обычные клиенты, не из тестового списка).
     delivery_enabled = _delivery_enabled(tg_id)
-    delivery_fee = sheets.get_client_delivery_fee(order_count) if delivery_enabled else 0
+    delivery_fee = sheets.get_client_delivery_fee(club_count) if delivery_enabled else 0
     return web.json_response({
         "registered": True,
         "name": client.get("name", ""),
@@ -838,7 +839,8 @@ async def api_profile(request: web.Request):
             # Полная шкала всех статусов (для экрана "Pause Club" — см.
             # renderClubLevelsScreen в app.js), сама по себе чистая
             # функция, доп. обращения к таблице не нужны.
-            "levels": sheets.get_club_levels_overview(order_count),
+            "levels": sheets.get_club_levels_overview(club_count),
+            "count": club_count,
         },
     })
 
@@ -1404,7 +1406,7 @@ async def api_club_leaderboard(request: web.Request):
 async def api_club_giveaway(request: web.Request):
     tg_id = request["tg_id"]
     client = await _retry_sheets(sheets.find_client_by_tg_id, tg_id)
-    order_count = client.get("order_count", 0) if client else 0
+    order_count = sheets.club_count_of(client) if client else 0
 
     required_key, required_threshold, required_emoji, required_label = next(
         lvl for lvl in config.CLUB_LEVELS if lvl[0] == config.GIVEAWAY_REQUIRED_LEVEL

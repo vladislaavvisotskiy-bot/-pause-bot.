@@ -2489,7 +2489,7 @@
 
   function renderClubSelectCard(p) {
     var c = p.club;
-    var orderCount = p.order_count || 0;
+    var orderCount = (c.count != null ? c.count : p.order_count) || 0;  // счёт статуса — дни с заказами
     var left = c.left || 0;
     var total = orderCount + left;
     var pct = left > 0 && total > 0 ? Math.min(100, Math.round((orderCount / total) * 100)) : 100;

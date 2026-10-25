@@ -246,7 +246,7 @@ async def main():
             c, key = u["client"], u["level"]
             if key not in texts.LEVEL_UP_TEXTS:
                 continue
-            fee = sheets.get_client_delivery_fee(c.get("order_count", 0))
+            fee = sheets.get_client_delivery_fee(sheets.club_count_of(c))
             try:
                 await bot.send_message(
                     int(c["tg_id"]), texts.level_up_text(key, c.get("name"), fee),

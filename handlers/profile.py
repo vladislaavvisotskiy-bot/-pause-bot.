@@ -41,7 +41,7 @@ async def _show_profile(chat_id: int, tg_id: int, bot: Bot):
     if not client:
         await bot.send_message(chat_id, "Наберите /start, чтобы зарегистрироваться.")
         return
-    level = sheets.get_club_level(client.get("order_count", 0))
+    level = sheets.get_club_level(sheets.club_count_of(client))
     point = ", ".join(p for p in [client.get("zone", ""), client.get("point", "")] if p) or texts.PROFILE_NOT_SET
     text = texts.PROFILE_TEMPLATE.format(
         name=client.get("name") or texts.PROFILE_NOT_SET,

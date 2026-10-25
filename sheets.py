@@ -326,6 +326,85 @@ def sync_client_order_counts() -> int:
     return len(cells)
 
 
+def _order_days_from_orders() -> dict:
+    """{id клиента: число РАЗНЫХ дат доставки, в которые у него был
+    неотменённый заказ} — счёт статуса Pause Club идёт по дням, а не по
+    порциям (10 сетов за день = 1 день)."""
+    seen = {}
+    for i, row in enumerate(_orders_raw_rows()):
+        if i + 1 < config.ORDERS_DATA_START_ROW or len(row) < config.O_DATE:
+            continue
+        cid = str(row[config.O_CLIENT_ID - 1]).strip() if len(row) >= config.O_CLIENT_ID else ""
+        if not cid:
+            continue
+        if cid.endswith(".0"):
+            cid = cid[:-2]
+        if len(row) >= config.O_COMMENT and is_canceled(row[config.O_COMMENT - 1]):
+            continue
+        try:
+            qty = int(float(str(row[config.O_QTY - 1]).replace(" ", "").replace(",", ".").strip() or 0)) if len(row) >= config.O_QTY else 0
+        except ValueError:
+            continue
+        date = str(row[config.O_DATE - 1]).strip()
+        if qty > 0 and date:
+            seen.setdefault(cid, set()).add(date)
+    return {cid: len(d) for cid, d in seen.items()}
+
+
+_FLOOR_HEADER = ["client_id", "client_id_copy", "min_count", "days_at_start"]
+_floor_lock = threading.Lock()
+_floor_data = None  # {client_id: (min_count, days_at_start)}; грузится один раз за процесс
+
+
+def _level_threshold(count: int) -> int:
+    return get_club_level(count)["threshold"]
+
+
+def _load_status_floor(clients: list, days: dict) -> dict:
+    """«Зафиксированный» минимум статуса: при первом запуске после перехода
+    на счёт по дням для каждого клиента запоминается порог его тогдашнего
+    уровня (по порциям, как было) и число дней на этот момент. Дальше
+    club_count = max(дни, минимум + дни после фиксации) — никто не падает,
+    новые дни добавляются сверху. Снимок делается ОДИН раз (маркер-строка)."""
+    global _floor_data
+    if _floor_data is not None:
+        return _floor_data
+    with _floor_lock:
+        if _floor_data is not None:
+            return _floor_data
+        ws = _ws_or_create(config.SHEET_CLUB_STATUS_FLOOR, _FLOOR_HEADER)
+        rows = ws.get_all_values()
+        has_marker = any(r and r[0].strip() == "_snapshot" for r in rows[1:])
+        if not has_marker:
+            new_rows = []
+            for c in clients:
+                cid = str(c["id"])
+                thr = _level_threshold(c.get("order_count", 0))
+                if thr > 0:
+                    new_rows.append([cid, cid, thr, days.get(cid, 0)])
+            new_rows.append(["_snapshot", "", 0, today_date_str()])
+            ws.append_rows(new_rows, value_input_option="RAW")
+            rows = ws.get_all_values()
+        data = {}
+        for r in rows[1:]:
+            if not r or not r[0].strip() or r[0].strip() == "_snapshot":
+                continue
+            try:
+                data[r[0].strip()] = (int(float(r[2])), int(float(r[3]) if len(r) > 3 and r[3] != "" else 0))
+            except (ValueError, IndexError):
+                continue
+        _floor_data = data
+        return data
+
+
+def club_count_of(client: dict) -> int:
+    """Счёт статуса Pause Club клиента (дни с заказами + закреплённый минимум).
+    order_count клиента — это ПОРЦИИ, он остаётся для показа в профиле."""
+    if not client:
+        return 0
+    return client.get("club_count", client.get("order_count", 0))
+
+
 _LV_HEADER = ["tg_id", "client_id", "level", "date"]
 
 
@@ -354,7 +433,7 @@ def find_level_ups() -> list:
         tg = str(c.get("tg_id") or "").strip()
         if not tg:
             continue
-        key = get_club_level(c.get("order_count", 0))["key"]
+        key = get_club_level(club_count_of(c))["key"]
         if tg not in known:
             known[tg] = (0, key)
             new_rows.append([tg, str(c["id"]), key, today])
@@ -382,7 +461,12 @@ def _load_clients(force=False):
         real_counts = _order_counts_from_orders()
     except Exception:
         logger.exception("Не удалось посчитать заказы клиентов по листу «Заказы»")
-        real_counts = {}
+        real_counts = None
+    try:
+        real_days = _order_days_from_orders()
+    except Exception:
+        logger.exception("Не удалось посчитать дни заказов клиентов")
+        real_days = None
     clients = []
     for i, row in enumerate(rows):
         r = i + 1
@@ -408,11 +492,27 @@ def _load_clients(force=False):
             # Формула в Sheet1 может «залипнуть» (текстовые числа, затёртая
             # формула) — берём бóльшее из неё и реального подсчёта по «Заказы».
             "order_count": max(int(order_count_raw) if order_count_raw.isdigit() else 0,
-                               real_counts.get(cid, 0)),
+                               (real_counts or {}).get(cid, 0)),
             "notify_morning_off": cell(config.COL_NOTIFY_MORNING_OFF).lower() == "да",
             "notify_menu_off": cell(config.COL_NOTIFY_MENU_OFF).lower() == "да",
             "notify_courier_off": cell(config.COL_NOTIFY_COURIER_OFF).lower() == "да",
         })
+    # Счёт статуса: дни с заказами + закреплённый минимум (никто не падает).
+    try:
+        if real_days is None or real_counts is None:
+            raise RuntimeError("нет данных о заказах — фиксацию статусов откладываем")
+        floor = _load_status_floor(clients, real_days)
+        for c in clients:
+            cid = str(c["id"])
+            d = real_days.get(cid, 0)
+            fl = floor.get(cid)
+            c["order_days"] = d
+            c["club_count"] = max(d, fl[0] + max(0, d - fl[1])) if fl else d
+    except Exception:
+        logger.exception("Не удалось посчитать счёт статуса по дням — временно по старым порциям")
+        for c in clients:
+            c["order_days"] = real_days.get(str(c["id"]), 0) if real_days else 0
+            c["club_count"] = max(c.get("order_count", 0), c["order_days"])
     _cache["clients"] = clients
     _cache["clients_ts"] = now
     return clients
@@ -584,7 +684,7 @@ def autofill_manual_delivery() -> int:
     for (cid, _d), g in groups.items():
         if g["skip"] or not g["first"]:
             continue
-        fee = get_client_delivery_fee((clients.get(cid) or {}).get("order_count", 0))
+        fee = get_client_delivery_fee(club_count_of(clients.get(cid) or {}))
         if fee:
             cells.append(gspread.Cell(g["first"], config.O_DELIVERY_FEE, str(fee)))
     if cells:
@@ -1363,7 +1463,7 @@ def get_client_full_profile(client_id) -> dict:
     if not client:
         return {}
     cid = str(client["id"])
-    level = get_club_level(client["order_count"])
+    level = get_club_level(club_count_of(client))
     return {
         "id": client["id"], "name": client["name"], "zone": client["zone"], "point": client["point"],
         "contact": client["contact"], "telegram": client["telegram"], "tg_id": client["tg_id"],
@@ -3540,7 +3640,7 @@ def get_club_level(order_count: int) -> dict:
             break
     key, _, emoji, label = current
     result = {
-        "key": key, "emoji": emoji, "label": label, "order_count": order_count,
+        "key": key, "emoji": emoji, "label": label, "order_count": order_count, "threshold": current[1],
         "next_key": None, "next_label": None, "left": 0,
     }
     if next_level:
@@ -3602,7 +3702,7 @@ def get_club_leaderboard(limit: int = 10) -> list:
     ranked.sort(key=lambda c: -c["order_count"])
     out = []
     for c in ranked[:limit]:
-        level = get_club_level(c["order_count"])
+        level = get_club_level(club_count_of(c))
         out.append({
             "tg_id": c["tg_id"],
             "name": c["name"],
@@ -3627,7 +3727,7 @@ def get_club_leaderboard_me(tg_id) -> tuple:
     target = str(tg_id)
     for i, c in enumerate(ranked):
         if c["tg_id"] == target:
-            level = get_club_level(c["order_count"])
+            level = get_club_level(club_count_of(c))
             return {
                 "tg_id": c["tg_id"], "name": c["name"], "order_count": c["order_count"], "rank": i + 1,
                 "club": {"key": level["key"], "emoji": level["emoji"], "label": level["label"]},
@@ -3741,7 +3841,7 @@ def auto_join_daily_giveaway(date_str: str, client: dict) -> bool:
         return False
     if is_in_daily_giveaway(date_str, tg_id):
         return False
-    if not is_giveaway_eligible(client.get("order_count", 0)):
+    if not is_giveaway_eligible(club_count_of(client)):
         return False
     ws = _ws(config.SHEET_DAILY_GIVEAWAY)
     ws.append_row(
