@@ -306,7 +306,7 @@ async def api_menu(request: web.Request):
     # публикация через Операционный центр может идти без фото-поста.
     published = bool(photo_ids or caption) or await _retry_sheets(sheets.has_today_sets_selection) \
         or await _retry_sheets(sheets.is_active_menu_date_current)
-    cutoff_passed = False if PAUSEAPP_IGNORE_CUTOFF else await _retry_sheets(sheets.is_after_cutoff)
+    cutoff_passed = False if (PAUSEAPP_IGNORE_CUTOFF or str(request["tg_id"]) in config.NO_CUTOFF_TG_IDS) else await _retry_sheets(sheets.is_after_cutoff)
 
     sets_today = await _retry_sheets(sheets.get_today_sets)
     prices = await _retry_sheets(sheets.get_set_prices)
@@ -537,7 +537,7 @@ async def api_order_submit(request: web.Request):
 
     after_cutoff, date_str = await asyncio.gather(
         _retry_sheets(sheets.is_after_cutoff), _retry_sheets(sheets.get_active_menu_date))
-    if not PAUSEAPP_IGNORE_CUTOFF and after_cutoff:
+    if not PAUSEAPP_IGNORE_CUTOFF and after_cutoff and str(tg_id) not in config.NO_CUTOFF_TG_IDS:
         return web.json_response({"error": "cutoff_closed"}, status=409)
 
     body = await request.json()

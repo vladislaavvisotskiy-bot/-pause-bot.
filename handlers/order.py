@@ -47,7 +47,7 @@ async def menu_section(callback: CallbackQuery, state: FSMContext, bot: Bot):
         await callback.answer()
         return
 
-    can_order = not sheets.is_after_cutoff()
+    can_order = str(callback.from_user.id) in config.NO_CUTOFF_TG_IDS or not sheets.is_after_cutoff()
 
     photo_ids, caption = sheets.get_today_menu_photos()
     if photo_ids:
