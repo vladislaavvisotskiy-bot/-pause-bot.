@@ -2378,6 +2378,6 @@ p { margin: 0; color: var(--ink-soft); }
 .co-summary .checkout-summary-price { font-weight: 600; }
 .co-pay-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border-radius: 18px; font-size: 14px; }
 .co-pay-tile.active { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
-.co-bar { position: sticky; bottom: 0; z-index: 4; margin: 18px -18px calc(-30px - var(--safe-bottom)); padding: 14px 18px calc(18px + var(--safe-bottom)); background: linear-gradient(to top, var(--ivory) 72%, rgba(242, 235, 220, 0)); }
+.co-bar { position: sticky; bottom: 0; z-index: 4; margin: 28px -18px calc(-30px - var(--safe-bottom)); padding: 26px 18px calc(22px + var(--safe-bottom)); background: linear-gradient(to top, var(--ivory) 78%, rgba(242, 235, 220, 0)); }
 .co-cta { width: 100%; display: flex; justify-content: space-between; align-items: center; padding-left: 24px; padding-right: 24px; }
 .co-cta-sum { font-weight: 700; }
