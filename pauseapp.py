@@ -2643,6 +2643,74 @@ async def api_ops_menu_archive_use(request: web.Request):
     return web.json_response({"ok": True, "key": card["key"]})
 
 
+async def _upload_menu_photo(request: web.Request):
+    """Фото из multipart "photo" → Telegram-хранилище; (file_id, None) или (None, ответ-ошибка)."""
+    if not config.MEDIA_CHAT_ID:
+        return None, web.json_response({"error": "media_chat_not_configured"}, status=503)
+    bot = request.app.get("bot")
+    if not bot:
+        return None, web.json_response({"error": "bot_unavailable"}, status=503)
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "photo":
+        return None, web.json_response({"error": "photo_required"}, status=400)
+    data = await field.read(decode=False)
+    if not data:
+        return None, web.json_response({"error": "photo_required"}, status=400)
+    if len(data) > MAX_SCREENSHOT_BYTES:
+        return None, web.json_response({"error": "too_large"}, status=400)
+    try:
+        msg = await bot.send_photo(int(config.MEDIA_CHAT_ID), BufferedInputFile(data, filename=field.filename or "set.jpg"))
+    except Exception:
+        logger.exception("PAUSE App: не удалось загрузить фото карточки каталога")
+        return None, web.json_response({"error": "upload_failed"}, status=502)
+    return msg.photo[-1].file_id, None
+
+
+async def api_ops_menu_archive_photo(request: web.Request):
+    """Заменяет фото карточки каталога (отдельно от публикации меню)."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    cid = request.match_info.get("card_id", "")
+    file_id, err = await _upload_menu_photo(request)
+    if err:
+        return err
+    try:
+        new_id = await _retry_sheets(sheets.update_menu_archive, cid, file_id, None)
+    except KeyError:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True, "id": new_id, "photo_url": _resolve_photo_url(file_id)})
+
+
+async def api_ops_menu_archive_description(request: web.Request):
+    """Меняет состав карточки каталога (отдельно от публикации меню)."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    cid = request.match_info.get("card_id", "")
+    body = await request.json()
+    description = (body.get("description") or "").strip()
+    try:
+        new_id = await _retry_sheets(sheets.update_menu_archive, cid, None, description)
+    except KeyError:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({"ok": True, "id": new_id})
+
+
+async def api_ops_menu_archive_add(request: web.Request):
+    """Новая карточка прямо в каталоге: {set_key, description}; фото — следом
+    через /archive/{id}/photo."""
+    if not request["pa_menu"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    key = (body.get("set_key") or "").strip()
+    catalog = {c["key"]: c for c in await _catalog_overview()}
+    if key not in catalog:
+        return web.json_response({"error": "set_not_found"}, status=404)
+    description = (body.get("description") or "").strip()
+    cid = await _retry_sheets(sheets.add_menu_archive_blank, key, catalog[key]["display_name"], description)
+    return web.json_response({"ok": True, "id": cid})
+
+
 async def api_ops_menu_archive_delete(request: web.Request):
     if not request["pa_menu"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -3126,6 +3194,9 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/ops/menu/archive", api_ops_menu_archive)
     app.router.add_post("/api/ops/menu/archive/{card_id}/use", api_ops_menu_archive_use)
     app.router.add_post("/api/ops/menu/archive/{card_id}/delete", api_ops_menu_archive_delete)
+    app.router.add_post("/api/ops/menu/archive/{card_id}/photo", api_ops_menu_archive_photo)
+    app.router.add_post("/api/ops/menu/archive/{card_id}/description", api_ops_menu_archive_description)
+    app.router.add_post("/api/ops/menu/archive/add", api_ops_menu_archive_add)
     app.router.add_get("/api/avatar/{tg_id}", api_avatar_image)
     app.router.add_post("/api/profile/avatar", api_avatar_upload)
     app.router.add_post("/api/profile/avatar/delete", api_avatar_reset)

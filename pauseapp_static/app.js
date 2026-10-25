@@ -6239,6 +6239,12 @@
     root.appendChild(el("div", "skeleton-block"));
     api("/api/ops/menu/archive").then(function (data) {
       root.innerHTML = "";
+      var addNew = el("button", "btn-ghost", "+ Добавить карточку");
+      addNew.addEventListener("click", function () {
+        haptic("select");
+        wizardStep(function (b) { renderMenuArchiveAddPick(b); });
+      });
+      root.appendChild(addNew);
       if (!data.items.length) {
         root.appendChild(el("div", "empty-note", "Каталог пока пуст. Карточки появятся здесь после публикации меню."));
         return;
@@ -6271,6 +6277,116 @@
     });
   }
 
+  // --- Правка/создание карточки каталога — отдельно от публикации меню:
+  // фото и состав. it — карточка каталога (меняется на месте, чтобы
+  // предыдущие экраны после «назад» показали новые данные). ---
+
+  function renderMenuArchiveAddPick(body) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", "Новая карточка"));
+    body.appendChild(el("div", "center-note", "Выберите блюдо"));
+    var list = el("div");
+    list.appendChild(el("div", "skeleton-block"));
+    body.appendChild(list);
+    api("/api/ops/menu/catalog").then(function (data) {
+      list.innerHTML = "";
+      data.sets.forEach(function (c) {
+        var b = el("button", "btn-ghost", escapeHtml(c.display_name));
+        b.addEventListener("click", function () {
+          haptic("select");
+          var prices = c.is_group ? c.technical_names.map(function (t2) { return c.prices[t2]; }) : [c.prices[c.key]];
+          var it = { id: "", key: c.key, display_name: c.display_name, photo_url: "", description: "", garnishes: [], date: "", prices: prices, has_garnish: c.has_garnish };
+          wizardStep(function (bb) { renderMenuArchiveEditor(bb, it, true); });
+        });
+        list.appendChild(b);
+      });
+    }).catch(function (err) {
+      list.innerHTML = "";
+      list.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+    });
+  }
+
+  function renderMenuArchiveEditor(body, it, isNew) {
+    wizardPhaseEl.innerHTML = "";
+    body.appendChild(el("h2", "wizard-title", isNew ? "Новая карточка" : "Изменить карточку"));
+    var price = it.prices.length > 1
+      ? t("menu.from", { sum: fmtSumComma(Math.min.apply(null, it.prices)) })
+      : fmtSumComma(it.prices[0] || 0);
+
+    var pendingUrl = "";
+    var pendingFile = null;
+    var previewWrap = el("div");
+    body.appendChild(previewWrap);
+
+    var fileInput = el("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.style.display = "none";
+    var attachBtn = el("button", "btn-ghost", it.photo_url ? "Заменить фото" : "Добавить фото");
+    attachBtn.addEventListener("click", function () { fileInput.click(); });
+    body.appendChild(fileInput);
+    body.appendChild(attachBtn);
+
+    var descField = el("div", "field");
+    descField.innerHTML = '<label>Состав</label><textarea rows="6" placeholder="Каждая строка — отдельный пункт"></textarea>';
+    body.appendChild(descField);
+    var descInput = descField.querySelector("textarea");
+    descInput.value = it.description || "";
+
+    function drawPreview() {
+      previewWrap.innerHTML = "";
+      previewWrap.appendChild(buildAdminWideCard({
+        display_name: it.display_name, price_text: price,
+        photo_url: pendingUrl || it.photo_url, description: adminDescLines(descInput.value),
+        garnish_list: it.garnishes || [],
+      }, true));
+    }
+    descInput.addEventListener("input", drawPreview);
+    drawPreview();
+
+    fileInput.addEventListener("change", function () {
+      if (!fileInput.files || !fileInput.files[0]) return;
+      pendingFile = fileInput.files[0];
+      pendingUrl = URL.createObjectURL(pendingFile);
+      attachBtn.textContent = "Заменить фото";
+      drawPreview();
+    });
+
+    var saveBtn = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+    saveBtn.addEventListener("click", function () {
+      var desc = descInput.value.trim();
+      if (isNew && !desc && !pendingFile) { toast("Добавьте фото или состав"); return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Сохраняю…";
+      var step;
+      if (isNew) {
+        step = api("/api/ops/menu/archive/add", { method: "POST", body: { set_key: it.key, description: desc } });
+      } else if (desc !== (it.description || "").trim()) {
+        step = api("/api/ops/menu/archive/" + encodeURIComponent(it.id) + "/description", { method: "POST", body: { description: desc } });
+      } else {
+        step = Promise.resolve({ id: it.id });
+      }
+      step.then(function (res) {
+        it.id = res.id;
+        it.description = desc;
+        if (!pendingFile) return null;
+        return momDownscale(pendingFile).then(function (small) {
+          return apiUpload("/api/ops/menu/archive/" + encodeURIComponent(it.id) + "/photo", small, "set.jpg");
+        }).then(function (r) { it.id = r.id; it.photo_url = r.photo_url; });
+      }).then(function () {
+        haptic("success");
+        toast("Сохранено");
+        wizardBack();
+        if (isNew) wizardBack();
+      }).catch(function (err) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Сохранить";
+        toast("Не удалось сохранить: " + err.message);
+      });
+    });
+    body.appendChild(saveBtn);
+  }
+
   function renderMenuArchiveDetail(body, it) {
     wizardPhaseEl.innerHTML = "";
     var price = it.prices.length > 1
@@ -6295,6 +6411,13 @@
       });
     });
     body.appendChild(addBtn);
+
+    var editBtn = el("button", "btn-ghost", "Изменить");
+    editBtn.addEventListener("click", function () {
+      haptic("select");
+      wizardStep(function (b) { renderMenuArchiveEditor(b, it); });
+    });
+    body.appendChild(editBtn);
 
     var delBtn = el("button", "btn-text", "Удалить из каталога");
     delBtn.addEventListener("click", function () {

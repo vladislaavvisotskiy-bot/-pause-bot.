@@ -3248,6 +3248,45 @@ def get_menu_archive() -> list:
     return out
 
 
+def update_menu_archive(cid: str, photo=None, description=None) -> str:
+    """Правка карточки каталога отдельно от публикации: фото и/или состав
+    (None — не менять). id зависит от сета+состава, поэтому после смены
+    состава он пересчитывается; если такая карточка (тот же сет и состав)
+    уже есть — правки вливаются в неё, лишняя строка удаляется.
+    Возвращает актуальный id."""
+    with _menu_archive_lock:
+        ws = _ws_or_create(config.SHEET_MENU_ARCHIVE, _MA_HEADER)
+        rows = ws.get_all_values()
+        idx = next((i for i, r in enumerate(rows) if i and r and r[0].strip() == cid), None)
+        if idx is None:
+            raise KeyError(cid)
+        r = rows[idx] + [""] * (7 - len(rows[idx]))
+        new_photo = r[3] if photo is None else photo
+        new_desc = r[4] if description is None else description
+        new_id = _archive_id(r[1].strip(), new_desc)
+        other = next((i for i, x in enumerate(rows) if i and i != idx and x and x[0].strip() == new_id), None)
+        row = [new_id, r[1], r[2], new_photo, new_desc, r[5], r[6]]
+        if other is not None:
+            ws.update([row], f"A{other + 1}", value_input_option="RAW")
+            ws.delete_rows(idx + 1)
+        else:
+            ws.update([row], f"A{idx + 1}", value_input_option="RAW")
+        return new_id
+
+
+def add_menu_archive_blank(key: str, display_name: str, description: str) -> str:
+    """Новая карточка прямо в каталоге (без публикации меню). Если карточка
+    того же сета и состава уже есть — возвращает её id."""
+    cid = _archive_id(key, description)
+    with _menu_archive_lock:
+        ws = _ws_or_create(config.SHEET_MENU_ARCHIVE, _MA_HEADER)
+        for i, r in enumerate(ws.get_all_values()):
+            if i and r and r[0].strip() == cid:
+                return cid
+        ws.append_row([cid, key, display_name, "", description or "", "", today_date_str()], value_input_option="RAW")
+    return cid
+
+
 def delete_menu_archive(cid: str):
     with _menu_archive_lock:
         ws = _ws_or_create(config.SHEET_MENU_ARCHIVE, _MA_HEADER)
