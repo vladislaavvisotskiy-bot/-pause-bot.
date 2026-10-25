@@ -683,10 +683,8 @@ p { margin: 0; color: var(--ink-soft); }
    ширины, а не расчёт "на глаз". */
 .home-hero p {
   margin-top: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: clamp(10px, calc(4.04vw - 1.94px), 15px);
+  font-size: 15px;
+  line-height: 1.4;
 }
 /* "PAUSE" — бренд в начале строки с таглайном (переехал сюда из шапки),
    чуть заметнее основного приглушённого текста параграфа, но без
