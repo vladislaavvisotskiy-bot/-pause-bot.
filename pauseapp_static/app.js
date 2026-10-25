@@ -1315,8 +1315,9 @@
     var info = el("div", "req-info");
     info.appendChild(el("div", "req-label", escapeHtml(t("checkout.reqLabel"))));
     info.appendChild(el("div", "req-number", escapeHtml(numLine)));
-    if (rest.length) info.appendChild(el("div", "req-name", escapeHtml(rest.join(" · "))));
     card.appendChild(info);
+    var bottom = el("div", "req-bottom");
+    bottom.appendChild(el("div", "req-name", escapeHtml(rest.join(" · "))));
     var btn = el("button", "req-copy", escapeHtml(t("checkout.reqCopy")));
     btn.type = "button";
     btn.addEventListener("click", function () {
@@ -1327,7 +1328,8 @@
         try { if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success"); } catch (e) {}
       }).catch(function () { toast(t("checkout.reqCopyFail")); });
     });
-    card.appendChild(btn);
+    bottom.appendChild(btn);
+    card.appendChild(bottom);
     return card;
   }
 
