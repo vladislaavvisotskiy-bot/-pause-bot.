@@ -123,3 +123,5 @@ The Club tab (`screen-club` in `pauseapp_static/index.html`) was redesigned to m
 **Заказ без отсечки:** `config.NO_CUTOFF_TG_IDS` ({"614897018"}) — эти tg_id могут заказывать в любое время (PAUSE App: `api_menu`, `api_order_submit`; чат-бот: `handlers/order.py`), приём заказов для них не закрывается.
 
 **Реквизиты при оплате картой (`buildRequisitesCard`):** светлая карточка `.req-card` — подпись «Номер карты», номер крупно, имя серым, кнопка «Скопировать» кладёт в буфер ТОЛЬКО номер (цифры без пробелов и без имени; `copyToClipboard` с запасным `execCommand`). Номер — первая строка из 13–23 цифр/пробелов в `card_requisites`; если такой строки нет, показывается весь текст без кнопки. Ключи `checkout.req*` (ru/uz/en).
+
+**«Мои заказы» — закреплённый долг:** при долге внизу окна закреплена тёмная плашка `.debt-bar` (sticky, как `.co-bar`): «Текущий долг» + сумма и кнопка «Оплатить» → `openDebtPay` (ключи `orders.debtLabel/payBtn`).

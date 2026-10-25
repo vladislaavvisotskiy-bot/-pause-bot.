@@ -357,7 +357,7 @@
       "orders.cancelTooLate": "Уже поздно для самостоятельной отмены — напишите в поддержку.",
       "orders.cancelCardPending": "Оплата картой уже в обработке — отмена через поддержку.",
       "orders.review": "★ Отзыв",
-      "orders.debtLine": "Текущий долг: {sum}",
+      "orders.debtLine": "Текущий долг: {sum}", "orders.debtLabel": "Текущий долг", "orders.payBtn": "Оплатить",
       "orders.loadFailed": "Не удалось загрузить заказы.",
 
       "feedback.title": "Отзыв о заказе",
@@ -678,7 +678,7 @@
       "orders.cancelTooLate": "Mustaqil bekor qilish uchun juda kech — yordam xizmatiga yozing.",
       "orders.cancelCardPending": "Karta orqali to'lov hali ko'rib chiqilmoqda — bekor qilish yordam xizmati orqali.",
       "orders.review": "★ Sharh",
-      "orders.debtLine": "Joriy qarz: {sum}",
+      "orders.debtLine": "Joriy qarz: {sum}", "orders.debtLabel": "Joriy qarz", "orders.payBtn": "To'lash",
       "orders.loadFailed": "Buyurtmalarni yuklab bo'lmadi.",
 
       "feedback.title": "Buyurtma haqida sharh",
@@ -999,7 +999,7 @@
       "orders.cancelTooLate": "Too late to cancel yourself — please contact support.",
       "orders.cancelCardPending": "Card payment is already being reviewed — cancel via support.",
       "orders.review": "★ Review",
-      "orders.debtLine": "Current debt: {sum}",
+      "orders.debtLine": "Current debt: {sum}", "orders.debtLabel": "Current debt", "orders.payBtn": "Pay",
       "orders.loadFailed": "Couldn't load orders.",
 
       "feedback.title": "Order review",
@@ -4882,10 +4882,20 @@
         });
 
         if (data.debt > 0) {
-          root.appendChild(el("div", "center-note", t("orders.debtLine", { sum: fmtSum(data.debt) })));
-          var payBtn = el("button", "btn-primary orders-pay-btn", t("orders.pay", { sum: fmtSum(data.debt) }));
+          // Закреплена внизу экрана (sticky в прокручиваемом окне), чтобы
+          // «Оплатить» не терялась в конце длинной истории.
+          var debtBar = el("div", "debt-bar");
+          var debtPill = el("div", "debt-bar-pill");
+          var debtInfo = el("div", "debt-bar-info");
+          debtInfo.appendChild(el("span", "debt-bar-label", escapeHtml(t("orders.debtLabel"))));
+          debtInfo.appendChild(el("span", "debt-bar-sum", escapeHtml(fmtSum(data.debt))));
+          var payBtn = el("button", "debt-bar-btn", escapeHtml(t("orders.payBtn")));
+          payBtn.type = "button";
           payBtn.addEventListener("click", function () { openDebtPay(root, data.debt_days || []); });
-          root.appendChild(payBtn);
+          debtPill.appendChild(debtInfo);
+          debtPill.appendChild(payBtn);
+          debtBar.appendChild(debtPill);
+          root.appendChild(debtBar);
         }
       }
     }).catch(function () {

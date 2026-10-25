@@ -2391,3 +2391,11 @@ p { margin: 0; color: var(--ink-soft); }
 .req-name { font-size: 14px; color: var(--ink-soft); min-width: 0; }
 .req-copy { flex: none; border: 0; border-radius: 999px; padding: 10px 16px; font-size: 14px; font-weight: 600; background: var(--ink); color: var(--ivory); cursor: pointer; }
 .req-copy.done { background: #4f7a52; }
+
+/* «Мои заказы»: долг и «Оплатить» закреплены внизу окна, как корзина. */
+.debt-bar { position: sticky; bottom: 0; z-index: 4; margin: 16px -18px calc(-30px - var(--safe-bottom)); padding: 18px 18px calc(18px + var(--safe-bottom)); background: linear-gradient(to top, var(--ivory) 70%, rgba(242, 235, 220, 0)); }
+.debt-bar-pill { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--ink); color: var(--ivory); border-radius: 999px; padding: 8px 8px 8px 22px; box-shadow: 0 8px 22px rgba(43, 40, 35, 0.28); }
+.debt-bar-info { display: flex; flex-direction: column; }
+.debt-bar-label { font-size: 11px; opacity: .75; }
+.debt-bar-sum { font-size: 16px; font-weight: 700; }
+.debt-bar-btn { border: 0; border-radius: 999px; padding: 12px 24px; font-size: 15px; font-weight: 600; background: var(--ivory); color: var(--ink); cursor: pointer; }
