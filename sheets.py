@@ -681,10 +681,16 @@ def autofill_manual_delivery() -> int:
             g["first"] = r
     clients = _clients_index()
     cells = []
-    for (cid, _d), g in groups.items():
+    for (cid, d_s), g in groups.items():
         if g["skip"] or not g["first"]:
             continue
-        fee = get_client_delivery_fee(club_count_of(clients.get(cid) or {}))
+        # Как в приложении: доставка считается по статусу ДО этого заказа.
+        # Дни заказов, начиная с этой даты, уже входят в счёт статуса —
+        # вычитаем их, иначе первый же ручной заказ сразу считался бы «Member».
+        d_this = dt.datetime.strptime(d_s, "%d.%m.%Y").date()
+        later = sum(1 for (c2, d2) in groups if c2 == cid and dt.datetime.strptime(d2, "%d.%m.%Y").date() >= d_this)
+        count = max(0, club_count_of(clients.get(cid) or {}) - later)
+        fee = get_client_delivery_fee(count)
         if fee:
             cells.append(gspread.Cell(g["first"], config.O_DELIVERY_FEE, str(fee)))
     if cells:
