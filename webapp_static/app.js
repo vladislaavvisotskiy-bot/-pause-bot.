@@ -2303,65 +2303,6 @@
     actionsRow2.appendChild(transferBtn);
     actionsRow2.appendChild(setBalBtn);
     wrap.appendChild(actionsRow2);
-    if (state.isOwner || state.canToggleMode === false) {
-      var resetBtn = el("button", "btn-text", "Очистить историю платежей");
-      resetBtn.addEventListener("click", function () {
-        confirmSheet(
-          "Очистить историю платежей курьера?",
-          "Удалятся его оплаты за смену и списания наличных (копия сохранится в листе «Архив истории курьеров»), " +
-          "наличные и остаток начнут считаться с сегодняшнего дня. Записи «кто сколько дал» останутся. " +
-          "Расходы на этого курьера пропадут и из Финансов за прошлые дни. Остаток наличных на руках у курьера тоже обнулится в приложении.",
-          [
-            { label: "Да, очистить", className: "btn-primary", onClick: function () {
-              resetBtn.disabled = true;
-              api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/reset-history", { method: "POST", body: {} })
-                .then(function (res) {
-                  haptic("success");
-                  toast("История очищена: оплат " + res.shift_payments + ", списаний " + res.settlements);
-                  loadAll();
-                })
-                .catch(function (err) { resetBtn.disabled = false; toast("Не удалось очистить: " + err.message); });
-            } },
-            { label: "Отмена", className: "btn-ghost" },
-          ]
-        );
-      });
-      wrap.appendChild(resetBtn);
-
-      // Смена Telegram ID (аккаунт угнали/сменили): история и касса остаются у этого курьера.
-      var swapBtn = el("button", "btn-text", "Сменить Telegram ID");
-      var swapBox = el("div", "field");
-      swapBox.hidden = true;
-      swapBox.innerHTML = "<label>Новый Telegram ID</label>";
-      var swapInput = el("input");
-      swapInput.type = "text"; swapInput.inputMode = "numeric"; swapInput.placeholder = "Например: 123456789";
-      swapBox.appendChild(swapInput);
-      var swapGo = el("button", "btn-primary", "Заменить");
-      swapBox.appendChild(swapGo);
-      swapBtn.addEventListener("click", function () { swapBox.hidden = !swapBox.hidden; });
-      swapGo.addEventListener("click", function () {
-        var nid = swapInput.value.trim();
-        if (!/^\d+$/.test(nid)) { toast("Введите Telegram ID числом"); return; }
-        confirmSheet(
-          "Заменить Telegram ID курьера?",
-          "ID " + courier.tg_id + " → " + nid + ". Маршруты, наличные, оплаты и расчёты этого курьера перейдут на новый ID, старый аккаунт потеряет доступ.",
-          [
-            { label: "Да, заменить", className: "btn-primary", onClick: function () {
-              swapGo.disabled = true;
-              api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/replace-id", { method: "POST", body: { new_tg_id: nid } })
-                .then(function () { haptic("success"); toast("ID заменён"); wizardBack(); })
-                .catch(function (err) {
-                  swapGo.disabled = false;
-                  toast(err.message === "new_exists" ? "Курьер с таким ID уже есть" : "Не удалось заменить: " + err.message);
-                });
-            } },
-            { label: "Отмена", className: "btn-ghost" },
-          ]
-        );
-      });
-      wrap.appendChild(swapBtn);
-      wrap.appendChild(swapBox);
-    }
     root.appendChild(wrap);
 
     var selectedDate = todayRuDate();
@@ -3610,6 +3551,8 @@
     load();
   }
 
+  var ICON_COURIER_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="20" height="20" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+
   function renderCourierDetail(root, courier) {
     // Имя курьера уже показано заголовком визарда (wizard-title) — сама
     // карточка больше не повторяет имя/телефон/аватар, по прямой просьбе.
@@ -3643,6 +3586,33 @@
     actionsRow.appendChild(callBtn);
     card.appendChild(actionsRow);
 
+    // Все настройки курьера — за шестерёнкой справа от имени.
+    var gear = el("button", "ops-contact-btn courier-gear-btn", ICON_COURIER_GEAR);
+    gear.setAttribute("aria-label", "Настройки курьера");
+    gear.addEventListener("click", function () {
+      haptic("select");
+      wizardStep(function (body) {
+        body.appendChild(el("h2", "wizard-title", "Настройки · " + escapeHtml(courier.name || courier.tg_id)));
+        renderCourierSettings(body, courier);
+      });
+    });
+    var titleEl = root.querySelector(".wizard-title");
+    if (titleEl) {
+      var titleRow = el("div", "courier-title-row");
+      titleEl.parentNode.insertBefore(titleRow, titleEl);
+      titleRow.appendChild(titleEl);
+      titleRow.appendChild(gear);
+    } else {
+      actionsRow.appendChild(gear);
+    }
+
+    root.appendChild(card);
+
+    renderCourierCashCard(root, courier);
+  }
+
+  function renderCourierSettings(root, courier) {
+    var card = el("div", "card courier-card");
     // Три включателя — компактно, в ОДНОЙ карточке (были 3 отдельные,
     // занимали много места), каждый с (i)-пояснением, как у "Дедлайна".
     card.appendChild(buildToggleRow(
@@ -3741,8 +3711,6 @@
         .then(function () {
           haptic("success");
           courier.name = nm;
-          var title = document.querySelector(".wizard-title");
-          if (title) title.textContent = nm;
           toast("Имя сохранено");
           nameSave.disabled = false;
           loadCouriers();
@@ -3812,9 +3780,66 @@
       var adminInputRef = card.lastChild.querySelector("input");
     }
 
-    root.appendChild(card);
+    if (state.isOwner || state.canToggleMode === false) {
+      var resetBtn = el("button", "btn-text", "Очистить историю платежей");
+      resetBtn.addEventListener("click", function () {
+        confirmSheet(
+          "Очистить историю платежей курьера?",
+          "Удалятся его оплаты за смену и списания наличных (копия сохранится в листе «Архив истории курьеров»), " +
+          "наличные и остаток начнут считаться с сегодняшнего дня. Записи «кто сколько дал» останутся. " +
+          "Расходы на этого курьера пропадут и из Финансов за прошлые дни. Остаток наличных на руках у курьера тоже обнулится в приложении.",
+          [
+            { label: "Да, очистить", className: "btn-primary", onClick: function () {
+              resetBtn.disabled = true;
+              api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/reset-history", { method: "POST", body: {} })
+                .then(function (res) {
+                  haptic("success");
+                  toast("История очищена: оплат " + res.shift_payments + ", списаний " + res.settlements);
+                  wizardBack();
+                })
+                .catch(function (err) { resetBtn.disabled = false; toast("Не удалось очистить: " + err.message); });
+            } },
+            { label: "Отмена", className: "btn-ghost" },
+          ]
+        );
+      });
+      card.appendChild(resetBtn);
 
-    renderCourierCashCard(root, courier);
+      // Смена Telegram ID (аккаунт угнали/сменили): история и касса остаются у этого курьера.
+      var swapBtn = el("button", "btn-text", "Сменить Telegram ID");
+      var swapBox = el("div", "field");
+      swapBox.hidden = true;
+      swapBox.innerHTML = "<label>Новый Telegram ID</label>";
+      var swapInput = el("input");
+      swapInput.type = "text"; swapInput.inputMode = "numeric"; swapInput.placeholder = "Например: 123456789";
+      swapBox.appendChild(swapInput);
+      var swapGo = el("button", "btn-primary", "Заменить");
+      swapBox.appendChild(swapGo);
+      swapBtn.addEventListener("click", function () { swapBox.hidden = !swapBox.hidden; });
+      swapGo.addEventListener("click", function () {
+        var nid = swapInput.value.trim();
+        if (!/^\d+$/.test(nid)) { toast("Введите Telegram ID числом"); return; }
+        confirmSheet(
+          "Заменить Telegram ID курьера?",
+          "ID " + courier.tg_id + " → " + nid + ". Маршруты, наличные, оплаты и расчёты этого курьера перейдут на новый ID, старый аккаунт потеряет доступ.",
+          [
+            { label: "Да, заменить", className: "btn-primary", onClick: function () {
+              swapGo.disabled = true;
+              api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/replace-id", { method: "POST", body: { new_tg_id: nid } })
+                .then(function () { haptic("success"); toast("ID заменён"); wizardBack(); })
+                .catch(function (err) {
+                  swapGo.disabled = false;
+                  toast(err.message === "new_exists" ? "Курьер с таким ID уже есть" : "Не удалось заменить: " + err.message);
+                });
+            } },
+            { label: "Отмена", className: "btn-ghost" },
+          ]
+        );
+      });
+      card.appendChild(swapBtn);
+      card.appendChild(swapBox);
+    }
+    root.appendChild(card);
   }
 
   function toggleRevert(input) { input.checked = !input.checked; }

@@ -209,6 +209,8 @@
     ["Наличные у курьеров", "Kuryerlardagi naqd pul", "x"],
     ["Показывать во вкладках на главном экране", "Asosiy ekrandagi yorliqlarda ko'rsatish", "x"],
     ["Сохранить имя", "Ismni saqlash", "x"],
+    ["Настройки курьера", "Kuryer sozlamalari", "x"],
+    ["Настройки", "Sozlamalar"],
     ["Перенести историю в другого курьера", "Tarixni boshqa kuryerga o'tkazish", "x"],
     ["Остаток сохранён", "Qoldiq saqlandi", "x"],
     ["Имя сохранено", "Ism saqlandi", "x"],
