@@ -5131,6 +5131,7 @@ def get_couriers() -> list:
             "notify_off": (row[config.COURIER_NOTIFY_OFF - 1].strip().lower() == "да") if len(row) >= config.COURIER_NOTIFY_OFF else False,
             "cash_from": row[config.COURIER_CASH_FROM - 1].strip() if len(row) >= config.COURIER_CASH_FROM else "",
             "lang": row[config.COURIER_LANG - 1].strip() if len(row) >= config.COURIER_LANG else "",
+            "tabs_hidden": (row[config.COURIER_TABS_HIDDEN - 1].strip().lower() == "да") if len(row) >= config.COURIER_TABS_HIDDEN else False,
         })
     try:
         out.extend(_former_couriers({c["tg_id"] for c in out}))
@@ -5232,6 +5233,20 @@ def _set_courier_flag(tg_id: str, col: int, value: str) -> bool:
             _cache["couriers"] = None
             return True
     return False
+
+
+def set_courier_tabs_hidden(tg_id: str, hidden: bool) -> bool:
+    """Скрыть/показать курьера во вкладках над картой «Маршрута»."""
+    return _set_courier_flag(tg_id, config.COURIER_TABS_HIDDEN, "Да" if hidden else "")
+
+
+def rename_courier(tg_id: str, name: str) -> bool:
+    """Новое имя курьера в «Курьеры» (столбец B). Прошлые записи в других
+    листах хранят имя только для справки — расчёты идут по Telegram ID."""
+    name = (name or "").strip()
+    if not name:
+        return False
+    return _set_courier_flag(tg_id, config.COURIER_NAME, name)
 
 
 def set_courier_kpi_hidden(tg_id: str, hidden: bool) -> bool:
@@ -5340,7 +5355,7 @@ def add_courier(tg_id: str, name: str, phone: str = ""):
     _backfill_courier_into_active_route(target)
 
 
-def replace_courier_tg_id(old_id: str, new_id: str) -> dict:
+def replace_courier_tg_id(old_id: str, new_id: str, merge: bool = False) -> dict:
     """Меняет Telegram ID курьера везде (угнали/сменили аккаунт): «Курьеры»,
     «Маршрут» (столбец C — список ID через запятую), «Старт маршрута»,
     «Наличные», «Расходы на логистику», «Расчёты с курьерами». История и
@@ -5350,11 +5365,23 @@ def replace_courier_tg_id(old_id: str, new_id: str) -> dict:
     if not new_id.isdigit() or not old_id or old_id == new_id:
         return {"error": "bad_id"}
     existing = {c["tg_id"] for c in get_couriers() if not c.get("archived")}
-    if new_id in existing:
+    if new_id in existing and not merge:
         return {"error": "new_exists"}
+    if merge and new_id not in existing:
+        return {"error": "target_not_found"}
     changed = {}
-    plain = (
-        (config.SHEET_COURIERS, config.COURIER_TG_ID, config.COURIER_DATA_START_ROW),
+    if merge:
+        # Объединение: строка старого курьера в «Курьеры» удаляется (новый уже есть),
+        # вся история (маршруты, наличные, оплаты, расчёты) переходит на новый ID.
+        ws = _ws(config.SHEET_COURIERS)
+        drop = [i + 1 for i, row in enumerate(ws.get_all_values())
+                if i + 1 >= config.COURIER_DATA_START_ROW and len(row) >= config.COURIER_TG_ID
+                and row[config.COURIER_TG_ID - 1].strip() == old_id]
+        for r in reversed(drop):
+            ws.delete_rows(r)
+        changed[config.SHEET_COURIERS] = len(drop)
+    plain = (() if merge else (
+        (config.SHEET_COURIERS, config.COURIER_TG_ID, config.COURIER_DATA_START_ROW),)) + (
         (config.SHEET_ROUTE_START, config.RS_COURIER_TG_ID, config.RS_DATA_START_ROW),
         (config.SHEET_CASH_COLLECTIONS, config.CASH_COURIER_TG_ID, config.CASH_DATA_START_ROW),
         (config.SHEET_LOGISTICS_EXPENSES, config.LOG_COURIER_TG_ID, config.LOG_DATA_START_ROW),
@@ -6355,7 +6382,9 @@ def get_courier_earnings_month(courier_tg_id, year: int, month: int) -> int:
 
 _CASH_HEADER = ["date", "courier_tg_id", "courier_name", "point", "client_id", "name", "contact", "telegram", "amount", "time"]
 _SETL_HEADER = ["date", "courier_tg_id", "courier_name", "type", "amount", "time"]
-_SETL_WITHDRAW_TYPES = (config.SETTLEMENT_TYPE_CASH_RECEIVED, config.SETTLEMENT_TYPE_PAID_FROM_CASH)
+_SETL_WITHDRAW_TYPES = (config.SETTLEMENT_TYPE_CASH_RECEIVED, config.SETTLEMENT_TYPE_PAID_FROM_CASH,
+                        config.SETTLEMENT_TYPE_TRANSFER_OUT, config.SETTLEMENT_TYPE_TRANSFER_IN,
+                        config.SETTLEMENT_TYPE_ADJUST)
 
 # Короткий кэш сырых строк каждого из трёх листов (та же идея и тот же
 # TTL, что и у _orders_raw_rows выше, по той же причине: один показ
@@ -6834,7 +6863,7 @@ def get_courier_cash_breakdown(courier_tg_id, date_str: str = None) -> dict:
     собрано всего − забрали у курьера − оплачено из его наличных."""
     date_str = date_str or today_date_str()
     collected = get_cash_total(courier_tg_id, None, date_str)
-    received = paid = 0
+    received = paid = moved = adjusted = 0
     for row in _iter_settlement_rows(courier_tg_id, None, date_str):
         try:
             amount = int(row[config.SETL_AMOUNT - 1].strip() or 0)
@@ -6845,8 +6874,13 @@ def get_courier_cash_breakdown(courier_tg_id, date_str: str = None) -> dict:
             received += amount
         elif t == config.SETTLEMENT_TYPE_PAID_FROM_CASH:
             paid += amount
+        elif t in (config.SETTLEMENT_TYPE_TRANSFER_OUT, config.SETTLEMENT_TYPE_TRANSFER_IN):
+            moved += amount
+        elif t == config.SETTLEMENT_TYPE_ADJUST:
+            adjusted += amount
     return {"collected": collected, "received": received, "paid_from_cash": paid,
-            "balance": collected - received - paid}
+            "transferred": moved, "adjusted": adjusted,
+            "balance": collected - received - paid - moved - adjusted}
 
 
 def get_courier_cash_ledger(courier_tg_id, date_str: str = None, max_days: int = 31) -> dict:
@@ -6861,7 +6895,8 @@ def get_courier_cash_ledger(courier_tg_id, date_str: str = None, max_days: int =
     days = {}
 
     def day(d):
-        return days.setdefault(d, {"collected": 0, "received": 0, "paid_from_cash": 0, "paid_separate": 0})
+        return days.setdefault(d, {"collected": 0, "received": 0, "paid_from_cash": 0, "paid_separate": 0,
+                                   "transfer": 0, "adjust": 0})
 
     for row in _iter_cash_rows(courier_tg_id, None, date_str):
         d = row[config.CASH_DATE - 1].strip()
@@ -6880,7 +6915,15 @@ def get_courier_cash_ledger(courier_tg_id, date_str: str = None, max_days: int =
             amount = int(row[config.SETL_AMOUNT - 1].strip() or 0)
         except ValueError:
             amount = 0
-        day(d)["received" if t == config.SETTLEMENT_TYPE_CASH_RECEIVED else "paid_from_cash"] += amount
+        if t == config.SETTLEMENT_TYPE_CASH_RECEIVED:
+            key = "received"
+        elif t == config.SETTLEMENT_TYPE_PAID_FROM_CASH:
+            key = "paid_from_cash"
+        elif t == config.SETTLEMENT_TYPE_ADJUST:
+            key = "adjust"      # + уменьшили остаток, − увеличили
+        else:
+            key = "transfer"    # + передал другому курьеру, − получил от другого
+        day(d)[key] += amount
     for e in get_courier_earnings_by_day(courier_tg_id):
         d = _parse_ru_date_safe(e["date"])
         if d > end or (base and d < base) or e["from_cash"] or not e["amount"]:
@@ -6894,11 +6937,12 @@ def get_courier_cash_ledger(courier_tg_id, date_str: str = None, max_days: int =
     full = []
     while cur <= end:
         key = cur.strftime("%d.%m.%Y")
-        full.append((key, days.get(key) or {"collected": 0, "received": 0, "paid_from_cash": 0, "paid_separate": 0}))
+        full.append((key, days.get(key) or {"collected": 0, "received": 0, "paid_from_cash": 0, "paid_separate": 0,
+                                            "transfer": 0, "adjust": 0}))
         cur += dt.timedelta(days=1)
     out, bal = [], 0
     for key, v in full:
-        bal += v["collected"] - v["received"] - v["paid_from_cash"]
+        bal += v["collected"] - v["received"] - v["paid_from_cash"] - v["transfer"] - v["adjust"]
         out.append({"date": key, **v, "balance": bal})
     opening = 0
     if len(out) > max_days:
@@ -7086,6 +7130,47 @@ def withdraw_courier_cash(courier_tg_id, courier_name: str, day_amounts: dict) -
         record_courier_settlement(courier_tg_id, courier_name, config.SETTLEMENT_TYPE_CASH_RECEIVED, amount, date_str=date_str)
         total += amount
     return total
+
+
+def transfer_courier_cash(from_tg_id, from_name: str, to_tg_id, to_name: str, amount: int) -> dict:
+    """Админ передаёт наличные от одного курьера другому (сегодняшней датой):
+    у отдавшего остаток уменьшается, у получившего растёт. Больше, чем на
+    руках у отдающего, передать нельзя."""
+    amount = int(amount or 0)
+    if amount <= 0 or str(from_tg_id) == str(to_tg_id):
+        return {"error": "bad_amount"}
+    if amount > get_courier_cash_balance_as_of(from_tg_id):
+        return {"error": "too_much"}
+    today = today_date_str()
+    record_courier_settlement(from_tg_id, from_name, config.SETTLEMENT_TYPE_TRANSFER_OUT, amount, date_str=today)
+    record_courier_settlement(to_tg_id, to_name, config.SETTLEMENT_TYPE_TRANSFER_IN, -amount, date_str=today)
+    return {"ok": True}
+
+
+def set_courier_cash_balance(courier_tg_id, courier_name: str, new_balance: int) -> dict:
+    """Правка «Общей суммы у курьера» админом: пишет «Корректировку» на
+    разницу (сегодняшней датой), чтобы остаток стал ровно new_balance.
+    История не переписывается — правка видна в журнале по дням."""
+    new_balance = int(new_balance)
+    cur = get_courier_cash_balance_as_of(courier_tg_id)
+    delta = cur - new_balance
+    if delta:
+        record_courier_settlement(courier_tg_id, courier_name, config.SETTLEMENT_TYPE_ADJUST, delta)
+    return {"ok": True, "before": cur, "after": new_balance}
+
+
+def get_couriers_cash_overview() -> list:
+    """Остаток наличных на руках у каждого курьера (активные — всегда,
+    бывшие — только если у них не ноль): [{"tg_id","name","balance","archived"}]."""
+    out = []
+    for c in get_couriers():
+        bal = get_courier_cash_balance_as_of(c["tg_id"])
+        if c.get("archived") and not bal:
+            continue
+        out.append({"tg_id": c["tg_id"], "name": c.get("name") or c["tg_id"], "balance": bal,
+                    "archived": bool(c.get("archived"))})
+    out.sort(key=lambda x: -x["balance"])
+    return out
 
 
 def withdraw_courier_cash_amount(courier_tg_id, courier_name: str, amount: int) -> dict:

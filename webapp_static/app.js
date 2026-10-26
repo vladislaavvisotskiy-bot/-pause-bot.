@@ -1156,6 +1156,7 @@
   // у них есть точки в маршруте этого дня — иначе они не засоряют сегодняшний экран.
   function dayCouriers() {
     return state.couriers.filter(function (c) {
+      if (c.tabs_hidden) return false;  // скрыт админом с главного экрана
       return !c.archived || state.points.some(function (p) { return (p.courier_tg_ids || []).indexOf(c.tg_id) !== -1; });
     });
   }
@@ -2296,6 +2297,12 @@
     actionsRow.appendChild(withdrawBtn);
     actionsRow.appendChild(payBtn);
     wrap.appendChild(actionsRow);
+    var actionsRow2 = el("div", "cash-actions-row");
+    var transferBtn = el("button", "btn-ghost", "Передать другому курьеру");
+    var setBalBtn = el("button", "btn-ghost", "Изменить остаток");
+    actionsRow2.appendChild(transferBtn);
+    actionsRow2.appendChild(setBalBtn);
+    wrap.appendChild(actionsRow2);
     if (state.isOwner || state.canToggleMode === false) {
       var resetBtn = el("button", "btn-text", "Очистить историю платежей");
       resetBtn.addEventListener("click", function () {
@@ -2396,12 +2403,15 @@
           head.appendChild(el("div", "cash-day-date", d.date.slice(0, 5)));
           head.appendChild(el("strong", "cash-day-remaining", "Остаток " + fmtSum(d.balance)));
           row.appendChild(head);
-          var idle = !d.collected && !d.received && !d.paid_from_cash && !d.paid_separate;
+          var idle = !d.collected && !d.received && !d.paid_from_cash && !d.paid_separate && !d.transfer && !d.adjust;
           row.appendChild(el("div", "cash-day-sub", idle ? "Движений нет" :
             "Собрал " + fmtSum(d.collected) +
             (d.received ? " · забрали " + fmtSum(d.received) : "") +
             (d.paid_from_cash ? " · оплачено из наличных " + fmtSum(d.paid_from_cash) : "") +
-            (d.paid_separate ? " · оплачено отдельно " + fmtSum(d.paid_separate) : "")));
+            (d.paid_separate ? " · оплачено отдельно " + fmtSum(d.paid_separate) : "") +
+            (d.transfer > 0 ? " · передал другому " + fmtSum(d.transfer) : "") +
+            (d.transfer < 0 ? " · получил от другого " + fmtSum(-d.transfer) : "") +
+            (d.adjust ? " · корректировка " + (d.adjust > 0 ? "−" : "+") + fmtSum(Math.abs(d.adjust)) : "")));
           ledger.appendChild(row);
         });
         totalBox.appendChild(ledger);
@@ -2462,8 +2472,114 @@
 
     withdrawBtn.addEventListener("click", function () { openWithdrawCashScreen(courier.tg_id, loadAll); });
     payBtn.addEventListener("click", function () { openPayShiftScreen(courier.tg_id, selectedDate, loadAll); });
+    transferBtn.addEventListener("click", function () { openTransferCashScreen(courier, loadAll); });
+    setBalBtn.addEventListener("click", function () { openSetCashBalanceScreen(courier, loadAll); });
 
     loadAll();
+  }
+
+  // Передача наличных от этого курьера другому (делает админ).
+  function openTransferCashScreen(courier, onDone) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", "Передать наличные"));
+      var holder = el("div");
+      holder.appendChild(el("div", "skeleton-block"));
+      body.appendChild(holder);
+      api("/api/couriers/cash-overview").then(function (data) {
+        holder.innerHTML = "";
+        var me = (data.couriers || []).filter(function (c) { return c.tg_id === courier.tg_id; })[0];
+        var onHand = me ? me.balance : 0;
+        holder.appendChild(el("div", "cash-day-sub", "У " + escapeHtml(courier.name || courier.tg_id) + " на руках: " + fmtSum(onHand)));
+        var others = (data.couriers || []).filter(function (c) { return c.tg_id !== courier.tg_id && !c.archived; });
+        if (!others.length) { holder.appendChild(el("div", "empty-note", "Нет других курьеров.")); return; }
+        var picked = null;
+        var list = el("div", "card");
+        others.forEach(function (c, idx) {
+          var row = el("div", "ops-breakdown-row" + (idx ? " ops-breakdown-row-sep" : ""));
+          row.appendChild(el("div", "ops-breakdown-name", escapeHtml(c.name)));
+          row.appendChild(el("div", "ops-breakdown-nums", fmtSum(c.balance)));
+          row.addEventListener("click", function () {
+            picked = c;
+            Array.prototype.forEach.call(list.children, function (x) { x.classList.remove("selected"); });
+            row.classList.add("selected");
+          });
+          list.appendChild(row);
+        });
+        holder.appendChild(el("div", "cash-day-sub", "Кому передать:"));
+        holder.appendChild(list);
+        var f = el("div", "field");
+        f.innerHTML = "<label>Сумма</label>";
+        var inp = document.createElement("input");
+        inp.type = "number"; inp.inputMode = "numeric"; inp.min = "0"; inp.placeholder = "0";
+        f.appendChild(inp);
+        holder.appendChild(f);
+        var allBtn = el("button", "btn-text", "Вся сумма на руках");
+        allBtn.addEventListener("click", function () { inp.value = String(Math.max(0, onHand)); });
+        holder.appendChild(allBtn);
+        var go = el("button", "btn-primary wizard-footer-btn", "Передать");
+        go.addEventListener("click", function () {
+          var amount = parseInt(inp.value, 10) || 0;
+          if (!picked) { toast("Выберите, кому передать"); return; }
+          if (amount <= 0) { toast("Введите сумму"); return; }
+          if (amount > onHand) { toast("Больше, чем на руках (" + fmtSum(onHand) + ")"); return; }
+          go.disabled = true;
+          api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/transfer-cash", {
+            method: "POST", body: { to_tg_id: picked.tg_id, amount: amount },
+          }).then(function () {
+            haptic("success");
+            toast("Передано " + fmtSum(amount) + " → " + picked.name);
+            onDone();
+            wizardBack();
+          }).catch(function (err) {
+            go.disabled = false;
+            toast(err.message === "too_much" ? "Больше, чем на руках" : "Не удалось: " + err.message);
+          });
+        });
+        holder.appendChild(go);
+      }).catch(function (err) {
+        holder.innerHTML = "";
+        holder.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      });
+    });
+  }
+
+  // Правка «Общей суммы у курьера»: вписываем, сколько реально на руках —
+  // разница пишется «Корректировкой» и видна в журнале по дням.
+  function openSetCashBalanceScreen(courier, onDone) {
+    wizardStep(function (body) {
+      body.appendChild(el("h2", "wizard-title", "Изменить остаток"));
+      var holder = el("div");
+      holder.appendChild(el("div", "skeleton-block"));
+      body.appendChild(holder);
+      api(cashSummaryUrl(courier.tg_id, todayRuDate())).then(function (data) {
+        holder.innerHTML = "";
+        holder.appendChild(el("div", "cash-day-sub", "Сейчас в приложении: " + fmtSum(data.balance_as_of)));
+        var f = el("div", "field");
+        f.innerHTML = "<label>Сколько реально на руках у курьера</label>";
+        var inp = document.createElement("input");
+        inp.type = "number"; inp.inputMode = "numeric"; inp.value = String(data.balance_as_of || 0);
+        f.appendChild(inp);
+        holder.appendChild(f);
+        holder.appendChild(el("div", "cash-day-sub", "Разница запишется в журнал как «Корректировка» сегодняшним днём. Прошлые записи не меняются."));
+        var go = el("button", "btn-primary wizard-footer-btn", "Сохранить");
+        go.addEventListener("click", function () {
+          if (inp.value === "" || isNaN(parseInt(inp.value, 10))) { toast("Введите сумму"); return; }
+          go.disabled = true;
+          api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/set-cash-balance", {
+            method: "POST", body: { balance: parseInt(inp.value, 10) },
+          }).then(function () {
+            haptic("success");
+            toast("Остаток сохранён");
+            onDone();
+            wizardBack();
+          }).catch(function (err) { go.disabled = false; toast("Не удалось: " + err.message); });
+        });
+        holder.appendChild(go);
+      }).catch(function (err) {
+        holder.innerHTML = "";
+        holder.appendChild(el("div", "empty-note", "Не удалось загрузить: " + err.message));
+      });
+    });
   }
 
   // "Мои доходы" (курьер) — та же касса, но своя подача, по прямой
@@ -3432,6 +3548,37 @@
         if (!addBox.hidden) idInput.focus();
       });
 
+      // --- касса: у кого сколько наличных на руках ---
+      root.appendChild(el("h3", "ops-section-title", "Наличные у курьеров"));
+      var cashCard = el("div", "card");
+      cashCard.appendChild(el("div", "skeleton-block"));
+      root.appendChild(cashCard);
+      api("/api/couriers/cash-overview").then(function (data) {
+        cashCard.innerHTML = "";
+        var list = data.couriers || [];
+        var total = list.reduce(function (s2, c) { return s2 + (c.balance || 0); }, 0);
+        var head = el("div", "ops-breakdown-row");
+        head.appendChild(el("div", "ops-breakdown-name", "<b>Всего на руках</b>"));
+        head.appendChild(el("div", "ops-breakdown-nums", "<b>" + fmtSum(total) + "</b>"));
+        cashCard.appendChild(head);
+        list.forEach(function (c) {
+          var row = el("div", "ops-breakdown-row ops-breakdown-row-sep");
+          row.appendChild(el("div", "ops-breakdown-name", escapeHtml(c.name) + (c.archived ? " (бывший)" : "")));
+          row.appendChild(el("div", "ops-breakdown-nums", fmtSum(c.balance)));
+          var full = couriers.filter(function (x) { return x.tg_id === c.tg_id; })[0];
+          if (full) {
+            row.addEventListener("click", function () {
+              haptic("select");
+              wizardStep(function (body) {
+                body.appendChild(el("h2", "wizard-title", full.name || full.tg_id));
+                renderCourierDetail(body, full);
+              });
+            });
+          }
+          cashCard.appendChild(row);
+        });
+      }).catch(function () { cashCard.innerHTML = ""; cashCard.appendChild(el("div", "empty-note", "Не удалось загрузить наличные.")); });
+
       // --- уже добавлены ---
       root.appendChild(el("h3", "ops-section-title", "Уже добавлены"));
       if (!couriers.length) {
@@ -3558,6 +3705,89 @@
       }
     ));
     var kpiInputRef = card.lastChild.querySelector("input");
+
+    card.appendChild(buildToggleRow(
+      "Показывать во вкладках на главном экране",
+      "Показывает или скрывает вкладку этого курьера над картой «Маршрута». Его точки остаются во вкладке «Все», доступ и касса не меняются.",
+      !courier.tabs_hidden,
+      function (checkedNow) {
+        var hidden = !checkedNow;
+        return api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/tabs-hidden", { method: "POST", body: { hidden: hidden } })
+          .then(function () {
+            courier.tabs_hidden = hidden;
+            toast(hidden ? "Скрыт с главного экрана" : "Снова виден на главном экране");
+            loadCouriers();
+          })
+          .catch(function (err) {
+            toggleRevert(tabsInputRef);
+            toast("Не удалось изменить: " + err.message);
+          });
+      }
+    ));
+    var tabsInputRef = card.lastChild.querySelector("input");
+
+    // Имя курьера — правится здесь же.
+    var nameBox = el("div", "field");
+    nameBox.innerHTML = "<label>Имя</label>";
+    var nameInp = document.createElement("input");
+    nameInp.type = "text"; nameInp.value = courier.name || "";
+    nameBox.appendChild(nameInp);
+    var nameSave = el("button", "btn-ghost", "Сохранить имя");
+    nameSave.addEventListener("click", function () {
+      var nm = nameInp.value.trim();
+      if (!nm) { toast("Введите имя"); return; }
+      nameSave.disabled = true;
+      api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/rename", { method: "POST", body: { name: nm } })
+        .then(function () {
+          haptic("success");
+          courier.name = nm;
+          var title = document.querySelector(".wizard-title");
+          if (title) title.textContent = nm;
+          toast("Имя сохранено");
+          nameSave.disabled = false;
+          loadCouriers();
+        })
+        .catch(function (err) { nameSave.disabled = false; toast("Не удалось: " + err.message); });
+    });
+    nameBox.appendChild(nameSave);
+    card.appendChild(nameBox);
+
+    // Два аккаунта одного человека (старый угнали, завели новый): вся
+    // история этого курьера переносится в выбранного, этот удаляется.
+    if (state.isOwner || state.canToggleMode === false) {
+      var mergeBtn = el("button", "btn-text", "Перенести историю в другого курьера");
+      mergeBtn.addEventListener("click", function () {
+        api("/api/couriers/manage").then(function (data) {
+          var targets = (data.couriers || []).filter(function (c) { return c.tg_id !== courier.tg_id && !c.archived; });
+          if (!targets.length) { toast("Нет других курьеров"); return; }
+          openModalSheet(function (sheet, close) {
+            sheet.appendChild(el("div", "modal-title", "В какого курьера перенести?"));
+            sheet.appendChild(el("div", "modal-text", "Маршруты, наличные, оплаты и расчёты «" + escapeHtml(courier.name || courier.tg_id) + "» перейдут к выбранному курьеру, а этот курьер будет удалён из списка."));
+            var acts = el("div", "modal-actions");
+            targets.forEach(function (t) {
+              var b = el("button", "btn-ghost", escapeHtml(t.name || t.tg_id));
+              b.addEventListener("click", function () {
+                close();
+                confirmSheet("Перенести историю в «" + (t.name || t.tg_id) + "»?", "Это нельзя отменить.", [
+                  { label: "Да, перенести", className: "btn-primary", onClick: function () {
+                    api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/merge-into", { method: "POST", body: { target_tg_id: t.tg_id } })
+                      .then(function () { haptic("success"); toast("История перенесена"); loadCouriers(); wizardBack(); })
+                      .catch(function (err) { toast("Не удалось: " + err.message); });
+                  } },
+                  { label: "Отмена", className: "btn-ghost" },
+                ]);
+              });
+              acts.appendChild(b);
+            });
+            var cancel = el("button", "btn-text", "Отмена");
+            cancel.addEventListener("click", close);
+            acts.appendChild(cancel);
+            sheet.appendChild(acts);
+          });
+        }).catch(function (err) { toast("Не удалось загрузить: " + err.message); });
+      });
+      card.appendChild(mergeBtn);
+    }
 
     // "Администратор Маршрута" — назначает/снимает ТОЛЬКО владелец бота
     // (config.OWNER_TG_ID, state.isOwner) — у остальных, даже действующих

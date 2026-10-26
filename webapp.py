@@ -211,6 +211,7 @@ async def _role_for(tg_id):
 # все точки входа, которые читают или пишут "Маршрут" на конкретную дату,
 # берут этот лок и работают строго по очереди, а не одновременно.
 _route_lock = asyncio.Lock()
+_cash_lock = asyncio.Lock()  # передача/правка наличных курьеров — по одной операции за раз
 
 
 @web.middleware
@@ -821,6 +822,87 @@ async def api_courier_replace_id(request: web.Request):
     return web.json_response(res)
 
 
+def _is_owner_or_main_admin(request) -> bool:
+    try:
+        me = int(request["tg_id"])
+    except (TypeError, ValueError):
+        return False
+    return me == config.OWNER_TG_ID or me in config.ADMIN_IDS
+
+
+def _courier_name(tg_id: str) -> str:
+    c = next((x for x in sheets.get_couriers() if x["tg_id"] == str(tg_id)), None)
+    return (c or {}).get("name") or str(tg_id)
+
+
+async def api_courier_rename(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    name = (body.get("name") or "").strip()[:60]
+    if not name:
+        return web.json_response({"error": "name_required"}, status=400)
+    ok = await _retry_sheets(sheets.rename_courier, request.match_info.get("tg_id", ""), name)
+    return web.json_response({"ok": True} if ok else {"error": "not_found"}, status=200 if ok else 404)
+
+
+async def api_courier_tabs_hidden(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    ok = await _retry_sheets(sheets.set_courier_tabs_hidden, request.match_info.get("tg_id", ""), bool(body.get("hidden")))
+    return web.json_response({"ok": True} if ok else {"error": "not_found"}, status=200 if ok else 404)
+
+
+async def api_courier_merge_into(request: web.Request):
+    """Перенос всей истории курьера в другого (два аккаунта одного человека) — владелец/главный админ."""
+    if not request["is_route_admin"] or not _is_owner_or_main_admin(request):
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    target = str(body.get("target_tg_id") or "").strip()
+    res = await _retry_sheets(sheets.replace_courier_tg_id, request.match_info.get("tg_id", ""), target, True)
+    if res.get("error"):
+        return web.json_response(res, status=400)
+    return web.json_response(res)
+
+
+async def api_courier_transfer_cash(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    from_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    to_id = str(body.get("to_tg_id") or "").strip()
+    try:
+        amount = int(str(body.get("amount") or "0").replace(" ", ""))
+    except ValueError:
+        return web.json_response({"error": "bad_amount"}, status=400)
+    async with _cash_lock:
+        res = await _retry_sheets(sheets.transfer_courier_cash, from_id, _courier_name(from_id), to_id, _courier_name(to_id), amount)
+    if res.get("error"):
+        return web.json_response(res, status=400)
+    return web.json_response(res)
+
+
+async def api_courier_set_cash_balance(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    tg_id = request.match_info.get("tg_id", "")
+    body = await request.json()
+    try:
+        balance = int(str(body.get("balance")).replace(" ", ""))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "bad_amount"}, status=400)
+    async with _cash_lock:
+        res = await _retry_sheets(sheets.set_courier_cash_balance, tg_id, _courier_name(tg_id), balance)
+    return web.json_response(res)
+
+
+async def api_couriers_cash_overview(request: web.Request):
+    if not request["is_route_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    return web.json_response({"couriers": await _retry_sheets(sheets.get_couriers_cash_overview)})
+
+
 async def api_courier_shift_delete(request: web.Request):
     if not request["is_route_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -1289,6 +1371,12 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/couriers/manage/{tg_id}/pay-shift", api_courier_pay_shift)
     app.router.add_post("/api/couriers/manage/{tg_id}/reset-history", api_courier_reset_history)
     app.router.add_post("/api/couriers/manage/{tg_id}/replace-id", api_courier_replace_id)
+    app.router.add_post("/api/couriers/manage/{tg_id}/rename", api_courier_rename)
+    app.router.add_post("/api/couriers/manage/{tg_id}/tabs-hidden", api_courier_tabs_hidden)
+    app.router.add_post("/api/couriers/manage/{tg_id}/merge-into", api_courier_merge_into)
+    app.router.add_post("/api/couriers/manage/{tg_id}/transfer-cash", api_courier_transfer_cash)
+    app.router.add_post("/api/couriers/manage/{tg_id}/set-cash-balance", api_courier_set_cash_balance)
+    app.router.add_get("/api/couriers/cash-overview", api_couriers_cash_overview)
     app.router.add_post("/api/couriers/manage/{tg_id}/shift-edit", api_courier_shift_edit)
     app.router.add_post("/api/couriers/manage/{tg_id}/shift-delete", api_courier_shift_delete)
     app.router.add_get("/api/courier/cash-summary", api_courier_cash_summary)

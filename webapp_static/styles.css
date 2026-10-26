@@ -1016,3 +1016,5 @@ p { margin: 0; color: var(--ink-soft); }
 .cash-ledger { margin-top: 10px; border-top: 1px solid rgba(0,0,0,.08); padding-top: 6px; }
 .cash-ledger-row { padding: 6px 0; }
 .cash-ledger-row + .cash-ledger-row { border-top: 1px solid rgba(0,0,0,.05); }
+
+.ops-breakdown-row.selected { background: var(--ink-soft-bg); border-radius: 10px; padding-left: 8px; padding-right: 8px; font-weight: 600; }
