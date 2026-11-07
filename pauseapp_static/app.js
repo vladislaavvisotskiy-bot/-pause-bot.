@@ -210,6 +210,7 @@
       "club.giveaway.winnerTitle": "🎉 Победитель дня",
       "club.giveaway.winnerNote": "{name} получает сет за наш счёт. Поздравляем!",
       "club.giveaway.noWinner": "Сегодня в пуле никого не было — ждём вас в следующий раз 🌿",
+      "club.giveaway.paused": "PAUSE DAY временно на паузе — скоро вернёмся 🌿",
       "club.giveaway.showAll": "Показать всех",
       "club.giveaway.showLess": "Свернуть",
       "club.giveaway.loadFailed": "Не удалось загрузить PAUSE GIFT.",
@@ -531,6 +532,7 @@
       "club.giveaway.winnerTitle": "🎉 Kunning g'olibi",
       "club.giveaway.winnerNote": "{name} bizning hisobimizdan bir set oladi. Tabriklaymiz!",
       "club.giveaway.noWinner": "Bugun pulda hech kim yo'q edi — keyingi safar sizni kutamiz 🌿",
+      "club.giveaway.paused": "PAUSE DAY vaqtincha to'xtatilgan — tez orada qaytamiz 🌿",
       "club.giveaway.showAll": "Barchasini ko'rsatish",
       "club.giveaway.showLess": "Yig'ish",
       "club.giveaway.loadFailed": "PAUSE GIFT'ni yuklab bo'lmadi.",
@@ -852,6 +854,7 @@
       "club.giveaway.winnerTitle": "🎉 Today's winner",
       "club.giveaway.winnerNote": "{name} gets a set on us. Congratulations!",
       "club.giveaway.noWinner": "Nobody was in the pool today — see you next time 🌿",
+      "club.giveaway.paused": "PAUSE DAY is paused for now — back soon 🌿",
       "club.giveaway.showAll": "Show all",
       "club.giveaway.showLess": "Show less",
       "club.giveaway.loadFailed": "Couldn't load PAUSE GIFT.",
@@ -3375,7 +3378,9 @@
     hero.appendChild(el("div", "gp-hero-bg", ICON_LEAF));
     var inner = el("div", "gp-hero-inner");
     inner.appendChild(el("div", "gp-eyebrow", escapeHtml(t("club.gp.eyebrow"))));
-    if (g.closed && g.winner_name) {
+    if (g.disabled) {
+      inner.appendChild(el("div", "gp-hero-note", escapeHtml(t("club.giveaway.paused"))));
+    } else if (g.closed && g.winner_name) {
       inner.appendChild(el("div", "gp-hero-label", escapeHtml(t("club.gp.winnerLabel"))));
       inner.appendChild(el("div", "gp-hero-main", escapeHtml(g.winner_name)));
       inner.appendChild(el("div", "gp-hero-note", escapeHtml(t("club.giveaway.winnerNote", { name: g.winner_name }))));
@@ -6746,9 +6751,73 @@
     root.appendChild(el("div", "skeleton-block"));
     api("/api/ops/giveaway").then(function (data) {
       root.innerHTML = "";
+      function saveSetting(patch, okText) {
+        api("/api/ops/giveaway/settings", { method: "POST", body: patch })
+          .then(function () { toast(okText); })
+          .catch(function (err) { toast("Не удалось сохранить: " + err.message); loadOpsGiveaway(root); });
+      }
+      var settings = el("div", "card");
+      settings.appendChild(buildToggleRow(
+        "Розыгрыш PAUSE DAY",
+        "Каждый день в 12:00 один лепесток. Выключено — пул не собирается, победителя нет.",
+        !data.disabled,
+        function (on) { saveSetting({ disabled: !on }, on ? "Розыгрыш включён" : "Розыгрыш выключен"); }
+      ));
+      settings.appendChild(buildToggleRow(
+        "Сообщение победителю",
+        "Победителю приходит сообщение в бот и в колокольчик.",
+        !data.win_notify_off,
+        function (on) { saveSetting({ win_notify_off: !on }, on ? "Уведомление включено" : "Уведомление выключено"); }
+      ));
+      root.appendChild(settings);
+
+      // --- начислить лепесток вручную
+      var grant = el("div", "card");
+      grant.appendChild(el("div", "profile-section-title", "Начислить лепесток"));
+      var field = el("div", "field");
+      var search = el("input");
+      search.type = "search";
+      search.placeholder = "Имя или ID клиента";
+      field.appendChild(search);
+      grant.appendChild(field);
+      var list = el("div");
+      grant.appendChild(list);
+      var notifyOn = true;
+      grant.appendChild(buildToggleRow(
+        "Уведомить клиента",
+        "Сообщение «Вам начислен лепесток» в бот и в колокольчик.",
+        true,
+        function (on) { notifyOn = on; }
+      ));
+      var clients = data.clients || [];
+      function drawList() {
+        list.innerHTML = "";
+        var q = search.value.trim().toLowerCase();
+        if (!q) return;
+        clients.filter(function (c) {
+          return (c.name || "").toLowerCase().indexOf(q) !== -1 || String(c.id) === q;
+        }).slice(0, 8).forEach(function (c) {
+          var b = el("button", "btn-ghost");
+          b.style.marginTop = "6px";
+          b.textContent = (c.name || "Без имени") + " · ID " + c.id;
+          b.addEventListener("click", function () {
+            showConfirm("Начислить лепесток: " + (c.name || ("ID " + c.id)) + "?", "Начислить", function () {
+              api("/api/ops/giveaway/grant", { method: "POST", body: { client_id: c.id, notify: notifyOn } })
+                .then(function () { toast("Лепесток начислен"); loadOpsGiveaway(root); })
+                .catch(function (err) { toast("Не удалось: " + err.message); });
+            });
+          });
+          list.appendChild(b);
+        });
+      }
+      search.addEventListener("input", drawList);
+      root.appendChild(grant);
+
+      // --- история
+      root.appendChild(el("div", "profile-section-title", "Лепестки клиентов"));
       var tickets = data.tickets || [];
       if (!tickets.length) {
-        root.appendChild(el("div", "empty-note", "Пока ни одного победителя — розыгрыш подводится каждый день в 12:00."));
+        root.appendChild(el("div", "empty-note", "Пока ни одного лепестка."));
         return;
       }
       tickets.forEach(function (tk) {
@@ -6756,15 +6825,27 @@
         var card = el("div", "card");
         card.innerHTML =
           '<div style="font-weight:600">' + escapeHtml(tk.name || ("ID " + tk.client_id)) + '</div>' +
-          '<div class="option-row-sub">Выигран ' + escapeHtml(tk.date_won) + '</div>' +
+          '<div class="option-row-sub">Начислен ' + escapeHtml(tk.date_won) + '</div>' +
           '<div class="option-row-sub">' + (used
-            ? "Билет использован" + (tk.date_used ? " (" + escapeHtml(tk.date_used) + ")" : "")
-            : "Билет доступен, пока не потрачен") + '</div>';
+            ? "Использован" + (tk.date_used ? " (" + escapeHtml(tk.date_used) + ")" : "")
+            : "Доступен, пока не потрачен") + '</div>';
+        if (!used) {
+          var rm = el("button", "btn-ghost", "Забрать лепесток");
+          rm.style.marginTop = "8px";
+          rm.addEventListener("click", function () {
+            showConfirm("Забрать лепесток у " + (tk.name || ("ID " + tk.client_id)) + "?", "Забрать", function () {
+              api("/api/ops/giveaway/revoke", { method: "POST", body: { row: tk.row, tg_id: tk.tg_id } })
+                .then(function () { toast("Лепесток забран"); loadOpsGiveaway(root); })
+                .catch(function (err) { toast("Не удалось: " + err.message); loadOpsGiveaway(root); });
+            });
+          });
+          card.appendChild(rm);
+        }
         root.appendChild(card);
       });
     }).catch(function (err) {
       root.innerHTML = "";
-      root.appendChild(el("div", "empty-note", "Не удалось загрузить историю розыгрыша: " + err.message));
+      root.appendChild(el("div", "empty-note", "Не удалось загрузить PAUSE GIFT: " + err.message));
     });
   }
 

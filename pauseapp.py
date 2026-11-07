@@ -1419,7 +1419,9 @@ async def api_club_giveaway(request: web.Request):
     joined = bool(client) and any(p["tg_id"] == str(tg_id) for p in participants)
     winner = await _retry_sheets(sheets.get_daily_giveaway_winner, date_str) if closed else None
 
+    disabled = await _retry_sheets(sheets.is_giveaway_disabled)
     return web.json_response({
+        "disabled": disabled,
         "eligible": eligible,
         "joined": joined,
         "closed": closed,
@@ -1445,6 +1447,11 @@ async def run_daily_giveaway_draw(bot):
     send_morning_reports/send_warm_broadcast) — не через _retry_sheets,
     тот нужен только под нагрузкой параллельных HTTP-запросов самого
     Mini App."""
+    try:
+        if sheets.is_giveaway_disabled():
+            return
+    except Exception:
+        logger.exception("Не удалось прочитать выключатель PAUSE DAY")
     date_str = sheets.get_active_menu_date()
     try:
         winner = sheets.pick_daily_giveaway_winner(date_str)
@@ -1457,22 +1464,27 @@ async def run_daily_giveaway_draw(bot):
         return
 
     try:
-        await bot.send_message(int(winner["tg_id"]), texts.APP_DAILY_GIVEAWAY_WINNER_MSG)
+        notify_off = sheets.is_giveaway_win_notify_off()
     except Exception:
-        logger.exception("Не удалось уведомить победителя 'Паузы в подарок' (tg_id=%s)", winner.get("tg_id"))
-
-    # Тот же текст — ещё и в колокольчик PAUSE App (см. api_notifications
-    # выше), отдельно от личного сообщения бота: человек может не
-    # заметить/удалить чат с ботом, а уведомление в приложении останется,
-    # пока он сам его не откроет.
-    try:
-        sheets.create_app_notification(winner["tg_id"], texts.APP_DAILY_GIVEAWAY_WINNER_MSG, kind="giveaway_win")
-    except Exception:
-        logger.exception("Не удалось записать уведомление в колокольчик PAUSE App (tg_id=%s)", winner.get("tg_id"))
-
+        notify_off = False
+    if not notify_off:
+        await _notify_ticket(bot, winner["tg_id"], texts.APP_DAILY_GIVEAWAY_WINNER_MSG, "giveaway_win")
     await notify_admins(bot, texts.APP_ADMIN_DAILY_GIVEAWAY_WINNER_ALERT.format(
         date=date_str, name=winner.get("name", ""), client_id=winner.get("client_id", ""),
     ))
+
+
+async def _notify_ticket(bot, tg_id, text, kind):
+    """Личное сообщение бота + запись в колокольчик PAUSE App."""
+    try:
+        await bot.send_message(int(tg_id), text)
+    except Exception:
+        logger.exception("Не удалось отправить сообщение о лепестке (tg_id=%s)", tg_id)
+    # Тот же текст — в колокольчик PAUSE App: чат с ботом могут не заметить.
+    try:
+        await asyncio.to_thread(sheets.create_app_notification, tg_id, text, kind=kind)
+    except Exception:
+        logger.exception("Не удалось записать уведомление в колокольчик PAUSE App (tg_id=%s)", tg_id)
 
 
 async def api_avatar_upload(request: web.Request):
@@ -2264,7 +2276,55 @@ async def api_ops_giveaway(request: web.Request):
     if not request["pa_finance"]:
         return web.json_response({"error": "forbidden"}, status=403)
     tickets = await _retry_sheets(sheets.get_all_tickets)
-    return web.json_response({"tickets": tickets})
+    disabled = await _retry_sheets(sheets.is_giveaway_disabled)
+    win_notify_off = await _retry_sheets(sheets.is_giveaway_win_notify_off)
+    clients = await _retry_sheets(sheets.get_broadcast_clients)
+    return web.json_response({
+        "tickets": tickets,
+        "disabled": disabled,
+        "win_notify_off": win_notify_off,
+        "clients": [{"id": str(c["id"]), "name": c.get("name", ""), "tg_id": str(c["tg_id"])} for c in clients],
+    })
+
+
+async def api_ops_giveaway_settings(request: web.Request):
+    if not request["pa_finance"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    if "disabled" in body:
+        await _retry_sheets(sheets.set_giveaway_disabled, bool(body["disabled"]))
+    if "win_notify_off" in body:
+        await _retry_sheets(sheets.set_giveaway_win_notify_off, bool(body["win_notify_off"]))
+    return web.json_response({"ok": True})
+
+
+async def api_ops_giveaway_grant(request: web.Request):
+    if not request["pa_finance"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    client_id = str(body.get("client_id") or "").strip()
+    if not client_id:
+        return web.json_response({"error": "bad_request"}, status=400)
+    winner = await _retry_sheets(sheets.grant_ticket_to_client, client_id)
+    if not winner:
+        return web.json_response({"error": "client_not_found"}, status=404)
+    if body.get("notify"):
+        asyncio.create_task(_notify_ticket(request.app["bot"], winner["tg_id"], texts.APP_TICKET_GRANTED_MSG, "ticket_granted"))
+    return web.json_response({"ok": True})
+
+
+async def api_ops_giveaway_revoke(request: web.Request):
+    if not request["pa_finance"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    try:
+        row = int(body.get("row"))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "bad_request"}, status=400)
+    ok = await _retry_sheets(sheets.revoke_ticket, row, str(body.get("tg_id") or ""))
+    if not ok:
+        return web.json_response({"error": "not_available"}, status=409)
+    return web.json_response({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -3173,6 +3233,9 @@ def create_app(bot=None) -> web.Application:
     app.router.add_get("/api/notifications", api_notifications)
     app.router.add_post("/api/notifications/read", api_notifications_read)
     app.router.add_get("/api/ops/giveaway", api_ops_giveaway)
+    app.router.add_post("/api/ops/giveaway/settings", api_ops_giveaway_settings)
+    app.router.add_post("/api/ops/giveaway/grant", api_ops_giveaway_grant)
+    app.router.add_post("/api/ops/giveaway/revoke", api_ops_giveaway_revoke)
     app.router.add_get("/api/ops/menu/catalog", api_ops_menu_catalog)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/photo", api_ops_menu_set_photo)
     app.router.add_post("/api/ops/menu/catalog/{set_key}/description", api_ops_menu_set_description)

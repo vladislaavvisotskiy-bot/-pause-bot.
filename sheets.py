@@ -3426,6 +3426,33 @@ def close_giveaway_window():
     ws.update_acell(config.REF_GIVEAWAY_CLOSED_CELL, "Да")
 
 
+def _ref_flag(cell) -> bool:
+    ws = _ws(config.SHEET_REFERENCE)
+    return (ws.acell(cell).value or "").strip().lower() == "да"
+
+
+def _set_ref_flag(cell, on: bool):
+    _ws(config.SHEET_REFERENCE).update_acell(cell, "Да" if on else "")
+
+
+def is_giveaway_disabled() -> bool:
+    """PAUSE DAY выключен админом (Операционный центр → PAUSE GIFT).
+    В отличие от J5 публикация меню это НЕ сбрасывает."""
+    return _ref_flag(config.REF_GIVEAWAY_OFF_CELL)
+
+
+def set_giveaway_disabled(on: bool):
+    _set_ref_flag(config.REF_GIVEAWAY_OFF_CELL, on)
+
+
+def is_giveaway_win_notify_off() -> bool:
+    return _ref_flag(config.REF_GIVEAWAY_WIN_NOTIFY_OFF_CELL)
+
+
+def set_giveaway_win_notify_off(on: bool):
+    _set_ref_flag(config.REF_GIVEAWAY_WIN_NOTIFY_OFF_CELL, on)
+
+
 def is_courier_notify_disabled() -> bool:
     """Админ «Маршрута» выключил оповещения клиентам «курьер рядом»."""
     ws = _ws(config.SHEET_REFERENCE)
@@ -4082,6 +4109,8 @@ def auto_join_daily_giveaway(date_str: str, client: dict) -> bool:
     tg_id = client.get("tg_id")
     if not tg_id:
         return False
+    if is_giveaway_disabled():
+        return False
     if is_giveaway_window_closed():
         return False
     if is_in_daily_giveaway(date_str, tg_id):
@@ -4229,6 +4258,36 @@ def grant_ticket(date_str: str, winner: dict):
         date_str, winner["client_id"], winner["tg_id"], winner["name"],
         config.TICKET_STATUS_AVAILABLE, "", "",
     ], value_input_option="RAW")
+
+
+def grant_ticket_to_client(client_id) -> Optional[dict]:
+    """Админ вручную начисляет лепесток клиенту (Операционный центр →
+    PAUSE GIFT). None — клиента нет или у него нет Telegram ID."""
+    c = get_client_by_id(client_id)
+    if not c or not c.get("tg_id"):
+        return None
+    winner = {"client_id": _id_value(c["id"]), "tg_id": str(c["tg_id"]), "name": c.get("name", "")}
+    grant_ticket(today_date_str(), winner)
+    return winner
+
+
+def revoke_ticket(row_num: int, tg_id) -> bool:
+    """Админ забирает НЕиспользованный лепесток: строка удаляется из
+    «Билеты клиентов». Проверяем tg_id и статус по номеру строки, чтобы
+    не удалить чужую/сдвинутую строку."""
+    ws = _ws_or_create(config.SHEET_CLIENT_TICKETS, _CT_HEADER)
+    rows = ws.get_all_values()
+    if row_num < config.CT_DATA_START_ROW or row_num > len(rows):
+        return False
+    row = rows[row_num - 1]
+    if len(row) < config.CT_STATUS:
+        return False
+    if row[config.CT_TG_ID - 1].strip() != str(tg_id).strip():
+        return False
+    if row[config.CT_STATUS - 1].strip() != config.TICKET_STATUS_AVAILABLE:
+        return False
+    ws.delete_rows(row_num)
+    return True
 
 
 def get_client_tickets(tg_id) -> list:
