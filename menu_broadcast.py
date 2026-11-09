@@ -70,7 +70,15 @@ async def run(bot, date_str: str, admin_id, caption: str = "", photo_ids: list =
     st = state
     try:
         clients = await _retry_sheets(sheets.get_broadcast_clients)
-        seen, targets, skipped_off = set(), [], 0
+        # Кто уже заказал на эту дату — им рассылку о меню не шлём.
+        try:
+            ordered = {str(o.get("client_id") or "").strip()
+                       for o in await _retry_sheets(sheets.get_orders_for_date, date_str)}
+            ordered.discard("")
+        except Exception:
+            logger.exception("Рассылка меню: не удалось прочитать заказы на %s", date_str)
+            ordered = set()
+        seen, targets, skipped_off, skipped_ordered = set(), [], 0, 0
         for c in clients:
             tid = str(c.get("tg_id") or "").strip()
             if not tid or tid in seen:
@@ -78,6 +86,9 @@ async def run(bot, date_str: str, admin_id, caption: str = "", photo_ids: list =
             seen.add(tid)
             if c.get("notify_menu_off"):
                 skipped_off += 1
+                continue
+            if str(c.get("id") or "").strip() in ordered:
+                skipped_ordered += 1
                 continue
             targets.append(c)
         st.update(total=len(targets), sent=0, failed=0, blocked=0, skipped_off=skipped_off)
@@ -116,7 +127,8 @@ async def run(bot, date_str: str, admin_id, caption: str = "", photo_ids: list =
                   f"Получили: {st['sent']}\n"
                   f"Не получили: {st['failed']}"
                   + (f" (заблокировали бота: {st['blocked']})" if st["blocked"] else "") + "\n"
-                  f"Отключили оповещения о меню (пропущены): {skipped_off}")
+                  f"Отключили оповещения о меню (пропущены): {skipped_off}\n"
+                  f"Уже заказали (пропущены): {skipped_ordered}")
         await _notify_admins(bot, admin_id, report)
     except Exception:
         logger.exception("Рассылка меню: сбой")
