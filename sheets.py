@@ -5725,6 +5725,29 @@ def sync_daily_route(date_str: str, people: dict = None) -> list:
     if not missing:
         return rows
 
+    # Дописываем под блокировкой и по СВЕЖИМ данным (в обход кэша чтения):
+    # иначе два одновременных открытия «Маршрута» (или устаревшее чтение
+    # из кэша при ошибке Google) дописывали одну и ту же точку дважды.
+    with _route_sync_lock:
+        rows = ws._raw.get_all_values() if hasattr(ws, "_raw") else ws.get_all_values()
+        existing = set()
+        for row in rows[config.ROUTE_DATA_START_ROW - 1:]:
+            if len(row) >= config.ROUTE_POINT and row[config.ROUTE_DATE - 1].strip() == date_str:
+                existing.add(row[config.ROUTE_POINT - 1].strip())
+                try:
+                    max_order = max(max_order, float(row[config.ROUTE_ORDER - 1] or 0)) if len(row) >= config.ROUTE_ORDER else max_order
+                except ValueError:
+                    pass
+        missing = points_with_orders - existing
+        if not missing:
+            return rows
+        return _append_missing_route_points(ws, rows, date_str, missing, max_order)
+
+
+_route_sync_lock = threading.Lock()
+
+
+def _append_missing_route_points(ws, rows, date_str, missing, max_order):
     dp_index = _delivery_points_index()
     couriers = get_couriers()
     all_courier_ids = ",".join(c["tg_id"] for c in couriers if not c.get("archived"))
@@ -5786,6 +5809,7 @@ def get_route_for_date(date_str: str) -> list:
     dp_index = _delivery_points_index()
 
     out = []
+    seen_points = {}
     for i, row in enumerate(rows):
         r = i + 1
         if r < config.ROUTE_DATA_START_ROW:
@@ -5806,6 +5830,14 @@ def get_route_for_date(date_str: str) -> list:
         point_name = cell(config.ROUTE_POINT).strip()
         if not people.get(point_name):
             continue
+        # Задвоенная строка той же точки (старый сбой синхронизации) —
+        # показываем одну: ту, что уже сдана/в работе, иначе первую.
+        if point_name in seen_points:
+            prev = seen_points[point_name]
+            if prev["status"] == config.ROUTE_STATUS_WAITING and status != config.ROUTE_STATUS_WAITING:
+                out.remove(prev)
+            else:
+                continue
 
         dp = dp_index.get(point_name, {})
         try:
@@ -5828,6 +5860,7 @@ def get_route_for_date(date_str: str) -> list:
             "pinned": cell(config.ROUTE_PINNED).strip().lower() == "да",
             "people": people.get(point_name, []),
         })
+        seen_points[point_name] = out[-1]
 
     out.sort(key=lambda p: p["order"])
     _route_cache[date_str] = (out, time.time())
