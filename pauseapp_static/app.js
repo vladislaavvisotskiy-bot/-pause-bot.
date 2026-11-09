@@ -5216,7 +5216,7 @@
       root.innerHTML = "";
       var card = el("div", "card");
       card.innerHTML = '<div class="order-card-items"><b>Новое меню готово</b></div>' +
-        '<div class="center-note" style="margin-top:6px">Получат: ' + info.recipients + ' клиентов (кроме отключивших оповещения о меню). ' +
+        '<div class="center-note" style="margin-top:6px">Получат: ' + info.recipients + ' клиентов (кроме отключивших оповещения о меню и тех, кто уже заказал на эту дату). ' +
         'Сообщение придёт с кнопкой «Посмотреть», она откроет приложение.</div>';
       root.appendChild(card);
       if (info.disabled) root.appendChild(el("div", "empty-note", "Рассылки сейчас выключены (включить: /admin в боте → рассылки)."));
@@ -5256,7 +5256,7 @@
         });
       }
       function ask(date, label) {
-        showConfirm("Отправить всем клиентам (" + info.recipients + ") сообщение «Новое меню " + label + " уже готово» с кнопкой «Посмотреть»?", "Отправить", function () { start(date, false); });
+        showConfirm("Отправить клиентам (до " + info.recipients + ", кроме уже заказавших) сообщение «Новое меню " + label + " уже готово» с кнопкой «Посмотреть»?", "Отправить", function () { start(date, false); });
       }
 
       var rowsCard = el("div", "card profile-nav-list");
