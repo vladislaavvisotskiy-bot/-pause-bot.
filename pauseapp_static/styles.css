@@ -2401,3 +2401,4 @@ p { margin: 0; color: var(--ink-soft); }
 .crm-msg-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .crm-msg-row input[type=checkbox] { width: 20px; height: 20px; flex: none; accent-color: var(--ink); }
 .crm-msg-row-text { flex: 1; min-width: 0; }
+.crm-msg-open { width: auto; flex: none; padding: 8px 14px; font-size: 13px; }

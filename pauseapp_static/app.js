@@ -7799,7 +7799,7 @@
   function openCrmPointMessage(pt) {
     wizardStep(function (body) {
       opsStepHeader(body, pt.name);
-      var chosen = {};
+      var chosen = {}, opened = {};
       var people = pt.clients || [];
       people.forEach(function (c) { if (c.can_message) chosen[c.id] = true; });
 
@@ -7823,20 +7823,22 @@
       card.appendChild(list);
       body.appendChild(card);
 
-      var send = el("button", "btn-primary wizard-footer-btn");
+      body.appendChild(el("div", "center-note", "«Написать» откроет чат с человеком в вашем Telegram — текст уже вписан, останется нажать «Отправить»."));
+      var send = el("button", "btn-ghost");
+      send.style.marginTop = "12px";
       body.appendChild(send);
 
       function count() { return Object.keys(chosen).filter(function (k) { return chosen[k]; }).length; }
       function refresh() {
         var n = count();
-        send.textContent = "Отправить (" + n + ")";
+        send.textContent = "Или отправить от бота отмеченным (" + n + ")";
         send.disabled = !n;
         allBtn.textContent = n ? "Снять все" : "Выбрать все";
       }
       function draw() {
         list.innerHTML = "";
         people.forEach(function (c) {
-          var row = el("label", "crm-msg-row");
+          var row = el("div", "crm-msg-row");
           var cb = el("input");
           cb.type = "checkbox";
           cb.disabled = !c.can_message;
@@ -7847,6 +7849,27 @@
           txt.innerHTML = '<div class="crm-map-person-name">' + escapeHtml(c.name || "—") + '</div>' +
             '<div class="crm-map-person-sub">' + escapeHtml(c.can_message ? (c.telegram || formatPhone(c.phone) || "") : "нет Telegram — не получит") + '</div>';
           row.appendChild(txt);
+          var wr = el("button", "btn-ghost crm-msg-open", opened[c.id] ? "✓ Открыт" : "Написать");
+          wr.disabled = !c.tg_link;
+          wr.addEventListener("click", function (e) {
+            e.preventDefault(); e.stopPropagation();
+            var text = ta.value.trim();
+            if (!text) { toast("Сначала напишите сообщение"); ta.focus(); return; }
+            try { localStorage.setItem("pause_crm_msg_v1", text); } catch (err) {}
+            var personal = text.split("{name}").join((c.name || "").trim());
+            var uname = (c.telegram || "").replace(/^@/, "");
+            haptic("select");
+            opened[c.id] = true;
+            wr.textContent = "✓ Открыт";
+            if (uname) {
+              openTelegramChat("https://t.me/" + uname + "?text=" + encodeURIComponent(personal));
+            } else {
+              copyToClipboard(personal);
+              toast("Нет @username — текст скопирован, вставьте его в чат");
+              setTimeout(function () { openTelegramChat(c.tg_link); }, 600);
+            }
+          });
+          row.appendChild(wr);
           list.appendChild(row);
         });
       }
@@ -7861,7 +7884,7 @@
         var text = ta.value.trim();
         if (!text) { toast("Напишите сообщение"); return; }
         var ids = Object.keys(chosen).filter(function (k) { return chosen[k]; });
-        showConfirm("Отправить сообщение " + ids.length + " клиентам?", "Отправить", function () {
+        showConfirm("Отправить от имени БОТА " + ids.length + " клиентам?", "Отправить", function () {
           try { localStorage.setItem("pause_crm_msg_v1", text); } catch (e) {}
           send.disabled = true;
           send.textContent = "Отправляем…";
