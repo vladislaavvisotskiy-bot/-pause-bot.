@@ -5753,7 +5753,7 @@ _route_sync_lock = threading.Lock()
 def _append_missing_route_points(ws, rows, date_str, missing, max_order):
     dp_index = _delivery_points_index()
     couriers = get_couriers()
-    all_courier_ids = ",".join(c["tg_id"] for c in couriers if not c.get("archived"))
+    all_courier_ids = _active_route_courier_ids(couriers)
 
     missing_sorted = sorted(missing, key=lambda p: dp_index.get(p, {}).get("priority", 0))
     new_rows = []
@@ -5768,6 +5768,14 @@ def _append_missing_route_points(ws, rows, date_str, missing, max_order):
     # настоящими типами как и раньше — на хранимые данные это не влияет.
     rows = rows + [[str(v) for v in new_row] for new_row in new_rows]
     return rows
+
+
+def _active_route_courier_ids(couriers) -> str:
+    """Кому назначать новую точку: только действующим курьерам, которые
+    показаны во вкладках «Маршрута» (не бывшие, не отключённые, не скрытые
+    переключателем «Показывать во вкладках на главном экране»)."""
+    return ",".join(c["tg_id"] for c in couriers
+                    if not c.get("archived") and not c.get("disabled") and not c.get("tabs_hidden"))
 
 
 def _parse_courier_ids(raw: str) -> list:
@@ -6284,7 +6292,7 @@ def add_route_point(date_str: str, point_name: str):
 
     existing = get_route_for_date(date_str)  # заодно синхронизирует
     couriers = get_couriers()
-    all_courier_ids = ",".join(c["tg_id"] for c in couriers if not c.get("archived"))
+    all_courier_ids = _active_route_courier_ids(couriers)
     # В конец текущего списка (см. sync_daily_route) — не по каталожному
     # "Приоритету", чтобы не воткнуться в середину уже расставленного на
     # сегодня порядка.
