@@ -1342,6 +1342,31 @@ async def index_page(request: web.Request):
     return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
 
 
+async def call_page(request: web.Request):
+    """Звонок с iPhone: внутри Telegram на iOS ссылки tel: не открываются,
+    поэтому «Маршрут» открывает эту страницу во внешнем браузере
+    (tg.openLink), а она уже сама переходит на tel: — Safari показывает
+    системное «Позвонить». Только цифры и «+», ничего больше в страницу не
+    попадает."""
+    raw = request.query.get("n", "")
+    num = "+" + "".join(ch for ch in raw if ch.isdigit())
+    if len(num) < 8:
+        return web.Response(text="Номер не указан", status=400)
+    html = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>Звонок {num}</title>"
+        "<style>body{font-family:-apple-system,system-ui,sans-serif;background:#F2EBDD;color:#2B2823;"
+        "display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:90vh;margin:0}"
+        "a{display:block;background:#2B2823;color:#F2EBDD;text-decoration:none;font-size:20px;font-weight:600;"
+        "padding:18px 36px;border-radius:999px;margin-top:16px}p{opacity:.7}</style></head><body>"
+        f"<div style='font-size:24px;font-weight:700'>{num}</div>"
+        f"<a href='tel:{num}'>Позвонить</a><p>Потом вернитесь в Telegram</p>"
+        f"<script>location.href='tel:{num}';</script></body></html>"
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
 def create_app(bot=None) -> web.Application:
     app = web.Application(middlewares=[error_middleware, auth_middleware])
     # Нужен, чтобы слать пуш курьеру при включении видимости маршрута (см.
@@ -1349,6 +1374,7 @@ def create_app(bot=None) -> web.Application:
     # polling (см. docstring выше про общий event loop), просто доступный
     # ещё и обработчикам aiohttp через request.app.
     app["bot"] = bot
+    app.router.add_get("/call", call_page)
     app.router.add_get("/miniapp", index_page)
     app.router.add_get("/miniapp/", index_page)
     app.router.add_static("/miniapp/static/", STATIC_DIR, show_index=False)

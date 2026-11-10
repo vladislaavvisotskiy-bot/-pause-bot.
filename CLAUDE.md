@@ -191,3 +191,5 @@ The Club tab (`screen-club` in `pauseapp_static/index.html`) was redesigned to m
 **Добавление курьера — устойчивость:** `add_courier` пишет строку с `table_range="A1"` (чтобы Google не сдвинул столбцы при append), сбой подключения к сегодняшним точкам (`_backfill_courier_into_active_route`) только логируется; в `api_couriers_manage_add` пуш «маршрут готов» в try/except — раньше сбой после записи давал клиенту «Не удалось добавить», хотя строка уже была.
 
 **Кому назначается новая точка:** `sheets._active_route_courier_ids` — только курьерам, которые не бывшие, не отключены и НЕ скрыты из вкладок (`tabs_hidden`). Используется в `sync_daily_route` и `add_route_point`. Уже созданные точки не трогаются.
+
+**Звонок с iPhone («Маршрут»):** в Telegram на iOS `tel:` не открывается (ни `<a href>`, ни `window.open`). На iOS/macOS (`isIosTg`) тап по номеру → `iosCall` → `tg.openLink(origin + "/call?n=цифры")` — внешний Safari открывает страницу `webapp.call_page` (только цифры, сама переходит на `tel:` + большая кнопка «Позвонить»). Android — обычный `<a href="tel:">`. Подключено: номер клиента в карточке точки, «Наличные: кто дал», кнопка звонка курьеру.

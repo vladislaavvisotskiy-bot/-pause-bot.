@@ -273,6 +273,19 @@
     return "tel:+" + digits;
   }
 
+  // iPhone: tel: внутри Telegram не работает (ни <a href>, ни window.open) —
+  // открываем во внешнем Safari нашу страницу /call, она сама набирает номер.
+  function isIosTg() {
+    return !!(tg && (tg.platform === "ios" || tg.platform === "macos"));
+  }
+  function iosCall(tel) {
+    var digits = String(tel || "").replace(/\D/g, "");
+    if (!digits) return;
+    var url = window.location.origin + "/call?n=" + digits;
+    if (tg && tg.openLink) tg.openLink(url, { try_instant_view: false });
+    else window.location.href = url;
+  }
+
   function copyToClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       return navigator.clipboard.writeText(text);
@@ -825,10 +838,10 @@
         // окном и блокирует). На Android трогать не нужно: там обычный
         // href и так работает, а дублирующий window.open() показал бы
         // курьеру два системных диалога звонка подряд.
-        if (tg && tg.platform === "ios") {
+        if (isIosTg()) {
           contactLink.addEventListener("click", function (e) {
             e.preventDefault();
-            window.open(tel, "_self");
+            iosCall(tel);
           });
         }
         line1.appendChild(contactLink);
@@ -2042,6 +2055,9 @@
         phoneLink.href = tel;
         phoneLink.className = "cash-entry-contact-btn";
         phoneLink.textContent = e.contact;
+        if (isIosTg()) {
+          (function (t) { phoneLink.addEventListener("click", function (ev) { ev.preventDefault(); iosCall(t); }); })(tel);
+        }
         contactsRow.appendChild(phoneLink);
       }
       if (e.telegram) {
@@ -3579,6 +3595,9 @@
       callBtn = el("button", "ops-contact-btn");
       callBtn.disabled = true;
       callBtn.title = "Номер телефона не указан";
+    }
+    if (telHrefVal && isIosTg()) {
+      callBtn.addEventListener("click", function (e) { e.preventDefault(); iosCall(telHrefVal); });
     }
     callBtn.innerHTML = ICON_COURIER_CALL;
     callBtn.setAttribute("aria-label", "Позвонить курьеру");
