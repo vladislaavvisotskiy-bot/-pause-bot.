@@ -3028,6 +3028,40 @@ async def api_crm_map(request: web.Request):
     return web.json_response(await _retry_sheets(sheets.get_crm_points_map))
 
 
+async def api_crm_message(request: web.Request):
+    """CRM → Карта → точка: личное сообщение выбранным клиентам от бота.
+    Текст свой (обычный текст, {name} = имя клиента). Только главный админ;
+    tg_id берём из таблицы по ID клиента, а не с фронта."""
+    if not request["is_main_admin"]:
+        return web.json_response({"error": "forbidden"}, status=403)
+    body = await request.json()
+    text = str(body.get("text") or "").strip()
+    ids = [str(x).strip() for x in (body.get("client_ids") or []) if str(x).strip()]
+    if not text or not ids:
+        return web.json_response({"error": "bad_request"}, status=400)
+    if len(text) > 3500:
+        return web.json_response({"error": "too_long"}, status=400)
+    index = await _retry_sheets(sheets._clients_index)
+    bot = request.app["bot"]
+    sent, failed, seen = 0, 0, set()
+    for cid in ids:
+        c = index.get(cid) or {}
+        tg = str(c.get("tg_id") or "").strip()
+        if not tg or tg in seen:
+            failed += 0 if tg in seen else 1
+            continue
+        seen.add(tg)
+        msg = text.replace("{name}", (c.get("name") or "").strip())
+        try:
+            await bot.send_message(int(tg), msg)
+            sent += 1
+        except Exception:
+            logger.warning("CRM сообщение не доставлено (client_id=%s)", cid, exc_info=True)
+            failed += 1
+        await asyncio.sleep(0.05)
+    return web.json_response({"ok": True, "sent": sent, "failed": failed})
+
+
 async def api_crm_client_detail(request: web.Request):
     if not request["is_main_admin"]:
         return web.json_response({"error": "forbidden"}, status=403)
@@ -3297,6 +3331,7 @@ def create_app(bot=None) -> web.Application:
     app.router.add_post("/api/pause-admins/{tg_id}/remove", api_pause_admins_remove)
     app.router.add_get("/api/crm/clients", api_crm_clients)
     app.router.add_get("/api/crm/map", api_crm_map)
+    app.router.add_post("/api/crm/message", api_crm_message)
     app.router.add_get("/api/crm/clients/{client_id}", api_crm_client_detail)
     app.router.add_get("/api/crm/leads", api_crm_leads)
     app.router.add_post("/api/crm/clients/{client_id}/stage", api_crm_stage_set)

@@ -7741,6 +7741,11 @@
       x.addEventListener("click", function () { sheet.classList.remove("show"); });
       head.appendChild(x);
       sheet.appendChild(head);
+      var msgBtn = el("button", "btn-primary", "Написать выбранным");
+      msgBtn.style.margin = "0 16px 10px";
+      msgBtn.style.width = "calc(100% - 32px)";
+      msgBtn.addEventListener("click", function () { haptic("select"); openCrmPointMessage(pt); });
+      sheet.appendChild(msgBtn);
       var list = el("div", "crm-map-sheet-list");
       pt.clients.forEach(function (c) {
         var row = el("div", "crm-map-person");
@@ -7787,6 +7792,88 @@
       }
       if (!pts.length) noteBox.appendChild(el("div", "empty-note", "Пока нет точек с координатами."));
     }).catch(function (err) { noteBox.appendChild(el("div", "empty-note", "Не удалось загрузить: " + escapeHtml(err.message))); });
+  }
+
+  // CRM → Карта → точка → «Написать выбранным»: галочки по людям точки,
+  // свой текст, одна кнопка — личное сообщение от бота каждому.
+  function openCrmPointMessage(pt) {
+    wizardStep(function (body) {
+      opsStepHeader(body, pt.name);
+      var chosen = {};
+      var people = pt.clients || [];
+      people.forEach(function (c) { if (c.can_message) chosen[c.id] = true; });
+
+      var field = el("div", "field");
+      field.appendChild(el("label", "", "Сообщение"));
+      var ta = el("textarea");
+      ta.rows = 4;
+      ta.placeholder = "Доброе утро, {name}! Записать вам сет на сегодня? 🤎";
+      try { ta.value = localStorage.getItem("pause_crm_msg_v1") || ""; } catch (e) {}
+      field.appendChild(ta);
+      body.appendChild(field);
+      body.appendChild(el("div", "center-note", "{name} заменится на имя клиента."));
+
+      var card = el("div", "card");
+      var allRow = el("div", "toggle-row");
+      var allBtn = el("button", "btn-text", "Снять все");
+      allRow.appendChild(el("div", "toggle-row-text", '<div class="toggle-row-title">Кому</div>'));
+      allRow.appendChild(allBtn);
+      card.appendChild(allRow);
+      var list = el("div");
+      card.appendChild(list);
+      body.appendChild(card);
+
+      var send = el("button", "btn-primary wizard-footer-btn");
+      body.appendChild(send);
+
+      function count() { return Object.keys(chosen).filter(function (k) { return chosen[k]; }).length; }
+      function refresh() {
+        var n = count();
+        send.textContent = "Отправить (" + n + ")";
+        send.disabled = !n;
+        allBtn.textContent = n ? "Снять все" : "Выбрать все";
+      }
+      function draw() {
+        list.innerHTML = "";
+        people.forEach(function (c) {
+          var row = el("label", "crm-msg-row");
+          var cb = el("input");
+          cb.type = "checkbox";
+          cb.disabled = !c.can_message;
+          cb.checked = !!chosen[c.id];
+          cb.addEventListener("change", function () { chosen[c.id] = cb.checked; refresh(); });
+          row.appendChild(cb);
+          var txt = el("div", "crm-msg-row-text");
+          txt.innerHTML = '<div class="crm-map-person-name">' + escapeHtml(c.name || "—") + '</div>' +
+            '<div class="crm-map-person-sub">' + escapeHtml(c.can_message ? (c.telegram || formatPhone(c.phone) || "") : "нет Telegram — не получит") + '</div>';
+          row.appendChild(txt);
+          list.appendChild(row);
+        });
+      }
+      allBtn.addEventListener("click", function () {
+        var on = !count();
+        people.forEach(function (c) { if (c.can_message) chosen[c.id] = on; });
+        draw(); refresh();
+      });
+      draw(); refresh();
+
+      send.addEventListener("click", function () {
+        var text = ta.value.trim();
+        if (!text) { toast("Напишите сообщение"); return; }
+        var ids = Object.keys(chosen).filter(function (k) { return chosen[k]; });
+        showConfirm("Отправить сообщение " + ids.length + " клиентам?", "Отправить", function () {
+          try { localStorage.setItem("pause_crm_msg_v1", text); } catch (e) {}
+          send.disabled = true;
+          send.textContent = "Отправляем…";
+          api("/api/crm/message", { method: "POST", body: { client_ids: ids, text: text } })
+            .then(function (r) {
+              toast("Отправлено: " + r.sent + (r.failed ? " · не дошло: " + r.failed : ""));
+              refresh();
+            })
+            .catch(function (err) { toast("Не удалось: " + err.message); refresh(); });
+        });
+      });
+    });
   }
 
   // --- Операционный центр → CRM (только главный админ) --------------------

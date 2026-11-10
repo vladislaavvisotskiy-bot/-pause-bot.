@@ -5073,7 +5073,7 @@ def get_crm_points_map() -> dict:
         by_name.setdefault(name.lower(), {"name": name, "clients": []})["clients"].append({
             "id": c["id"], "name": c.get("name", ""), "phone": c.get("contact", ""),
             "telegram": f"@{username}" if username else "", "tg_link": link,
-            "order_count": c.get("order_count", 0),
+            "order_count": c.get("order_count", 0), "can_message": bool(tg_id),
         })
     points, used = [], set()
     for p in get_delivery_points():

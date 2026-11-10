@@ -2397,3 +2397,7 @@ p { margin: 0; color: var(--ink-soft); }
 .debt-bar-label { font-size: 11px; opacity: .75; }
 .debt-bar-sum { font-size: 16px; font-weight: 700; }
 .debt-bar-btn { border: 0; border-radius: 999px; padding: 12px 24px; font-size: 15px; font-weight: 600; background: var(--ivory); color: var(--ink); cursor: pointer; }
+
+.crm-msg-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.crm-msg-row input[type=checkbox] { width: 20px; height: 20px; flex: none; accent-color: var(--ink); }
+.crm-msg-row-text { flex: 1; min-width: 0; }
