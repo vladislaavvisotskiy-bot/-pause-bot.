@@ -5478,6 +5478,7 @@ def replace_courier_tg_id(old_id: str, new_id: str, merge: bool = False) -> dict
     changed[config.SHEET_ROUTE] = len(cells)
     _cache["couriers"] = None
     _former_cache["found"] = None
+    _route_cache.clear()
     _invalidate_cash_raw_cache()
     _invalidate_logistics_raw_cache()
     _invalidate_settlement_raw_cache()

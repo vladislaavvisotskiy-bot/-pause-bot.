@@ -24,6 +24,10 @@
   var lang = detect();
 
   var PAIRS = [
+    ["Курьеру отправлено «маршрут готов».", "Kuryerga «marshrut tayyor» yuborildi."],
+    ["Курьер подключён к сегодняшним точкам.", "Kuryer bugungi nuqtalarga ulandi."],
+    ["но написать курьеру не удалось.", "lekin kuryerga yozib bo'lmadi."],
+    ["Понятно", "Tushunarli", "x"],
     // --- навигация / общее ---
     ["Маршрут PAUSE", "PAUSE marshruti"],
     ["Маршрут", "Marshrut", "x"],

@@ -286,6 +286,15 @@
     else window.location.href = url;
   }
 
+  function courierPushToast(prefix, r) {
+    var p = (r && r.push) || "";
+    if (p === "sent") toast(prefix + ". Курьеру отправлено «маршрут готов».");
+    else if (p === "failed") confirmSheet(prefix + ", но написать курьеру не удалось.",
+      "Пусть курьер с нового аккаунта откроет бота @PauseTashkentBot и нажмёт «Старт» (/start). Потом в «Видимость маршрутов» нажмите «Уведомить».",
+      [{ label: "Понятно", className: "btn-primary" }]);
+    else toast(prefix + ". Курьер подключён к сегодняшним точкам.");
+  }
+
   function copyToClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       return navigator.clipboard.writeText(text);
@@ -3758,7 +3767,7 @@
                 confirmSheet("Перенести историю в «" + (t.name || t.tg_id) + "»?", "Это нельзя отменить.", [
                   { label: "Да, перенести", className: "btn-primary", onClick: function () {
                     api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/merge-into", { method: "POST", body: { target_tg_id: t.tg_id } })
-                      .then(function () { haptic("success"); toast("История перенесена"); loadCouriers(); wizardBack(); })
+                      .then(function (r) { haptic("success"); courierPushToast("История перенесена", r); loadCouriers(); wizardBack(); })
                       .catch(function (err) { toast("Не удалось: " + err.message); });
                   } },
                   { label: "Отмена", className: "btn-ghost" },
@@ -3845,7 +3854,7 @@
             { label: "Да, заменить", className: "btn-primary", onClick: function () {
               swapGo.disabled = true;
               api("/api/couriers/manage/" + encodeURIComponent(courier.tg_id) + "/replace-id", { method: "POST", body: { new_tg_id: nid } })
-                .then(function () { haptic("success"); toast("ID заменён"); wizardBack(); })
+                .then(function (r) { haptic("success"); courierPushToast("ID заменён", r); wizardBack(); })
                 .catch(function (err) {
                   swapGo.disabled = false;
                   toast(err.message === "new_exists" ? "Курьер с таким ID уже есть" : "Не удалось заменить: " + err.message);

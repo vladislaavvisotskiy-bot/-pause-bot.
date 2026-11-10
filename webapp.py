@@ -807,6 +807,27 @@ async def api_courier_reset_history(request: web.Request):
     return web.json_response({"ok": True, **res})
 
 
+async def _connect_courier_now(request, tg_id: str) -> dict:
+    """После смены ID / объединения аккаунтов: подключаем курьера ко всем
+    несданным точкам текущего маршрута и, если маршрут уже открыт курьерам,
+    сразу шлём ему «маршрут готов». push: "sent" | "failed" (не смог
+    написать — курьер не нажимал /start в боте или выключил уведомления)
+    | "not_visible" (маршрут ещё не открыт — уйдёт при открытии)."""
+    out = {"push": "not_visible"}
+    try:
+        await _retry_sheets(sheets._backfill_courier_into_active_route, tg_id)
+        sheets._route_cache.clear()
+        date_str = await _today()
+        if await _retry_sheets(sheets.is_route_visible_to_courier, date_str):
+            bot = request.app.get("bot")
+            sent = await _send_route_ready_push(bot, date_str, {tg_id}) if bot is not None else 0
+            out["push"] = "sent" if sent else "failed"
+    except Exception:
+        logger.exception("Не удалось подключить курьера %s к маршруту после смены ID", tg_id)
+        out["push"] = "failed"
+    return out
+
+
 async def api_courier_replace_id(request: web.Request):
     """Смена Telegram ID курьера (аккаунт угнали/сменили) — только владелец/главный админ."""
     if not request["is_route_admin"]:
@@ -823,6 +844,7 @@ async def api_courier_replace_id(request: web.Request):
     res = await _retry_sheets(sheets.replace_courier_tg_id, tg_id, new_id)
     if res.get("error"):
         return web.json_response(res, status=409 if res["error"] == "new_exists" else 400)
+    res.update(await _connect_courier_now(request, new_id))
     return web.json_response(res)
 
 
@@ -867,6 +889,7 @@ async def api_courier_merge_into(request: web.Request):
     res = await _retry_sheets(sheets.replace_courier_tg_id, request.match_info.get("tg_id", ""), target, True)
     if res.get("error"):
         return web.json_response(res, status=400)
+    res.update(await _connect_courier_now(request, target))
     return web.json_response(res)
 
 
