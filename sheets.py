@@ -5409,9 +5409,12 @@ def add_courier(tg_id: str, name: str, phone: str = ""):
     row_values[config.COURIER_TG_ID - 1] = target
     row_values[config.COURIER_NAME - 1] = name
     row_values[config.COURIER_PHONE - 1] = phone
-    ws.append_row(row_values, value_input_option="RAW")
+    ws.append_row(row_values, value_input_option="RAW", table_range="A1")
     _cache["couriers"] = None
-    _backfill_courier_into_active_route(target)
+    try:
+        _backfill_courier_into_active_route(target)
+    except Exception:
+        logging.getLogger(__name__).exception("Курьер %s добавлен, но не подключён к сегодняшним точкам", target)
 
 
 def replace_courier_tg_id(old_id: str, new_id: str, merge: bool = False) -> dict:

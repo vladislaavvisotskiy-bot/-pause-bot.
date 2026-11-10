@@ -564,14 +564,18 @@ async def api_couriers_manage_add(request: web.Request):
     # (backfill), тихо остался бы без уведомления о том, что они у него
     # появились — воспроизведено и подтверждено. Шлём ему лично, раз уж он
     # только что получил доступ к уже видимому маршруту.
-    date_str = await _today()
-    visible = await _retry_sheets(sheets.is_route_visible_to_courier, date_str)
-    if visible:
-        route = await _retry_sheets(sheets.get_route_for_date, date_str)
-        has_points = any(tg_id in p["courier_tg_ids"] for p in route)
-        bot = request.app.get("bot")
-        if has_points and bot is not None:
-            await _send_route_ready_push(bot, date_str, {tg_id})
+    # Курьер уже записан — сбой пуша не должен выглядеть как «не добавился».
+    try:
+        date_str = await _today()
+        visible = await _retry_sheets(sheets.is_route_visible_to_courier, date_str)
+        if visible:
+            route = await _retry_sheets(sheets.get_route_for_date, date_str)
+            has_points = any(tg_id in p["courier_tg_ids"] for p in route)
+            bot = request.app.get("bot")
+            if has_points and bot is not None:
+                await _send_route_ready_push(bot, date_str, {tg_id})
+    except Exception:
+        logger.exception("Курьер %s добавлен, но пуш «маршрут готов» не отправлен", tg_id)
     return web.json_response({"ok": True})
 
 
