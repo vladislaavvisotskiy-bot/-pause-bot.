@@ -7471,7 +7471,9 @@
       cardBody.innerHTML =
         '<div class="ops-debtor-card-name">' + escapeHtml(data.name) + '</div>' +
         (data.phone ? '<div class="ops-debtor-card-line">' + escapeHtml(_opsFmtPhone(data.phone)) + '</div>' : "") +
-        (data.telegram ? '<div class="ops-debtor-card-line">@' + escapeHtml(data.telegram.replace(/^@/, "")) + '</div>' : "");
+        (data.telegram ? '<div class="ops-debtor-card-line">@' + escapeHtml(data.telegram.replace(/^@/, "")) + '</div>' : "") +
+        (data.club ? '<div class="ops-debtor-card-line"><b>' + escapeHtml((data.club.emoji ? data.club.emoji + " " : "") + data.club.label) + '</b> · дней с заказом: ' + data.club.days +
+          (data.club.next_label ? ' · до «' + escapeHtml(data.club.next_label) + '»: ' + data.club.left : "") + '</div>' : "");
       card.appendChild(cardBody);
 
       var actionsRow = el("div", "ops-contact-actions");

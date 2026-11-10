@@ -2124,6 +2124,9 @@ async def api_ops_debtor_detail(request: web.Request):
         "phone": (client or {}).get("contact", ""),
         "telegram": (client or {}).get("telegram", ""),
         "tg_link": tg_link,
+        "club": (lambda lv: {"emoji": lv["emoji"], "label": lv["label"], "days": lv["order_count"],
+                             "next_label": lv.get("next_label"), "left": lv.get("left", 0)})(
+            sheets.get_club_level(sheets.club_count_of(client) if client else 0)),
         # Итог — только НЕпогашенные строки (та же сумма, что покажет
         # список должников), погашенные дни остаются в lines для истории,
         # но в долг больше не идут.
